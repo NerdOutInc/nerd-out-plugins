@@ -27,12 +27,14 @@ To use it:
 1. Open Nerd Out Notes for Mac.
 2. Go to Settings -> MCP Server.
 3. Enable the local MCP server.
-4. Reveal the access token.
-5. Export the token before starting Codex:
+4. Authorize Codex (browser sign-in + consent):
 
 ```bash
-export NERD_OUT_MCP_TOKEN="<token-from-nerd-out-notes>"
+codex mcp login nerd-out-notes
 ```
+
+Older app builds without OAuth support can still use the shared bearer token —
+see the legacy setup section in the plugin README.
 
 Write tools only appear when "Allow writes" is enabled in Nerd Out Notes
 settings.

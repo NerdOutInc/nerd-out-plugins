@@ -17,15 +17,40 @@ Start a new Codex thread after installing so the plugin tools are loaded.
 1. Open Nerd Out Notes for Mac.
 2. Open Settings -> MCP Server.
 3. Enable the local MCP server.
-4. Reveal the access token.
-5. Export it before starting Codex:
+4. Authorize Codex:
+
+<!-- TODO(phase-0): verify the login server name on a real marketplace install
+     before publishing (plain `nerd-out-notes` vs a plugin-namespaced form). -->
 
 ```bash
-export NERD_OUT_MCP_TOKEN="<token-from-nerd-out-notes>"
+codex mcp login nerd-out-notes
 ```
+
+A browser window opens to sign in to your Nerd Out account and approve access.
+After approving, start a new Codex thread. No token export is needed.
 
 The plugin connects to `http://127.0.0.1:38473/mcp`. That server is loopback-only
 and runs inside the signed-in Nerd Out Notes Mac app.
+
+<details>
+<summary>Legacy token setup (older app builds)</summary>
+
+If your Nerd Out Notes build does not support OAuth sign-in yet, use the shared
+access token instead. This plugin version no longer wires the token env var, so
+add the server manually:
+
+1. In Nerd Out Notes, open Settings -> MCP Server and reveal the access token.
+2. Export it and register the server directly with Codex:
+
+```bash
+export NERD_OUT_MCP_TOKEN="<token-from-nerd-out-notes>"
+codex mcp add nerd-out-notes --url http://127.0.0.1:38473/mcp --bearer-token-env-var NERD_OUT_MCP_TOKEN
+```
+
+Updating Nerd Out Notes for Mac and running `codex mcp login nerd-out-notes`
+replaces this setup.
+
+</details>
 
 ## Tools
 
@@ -36,6 +61,7 @@ shared notes.
 When "Allow writes" is enabled in Nerd Out Notes settings, Codex can also create
 named notes and replace or append note content.
 
-If Codex reports an authorization or connection error, confirm the Mac app is
-open, the server is enabled, and `NERD_OUT_MCP_TOKEN` matches the currently
-revealed token.
+If Codex reports a connection error, confirm the Mac app is open and the server
+is enabled. If Codex reports an authorization error, re-run
+`codex mcp login nerd-out-notes` and complete the browser sign-in (access may
+have been revoked or expired).
