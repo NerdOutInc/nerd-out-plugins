@@ -33,8 +33,10 @@ To use it:
 codex mcp login nerd-out-notes
 ```
 
-Older app builds without OAuth support can still use the shared bearer token —
-see the legacy setup section in the plugin README.
+If `codex mcp login` can't find the server, run `codex mcp list` to see the
+exact name Codex registered it under and use that. Older app builds without
+OAuth support can still use the shared bearer token — see the legacy setup
+section in the [plugin README](plugins/nerd-out-notes/README.md).
 
 Write tools only appear when "Allow writes" is enabled in Nerd Out Notes
 settings.

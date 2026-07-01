@@ -19,15 +19,17 @@ Start a new Codex thread after installing so the plugin tools are loaded.
 3. Enable the local MCP server.
 4. Authorize Codex:
 
-<!-- TODO(phase-0): verify the login server name on a real marketplace install
-     before publishing (plain `nerd-out-notes` vs a plugin-namespaced form). -->
-
 ```bash
 codex mcp login nerd-out-notes
 ```
 
 A browser window opens to sign in to your Nerd Out account and approve access.
 After approving, start a new Codex thread. No token export is needed.
+
+> **Server name:** the plugin registers its server as `nerd-out-notes`, so that
+> is the name used above. If `codex mcp login` reports it can't find the server,
+> run `codex mcp list` to see the exact name Codex registered it under (a
+> marketplace install may namespace it) and use that name instead.
 
 The plugin connects to `http://127.0.0.1:38473/mcp`. That server is loopback-only
 and runs inside the signed-in Nerd Out Notes Mac app.
@@ -62,6 +64,7 @@ When "Allow writes" is enabled in Nerd Out Notes settings, Codex can also create
 named notes and replace or append note content.
 
 If Codex reports a connection error, confirm the Mac app is open and the server
-is enabled. If Codex reports an authorization error, re-run
-`codex mcp login nerd-out-notes` and complete the browser sign-in (access may
-have been revoked or expired).
+is enabled. If Codex reports an authorization error, re-run the `codex mcp login`
+command from **Setup** above and complete the browser sign-in (access may have
+been revoked or expired). If login can't find the server, use `codex mcp list`
+to confirm its exact name.
