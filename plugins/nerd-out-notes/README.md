@@ -49,8 +49,9 @@ export NERD_OUT_MCP_TOKEN="<token-from-nerd-out-notes>"
 codex mcp add nerd-out-notes --url http://127.0.0.1:38473/mcp --bearer-token-env-var NERD_OUT_MCP_TOKEN
 ```
 
-Updating Nerd Out Notes for Mac and running `codex mcp login nerd-out-notes`
-replaces this setup.
+Updating Nerd Out Notes for Mac and running the `codex mcp login` command from
+**Setup** above (use `codex mcp list` if the server name is namespaced) replaces
+this setup.
 
 </details>
 
