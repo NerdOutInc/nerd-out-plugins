@@ -237,7 +237,7 @@ Changes:
 
 ## 6. Plugin change (`nerd-out-plugins`) — the minimal diff
 
-Gated on §9 steps A–E (app AS live + Phase 0 passed). Expect ~4 files. Note this plugin is installed via `npx codex-marketplace add NerdOutInc/nerd-out-plugins/plugins/nerd-out-notes --plugin --project` (a marketplace install, **not** a `.claude`-style install) — this matters for the login-name question (§7).
+Gated on §9 steps A–E (app AS live + Phase 0 passed). Expect ~4 files. Note this plugin is installed via `npx codex-marketplace add NerdOutInc/nerd-out-plugins/plugins/nerd-out-notes --plugin --global` (a marketplace install, **not** a `.claude`-style install) — this matters for the login-name question (§7).
 
 ### 6.1 `plugins/nerd-out-notes/.mcp.json` — remove `bearer_token_env_var`
 **Before:**
@@ -267,7 +267,7 @@ Add an OAuth field **only if Phase 0 proves one is required.** Verified Codex HT
 
 ### 6.2 `plugins/nerd-out-notes/README.md` — rewrite setup to the login flow
 Replace the "Reveal token / `export NERD_OUT_MCP_TOKEN`" section with:
-1. Install: `npx codex-marketplace add NerdOutInc/nerd-out-plugins/plugins/nerd-out-notes --plugin --project` (same command users already use).
+1. Install: `npx codex-marketplace add NerdOutInc/nerd-out-plugins/plugins/nerd-out-notes --plugin --global` (same command users already use).
 2. Open Nerd Out Notes for Mac → Settings → MCP Server → enable.
 3. `codex mcp login <verified-name>` (use the **verified** name from Phase 0 — plain `nerd-out-notes` vs. a marketplace/plugin-namespaced form) → browser sign-in + consent.
 4. Start a new Codex thread; no token export needed.
@@ -286,7 +286,7 @@ The current SKILL.md **does** reference the token (Setup Checks bullet "Codex mu
 
 **Do this before publishing the plugin.** Requires a Mac build where `currentOAuthConfig()` returns non-nil (§4) and the AS (§3) is deployed over HTTPS.
 
-1. Make a scratch copy of the plugin with `bearer_token_env_var` removed and install it **the real way** — `npx codex-marketplace add NerdOutInc/nerd-out-plugins/plugins/nerd-out-notes --plugin --project` (pointed at the scratch copy / a fork) — so the test matches how users actually install, including any server-name namespacing the marketplace applies.
+1. Make a scratch copy of the plugin with `bearer_token_env_var` removed and install it **the real way** — `npx codex-marketplace add NerdOutInc/nerd-out-plugins/plugins/nerd-out-notes --plugin --global` (pointed at the scratch copy / a fork) — so the test matches how users actually install, including any server-name namespacing the marketplace applies.
 2. `codex mcp login <name>` → confirm a browser opens, Supabase sign-in + consent completes, Codex stores a token.
 3. Fresh Codex thread: exercise `list_notes`, `read_note`, keyword + semantic search, index status, collaborators; with "Allow writes" on, `create_note` / `update_note_content`.
 4. Confirm **refresh** (token auto-renews) and **revoke** (revoke the grant in-app/AS → Codex re-prompts; note the ≤5-min access-token residual window from §5).

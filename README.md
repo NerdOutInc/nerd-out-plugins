@@ -4,17 +4,19 @@ Plugins and agent integrations for Nerd Out products.
 
 ## Codex Plugins
 
-Install the Nerd Out Notes Codex plugin into the current project:
+Install the Nerd Out Notes Codex plugin globally (available in every project):
 
 ```bash
-npx codex-marketplace add NerdOutInc/nerd-out-plugins/plugins/nerd-out-notes --plugin --project
+npx codex-marketplace add NerdOutInc/nerd-out-plugins/plugins/nerd-out-notes --plugin --global
 ```
 
 Install all Codex plugins in this repository:
 
 ```bash
-npx codex-marketplace add NerdOutInc/nerd-out-plugins --plugins --project
+npx codex-marketplace add NerdOutInc/nerd-out-plugins --plugins --global
 ```
+
+To scope a plugin to the current repository instead, swap `--global` for `--project`.
 
 ## Nerd Out Notes
 
