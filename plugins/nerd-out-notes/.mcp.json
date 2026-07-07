@@ -2,8 +2,7 @@
   "mcpServers": {
     "nerd-out-notes": {
       "type": "http",
-      "url": "http://127.0.0.1:38473/mcp",
-      "bearer_token_env_var": "NERD_OUT_MCP_TOKEN"
+      "url": "http://127.0.0.1:38473/mcp"
     }
   }
 }

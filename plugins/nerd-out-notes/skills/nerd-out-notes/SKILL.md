@@ -12,14 +12,18 @@ through the local MCP server.
 
 - The Nerd Out Notes Mac app must be running.
 - Settings -> MCP Server must be enabled in the app.
-- Codex must have `NERD_OUT_MCP_TOKEN` set to the token revealed in Nerd Out
-  Notes settings.
+- Codex must be authorized with the server via `codex mcp login` (the plugin
+  registers the server as `nerd-out-notes`; if login can't find it, the exact
+  name is whatever `codex mcp list` shows). Legacy setups on older app builds
+  may use the `NERD_OUT_MCP_TOKEN` bearer token instead.
 - The server endpoint is `http://127.0.0.1:38473/mcp`.
 
 If MCP calls fail with connection errors, ask the user to open Nerd Out Notes
 for Mac and enable the local MCP server. If calls fail with authorization
-errors, ask the user to reveal or regenerate the token in Nerd Out Notes
-settings and update `NERD_OUT_MCP_TOKEN`.
+errors, ask the user to re-run `codex mcp login` for the server (its name from
+`codex mcp list`) and complete the browser sign-in (or, on legacy token setups,
+reveal or regenerate the token in Nerd Out Notes settings and update
+`NERD_OUT_MCP_TOKEN`).
 
 ## Tool Use
 
