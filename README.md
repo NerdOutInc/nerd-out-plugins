@@ -4,6 +4,26 @@ Plugins and agent integrations for Nerd Out products.
 
 ## Codex Plugins
 
+### Install from the Codex app
+
+Open **Plugins**, choose **Create -> Add plugin marketplace**, and enter:
+
+- Source: `https://github.com/NerdOutInc/nerd-out-plugins`
+- Git ref: `main`
+- Sparse paths: leave blank to load the whole marketplace, or enter both paths
+  below on separate lines:
+
+```text
+.agents/plugins
+plugins/nerd-out-notes
+```
+
+The marketplace manifest and plugin directory must both be included in a sparse
+checkout. Add the marketplace, then install **Nerd Out Notes** from the Nerd Out
+marketplace.
+
+### Install from the command line
+
 Install the Nerd Out Notes Codex plugin globally (available in every project):
 
 ```bash

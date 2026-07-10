@@ -1,0 +1,20 @@
+{
+  "name": "nerd-out",
+  "interface": {
+    "displayName": "Nerd Out"
+  },
+  "plugins": [
+    {
+      "name": "nerd-out-notes",
+      "source": {
+        "source": "local",
+        "path": "./plugins/nerd-out-notes"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
