@@ -67,6 +67,6 @@ Write tools only appear when "Allow writes" is enabled in Nerd Out Notes
 settings.
 
 The plugin supports multiple skills in its `skills/` directory. In addition to
-the direct note workflow, `$nerdoutjournal` configures a global
-`$CODEX_HOME/nerdoutjournal.json` workspace selection and automatically keeps
+the direct note workflow, `$nerd-out-journal` configures a global
+`$CODEX_HOME/nerd-out-journal.json` workspace selection and automatically keeps
 concise named-note and DailyNote summaries in that write-ready workspace.

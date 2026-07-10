@@ -1,6 +1,6 @@
 ---
-name: nerdoutjournal
-description: Keep a concise, searchable journal of Codex work in NerdOut. Use when the user invokes $nerdoutjournal or when the global $CODEX_HOME/nerdoutjournal.json configuration exists; once configured, automatically journal every task with useful decisions, implementation work, tests, or follow-ups. Configure a workspace on first use, write a daily summary, choose an appropriate set of detailed named notes, and search the archive before repeating past decisions.
+name: nerd-out-journal
+description: Keep a concise, searchable journal of Codex work in NerdOut. Use when the user invokes $nerd-out-journal or when the global $CODEX_HOME/nerd-out-journal.json configuration exists; once configured, automatically journal every task with useful decisions, implementation work, tests, or follow-ups. Configure a workspace on first use, write a daily summary, choose an appropriate set of detailed named notes, and search the archive before repeating past decisions.
 ---
 
 # NerdOut Journal
@@ -15,7 +15,7 @@ Resolve the global Codex home directory (`$CODEX_HOME`, falling back to
 `~/.codex`), then look for:
 
 ```text
-$CODEX_HOME/nerdoutjournal.json
+$CODEX_HOME/nerd-out-journal.json
 ```
 
 The expected shape is:
@@ -48,7 +48,7 @@ Only offer workspaces that are confirmed and not blocked, with both
 not bind to, search as a journal in, or write to a read-only, blocked,
 non-confirmed, or not-ready workspace.
 
-When `$nerdoutjournal` is invoked, configure the workspace if necessary and
+When `$nerd-out-journal` is invoked, configure the workspace if necessary and
 then journal the current task. When the valid global configuration already
 exists, invoke this skill implicitly for every task going forward, including
 tasks where the user did not mention journaling. Validate the saved workspace
@@ -61,11 +61,11 @@ perform the DailyNote update in addition to the named-note work. If it is
 `false`, still journal the task in the selected named notes but skip the
 DailyNote update.
 
-Distinguish explicit from implicit activation. An explicit `$nerdoutjournal`
+Distinguish explicit from implicit activation. An explicit `$nerd-out-journal`
 invocation may prompt for a workspace when the config is missing or invalid.
 An implicit invocation with no valid config must skip journaling for that task
 without prompting or interrupting unrelated work; wait for the user to invoke
-`$nerdoutjournal` explicitly before starting setup.
+`$nerd-out-journal` explicitly before starting setup.
 
 ## Search before writing
 
