@@ -79,9 +79,9 @@ This plugin can ship multiple skills; Codex discovers every subdirectory under
 `skills/` that contains a `SKILL.md`. It currently includes:
 
 - `$nerd-out-notes` for direct note, search, and MCP workflows.
-- `$nerdoutjournal` for a global journal: it asks you to choose a confirmed,
+- `$nerd-out-journal` for a global journal: it asks you to choose a confirmed,
   write-ready NerdOut workspace on first use, saves that choice in
-  `$CODEX_HOME/nerdoutjournal.json`, and then automatically records useful task
+  `$CODEX_HOME/nerd-out-journal.json`, and then automatically records useful task
   notes plus a daily summary with backlinks for future tasks.
 
 The journal skill is summary-first and never stores credentials or full
