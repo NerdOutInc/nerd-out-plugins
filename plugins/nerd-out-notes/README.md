@@ -69,8 +69,9 @@ this setup.
 
 When the server is enabled, Codex can list notes, read note content, run keyword
 and semantic search, check semantic index status, and list collaborators for
-shared notes. The journal workflow can also append to or materialize DailyNotes
-and add real backlink nodes through `update_note_content`.
+shared notes. When "Allow writes" is enabled, it can also create or update
+named notes, append to or materialize DailyNotes, and add real backlink nodes
+through `update_note_content`.
 
 When "Allow writes" is enabled in Nerd Out Notes settings, Codex can also create
 named notes and replace or append note content.

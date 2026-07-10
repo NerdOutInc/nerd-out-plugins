@@ -43,9 +43,10 @@ Codex home directory when needed and save the file above. When `$CODEX_HOME` is
 unset, that resolved home is the `~/.codex` fallback. Keep the file local to
 the machine and do not put tokens, note bodies, or credentials in it.
 
-Only offer workspaces whose `roleWritable` and `writeReady` signals are true.
-This skill is write-ready-only: do not bind to, search as a journal in, or
-write to a read-only, blocked, non-confirmed, or not-ready workspace.
+Only offer workspaces that are confirmed and not blocked, with both
+`roleWritable` and `writeReady` set to true. This skill is write-ready-only: do
+not bind to, search as a journal in, or write to a read-only, blocked,
+non-confirmed, or not-ready workspace.
 
 When `$nerdoutjournal` is invoked, configure the workspace if necessary and
 then journal the current task. When the valid global configuration already
