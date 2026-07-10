@@ -73,9 +73,6 @@ shared notes. When "Allow writes" is enabled, it can also create or update
 named notes, append to or materialize DailyNotes, and add real backlink nodes
 through `update_note_content`.
 
-When "Allow writes" is enabled in Nerd Out Notes settings, Codex can also create
-named notes and replace or append note content.
-
 ## Skills
 
 This plugin can ship multiple skills; Codex discovers every subdirectory under
