@@ -38,9 +38,10 @@ When the file is missing, malformed, or the saved workspace is no longer
 available, call `list_workspaces` and show the user only confirmed,
 write-ready choices. Include each workspace's name, id, role, and write status.
 Ask the user to choose by name or id; do not silently choose a workspace or
-overwrite a stale selection. After an explicit choice, create `$CODEX_HOME`
-when needed and save the file above. Keep the file local to the machine and do
-not put tokens, note bodies, or credentials in it.
+overwrite a stale selection. After an explicit choice, create the resolved
+Codex home directory when needed and save the file above. When `$CODEX_HOME` is
+unset, that resolved home is the `~/.codex` fallback. Keep the file local to
+the machine and do not put tokens, note bodies, or credentials in it.
 
 Only offer workspaces whose `roleWritable` and `writeReady` signals are true.
 This skill is write-ready-only: do not bind to, search as a journal in, or
@@ -53,6 +54,12 @@ tasks where the user did not mention journaling. Validate the saved workspace
 with `list_workspaces` before writing; if it is no longer write-ready, pause
 the journal write and ask the user to select a replacement rather than
 silently switching.
+
+Distinguish explicit from implicit activation. An explicit `$nerdoutjournal`
+invocation may prompt for a workspace when the config is missing or invalid.
+An implicit invocation with no valid config must skip journaling for that task
+without prompting or interrupting unrelated work; wait for the user to invoke
+`$nerdoutjournal` explicitly before starting setup.
 
 ## Search before writing
 
@@ -121,7 +128,7 @@ Follow-ups: <short list or none>
 
 When updating a DailyNote, send the detailed named note as a backlink in the
 `backlinks` field rather than pasting a fake Markdown URL. Preserve existing
-daily content by using append mode. For the configured workspace, use the
+daily content by using `mode: "append"`. For the configured workspace, use the
 current date as `date=YYYY-MM-DD&workspaceId=<configured-workspace-id>`; the
 journal MCP lazily materializes a missing DailyNote from that uuid. If that
 write is rejected by workspace readiness or encryption state, save the named
@@ -134,8 +141,8 @@ note but report that the daily summary did not succeed.
 - Use `read_note` for full text or HTML when a note's details matter.
 - Use `keyword_search` for exact terms, paths, and identifiers; use
   `semantic_search` for concepts and paraphrases.
-- Use `update_note_content` with `append` for new dated entries and `replace`
-  only when the user explicitly asks to rewrite a note.
+- Use `update_note_content` with `mode: "append"` for new dated entries and
+  `mode: "replace"` only when the user explicitly asks to rewrite a note.
 - Keep summaries short enough to scan. The named note is the durable detail;
   the daily note is the day's navigation page.
 
