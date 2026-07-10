@@ -130,7 +130,7 @@ When updating a DailyNote, send the detailed named note as a backlink in the
 `backlinks` field rather than pasting a fake Markdown URL. Preserve existing
 daily content by using `mode: "append"`. For the configured workspace, use the
 current date as `date=YYYY-MM-DD&workspaceId=<configured-workspace-id>`; the
-journal MCP lazily materializes a missing DailyNote from that uuid. If that
+journal MCP lazily materializes a missing DailyNote from that UUID. If that
 write is rejected by workspace readiness or encryption state, save the named
 note but report that the daily summary did not succeed.
 
