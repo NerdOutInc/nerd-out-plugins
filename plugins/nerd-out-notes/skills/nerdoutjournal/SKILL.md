@@ -56,6 +56,11 @@ with `list_workspaces` before writing; if it is no longer write-ready, pause
 the journal write and ask the user to select a replacement rather than
 silently switching.
 
+If `journal.dailyNote` is `true` (the default in the example configuration),
+perform the DailyNote update in addition to the named-note work. If it is
+`false`, still journal the task in the selected named notes but skip the
+DailyNote update.
+
 Distinguish explicit from implicit activation. An explicit `$nerdoutjournal`
 invocation may prompt for a workspace when the config is missing or invalid.
 An implicit invocation with no valid config must skip journaling for that task
@@ -130,8 +135,9 @@ Follow-ups: <short list or none>
 When updating a DailyNote, send the detailed named note as a backlink in the
 `backlinks` field rather than pasting a fake Markdown URL. Preserve existing
 daily content by using `mode: "append"`. For the configured workspace, use the
-current date as `date=YYYY-MM-DD&workspaceId=<configured-workspace-id>`; the
-journal MCP lazily materializes a missing DailyNote from that UUID. If that
+current date as the DailyNote identifier
+`date=YYYY-MM-DD&workspaceId=<configured-workspace-id>`; the journal MCP lazily
+materializes a missing DailyNote from that identifier. If that
 write is rejected by workspace readiness or encryption state, save the named
 note but report that the daily summary did not succeed.
 
