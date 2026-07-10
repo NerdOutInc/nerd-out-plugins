@@ -1,6 +1,6 @@
 ---
 name: nerd-out-journal
-description: Keep a concise, searchable journal of Codex work in NerdOut. Use when the user invokes $nerd-out-journal or when the global $CODEX_HOME/nerd-out-journal.json configuration exists; once configured, automatically journal every task with useful decisions, implementation work, tests, or follow-ups. Configure a workspace on first use, write a daily summary, choose an appropriate set of detailed named notes, and search the archive before repeating past decisions.
+description: Keep a concise, searchable journal of agent work in NerdOut. Use when the user invokes the nerd-out-journal skill ($nerd-out-journal in Codex, /nerd-out-notes:nerd-out-journal in Claude Code) or when the agent's global nerd-out-journal.json configuration exists; once configured, automatically journal every task with useful decisions, implementation work, tests, or follow-ups. Configure a workspace on first use, write a daily summary, choose an appropriate set of detailed named notes, and search the archive before repeating past decisions.
 ---
 
 # NerdOut Journal
@@ -11,11 +11,16 @@ transcript dump.
 
 ## Activation and configuration
 
-Resolve the global Codex home directory (`$CODEX_HOME`, falling back to
-`~/.codex`), then look for:
+Resolve the agent's global configuration directory. Each agent keeps its own
+configuration; use only the directory for the agent you are running in:
+
+- **Codex:** `$CODEX_HOME`, falling back to `~/.codex`.
+- **Claude Code:** `$CLAUDE_CONFIG_DIR`, falling back to `~/.claude`.
+
+Then look for:
 
 ```text
-$CODEX_HOME/nerd-out-journal.json
+<config-dir>/nerd-out-journal.json
 ```
 
 The expected shape is:
@@ -39,16 +44,19 @@ available, call `list_workspaces` and show the user only confirmed,
 write-ready choices. Include each workspace's name, id, role, and write status.
 Ask the user to choose by name or id; do not silently choose a workspace or
 overwrite a stale selection. After an explicit choice, create the resolved
-Codex home directory when needed and save the file above. When `$CODEX_HOME` is
-unset, that resolved home is the `~/.codex` fallback. Keep the file local to
-the machine and do not put tokens, note bodies, or credentials in it.
+configuration directory when needed and save the file above. When the agent's
+config-directory environment variable is unset, that resolved directory is the
+agent's home-directory fallback listed above. Keep the file local to the
+machine and do not put tokens, note bodies, or credentials in it. Do not read
+or migrate another agent's configuration file; each agent is configured
+independently.
 
 Only offer workspaces that are confirmed and not blocked, with both
 `roleWritable` and `writeReady` set to true. This skill is write-ready-only: do
 not bind to, search as a journal in, or write to a read-only, blocked,
 non-confirmed, or not-ready workspace.
 
-When `$nerd-out-journal` is invoked, configure the workspace if necessary and
+When the skill is invoked explicitly, configure the workspace if necessary and
 then journal the current task. When the valid global configuration already
 exists, invoke this skill implicitly for every task going forward, including
 tasks where the user did not mention journaling. Validate the saved workspace
@@ -61,11 +69,12 @@ perform the DailyNote update in addition to the named-note work. If it is
 `false`, still journal the task in the selected named notes but skip the
 DailyNote update.
 
-Distinguish explicit from implicit activation. An explicit `$nerd-out-journal`
-invocation may prompt for a workspace when the config is missing or invalid.
-An implicit invocation with no valid config must skip journaling for that task
+Distinguish explicit from implicit activation. An explicit skill invocation
+(`$nerd-out-journal` in Codex, `/nerd-out-notes:nerd-out-journal` in Claude
+Code) may prompt for a workspace when the config is missing or invalid. An
+implicit invocation with no valid config must skip journaling for that task
 without prompting or interrupting unrelated work; wait for the user to invoke
-`$nerd-out-journal` explicitly before starting setup.
+the skill explicitly before starting setup.
 
 ## Search before writing
 
@@ -121,10 +130,11 @@ Follow-ups:
 - <next step, blocker, or none>
 ```
 
-Use this daily-note template:
+Use this daily-note template, where `<agent>` is the agent's name ("Codex" or
+"Claude Code"):
 
 ```text
-## Codex — <task title>
+## <agent> — <task title>
 
 <one or two sentence summary>
 Decisions: <short list or none>

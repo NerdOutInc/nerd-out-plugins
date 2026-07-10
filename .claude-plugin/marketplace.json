@@ -1,0 +1,22 @@
+{
+  "name": "nerd-out",
+  "owner": {
+    "name": "Nerd Out Inc."
+  },
+  "description": "Plugins for Nerd Out products.",
+  "plugins": [
+    {
+      "name": "nerd-out-notes",
+      "source": "./plugins/nerd-out-notes",
+      "description": "Read, search, and update Nerd Out Notes through the Mac app's local MCP server.",
+      "category": "productivity",
+      "keywords": [
+        "nerd-out",
+        "notes",
+        "mcp",
+        "local-first",
+        "productivity"
+      ]
+    }
+  ]
+}
