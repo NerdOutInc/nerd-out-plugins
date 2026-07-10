@@ -69,10 +69,26 @@ this setup.
 
 When the server is enabled, Codex can list notes, read note content, run keyword
 and semantic search, check semantic index status, and list collaborators for
-shared notes.
+shared notes. The journal workflow can also append to or materialize DailyNotes
+and add real backlink nodes through `update_note_content`.
 
 When "Allow writes" is enabled in Nerd Out Notes settings, Codex can also create
 named notes and replace or append note content.
+
+## Skills
+
+This plugin can ship multiple skills; Codex discovers every subdirectory under
+`skills/` that contains a `SKILL.md`. It currently includes:
+
+- `$nerd-out-notes` for direct note, search, and MCP workflows.
+- `$nerdoutjournal` for a global journal: it asks you to choose a confirmed,
+  write-ready NerdOut workspace on first use, saves that choice in
+  `$CODEX_HOME/nerdoutjournal.json`, and then automatically records useful task
+  notes plus a daily summary with backlinks for future tasks.
+
+The journal skill is summary-first and never stores credentials or full
+conversation transcripts by default. Enable MCP writes in the app before using
+it to create or update notes.
 
 If Codex reports a connection error, confirm the Mac app is open and the server
 is enabled. If Codex reports an authorization error, re-run the `codex mcp login`
