@@ -4,8 +4,15 @@ Use Codex with the local MCP server hosted by Nerd Out Notes for Mac.
 
 ## Install
 
-Install globally so Codex can use the plugin in every project (this plugin
-talks to the per-user Nerd Out Notes Mac app, so it isn't project-specific):
+In the Codex app, add
+`https://github.com/NerdOutInc/nerd-out-plugins` as a plugin marketplace. Leave
+**Sparse paths** blank, or include both `.agents/plugins` and
+`plugins/nerd-out-notes` on separate lines. Then install **Nerd Out Notes** from
+the Nerd Out marketplace.
+
+Alternatively, install from the command line. Install globally so Codex can use
+the plugin in every project (this plugin talks to the per-user Nerd Out Notes
+Mac app, so it isn't project-specific):
 
 ```bash
 npx codex-marketplace add NerdOutInc/nerd-out-plugins/plugins/nerd-out-notes --plugin --global
