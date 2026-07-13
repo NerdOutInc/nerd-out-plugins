@@ -1,8 +1,10 @@
 {
   "mcpServers": {
     "nerd-out-notes": {
-      "type": "http",
-      "url": "http://127.0.0.1:38473/mcp"
+      "type": "stdio",
+      "command": "node",
+      "args": ["./bridge/index.mjs"],
+      "cwd": "."
     }
   }
 }

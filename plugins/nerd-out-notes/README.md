@@ -8,14 +8,14 @@ server hosted by Nerd Out Notes for Mac.
 The Mac app hosts a loopback-only MCP server at `http://127.0.0.1:38473/mcp`.
 Claude clients refuse plain-http URLs on some surfaces (Claude Desktop chat
 routes url-type servers through cloud custom connectors, which require public
-HTTPS and can never reach a loopback listener), so the Claude side of this
-plugin ships a **stdio bridge** instead of a URL: `bridge/index.mjs` waits for
-the app, then runs a bundled copy of [`mcp-remote`](https://github.com/geelen/mcp-remote)
+HTTPS and can never reach a loopback listener), so this plugin ships a
+**stdio bridge** instead of a URL: `bridge/index.mjs` waits for the app, then
+runs a bundled copy of [`mcp-remote`](https://github.com/geelen/mcp-remote)
 (MIT — `bridge/LICENSE-mcp-remote.txt`) that proxies stdio to the loopback
 server and handles the MCP OAuth browser sign-in, caching tokens in
-`~/.mcp-auth`. The bridge runs `node` from your PATH (any Node.js 18+). Codex
-connects to the loopback URL directly (`.codex-plugin/mcp.json`) and uses its
-built-in MCP OAuth instead.
+`~/.mcp-auth`. The bridge runs `node` from your PATH (any Node.js 18+). Both
+Claude (`.mcp.json`) and Codex (`.codex-plugin/mcp.json`) register the same
+bridge, so the two agents share one connection path and one token cache.
 
 The bundle is regenerated with `cd bridge/build && npm install && npm run build`
 (see `bridge/build/build.mjs`) — do not edit `bridge/mcp-remote-proxy.bundle.mjs`
@@ -72,26 +72,17 @@ Start a new thread after installing so the plugin tools are loaded.
 3. Enable the local MCP server.
 4. Authorize your agent.
 
-For Claude (Desktop, Cowork, and Claude Code), no explicit login step is
-needed: the first time the plugin's bridge connects, a browser window opens to
-sign in to your Nerd Out account and approve access. Approve, then start a new
-conversation. Tokens are cached and refreshed in `~/.mcp-auth`, so this
+No explicit login step is needed for either agent: the first time the
+plugin's bridge connects (in Claude Desktop, Cowork, Claude Code, or Codex),
+a browser window opens to sign in to your Nerd Out account and approve
+access. Approve, then start a new conversation or thread. Tokens are cached
+and refreshed in `~/.mcp-auth` and shared between Claude and Codex, so this
 happens once per Mac.
-
-For Codex:
-
-```bash
-codex mcp login nerd-out-notes
-```
-
-A browser window opens to sign in to your Nerd Out account and approve access.
-After approving, start a new thread. No token export is needed.
 
 > **Server name:** the plugin registers its server as `nerd-out-notes`, but the
 > installed name may be namespaced — Claude Code registers plugin servers as
-> `plugin:nerd-out-notes:nerd-out-notes`, and a Codex marketplace install may
-> namespace it too. If login can't find the server, run `codex mcp list` or
-> `claude mcp list` to see the exact name and use that instead.
+> `plugin:nerd-out-notes:nerd-out-notes`. If you don't see the server, run
+> `codex mcp list` or `claude mcp list` to see the exact name.
 
 The plugin connects to `http://127.0.0.1:38473/mcp`. That server is loopback-only
 and runs inside the signed-in Nerd Out Notes Mac app.
@@ -119,9 +110,9 @@ For Claude Code:
 claude mcp add --transport http nerd-out-notes http://127.0.0.1:38473/mcp --header "Authorization: Bearer <token-from-nerd-out-notes>"
 ```
 
-Updating Nerd Out Notes for Mac and running the OAuth authorization from
-**Setup** above (use `codex mcp list` or `claude mcp list` if the server name
-is namespaced) replaces this setup.
+Updating Nerd Out Notes for Mac and completing the browser sign-in from
+**Setup** above (it runs automatically the first time the plugin's bridge
+connects) replaces this setup.
 
 </details>
 
@@ -155,7 +146,8 @@ conversation transcripts by default. Enable MCP writes in the app before using
 it to create or update notes.
 
 If the agent reports a connection error, confirm the Mac app is open and the
-server is enabled. If it reports an authorization error, re-run the
-authorization from **Setup** above and complete the browser sign-in (access may
-have been revoked or expired). If login can't find the server, use
-`codex mcp list` or `claude mcp list` to confirm its exact name.
+server is enabled. If it reports an authorization error, start a new
+conversation so the bridge re-runs the browser sign-in (access may have been
+revoked or expired); deleting `~/.mcp-auth` forces a fresh sign-in. If you
+don't see the server, use `codex mcp list` or `claude mcp list` to confirm
+its exact name.
