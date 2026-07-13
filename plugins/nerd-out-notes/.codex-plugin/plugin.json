@@ -1,6 +1,6 @@
 {
   "name": "nerd-out-notes",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Use the Nerd Out Notes local MCP server from Codex.",
   "author": {
     "name": "Nerd Out Inc.",
@@ -16,7 +16,7 @@
     "productivity"
   ],
   "skills": "./skills/",
-  "mcpServers": "./.mcp.json",
+  "mcpServers": "./.codex-plugin/mcp.json",
   "interface": {
     "displayName": "Nerd Out Notes",
     "shortDescription": "Read, search, and update Nerd Out Notes.",

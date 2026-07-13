@@ -1,0 +1,33 @@
+{
+  "manifest_version": "0.3",
+  "name": "nerd-out-notes",
+  "display_name": "Nerd Out Notes",
+  "version": "0.5.0",
+  "description": "Read, search, and update Nerd Out Notes through the Mac app's local MCP server.",
+  "long_description": "Connects Claude Desktop to the local MCP server hosted by Nerd Out Notes for Mac. Claude can list notes, read note content, run keyword and semantic search, and (when writes are enabled in the app) create or update notes.\n\nRequires the Nerd Out Notes Mac app with its MCP server enabled (Settings -> MCP Server). On first use, a browser window opens to sign in to your Nerd Out account and approve access. All note access stays on your machine over the loopback interface.",
+  "author": {
+    "name": "Nerd Out Inc.",
+    "url": "https://github.com/NerdOutInc"
+  },
+  "homepage": "https://github.com/NerdOutInc/nerd-out-plugins/tree/main/desktop-extensions/nerd-out-notes",
+  "documentation": "https://github.com/NerdOutInc/nerd-out-plugins/tree/main/desktop-extensions/nerd-out-notes",
+  "support": "https://github.com/NerdOutInc/nerd-out-plugins/issues",
+  "icon": "icon.png",
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.mjs"]
+    }
+  },
+  "keywords": ["nerd-out", "notes", "mcp", "local-first", "productivity"],
+  "license": "MIT",
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": ["darwin"],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}

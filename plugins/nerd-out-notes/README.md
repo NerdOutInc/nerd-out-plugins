@@ -1,7 +1,25 @@
 # Nerd Out Notes Plugin
 
-Use Codex or Claude Code with the local MCP server hosted by Nerd Out Notes
-for Mac.
+Use Claude (Desktop, Cowork, or Claude Code) or Codex with the local MCP
+server hosted by Nerd Out Notes for Mac.
+
+## How the plugin connects
+
+The Mac app hosts a loopback-only MCP server at `http://127.0.0.1:38473/mcp`.
+Claude clients refuse plain-http URLs on some surfaces (Claude Desktop chat
+routes url-type servers through cloud custom connectors, which require public
+HTTPS and can never reach a loopback listener), so the Claude side of this
+plugin ships a **stdio bridge** instead of a URL: `bridge/index.mjs` waits for
+the app, then runs a bundled copy of [`mcp-remote`](https://github.com/geelen/mcp-remote)
+(MIT — `bridge/LICENSE-mcp-remote.txt`) that proxies stdio to the loopback
+server and handles the MCP OAuth browser sign-in, caching tokens in
+`~/.mcp-auth`. The bridge runs `node` from your PATH (any Node.js 18+). Codex
+connects to the loopback URL directly (`.codex-plugin/mcp.json`) and uses its
+built-in MCP OAuth instead.
+
+The bundle is regenerated with `cd bridge/build && npm install && npm run build`
+(see `bridge/build/build.mjs`) — do not edit `bridge/mcp-remote-proxy.bundle.mjs`
+by hand.
 
 ## Install
 
@@ -22,6 +40,12 @@ npx codex-marketplace add NerdOutInc/nerd-out-plugins/plugins/nerd-out-notes --p
 ```
 
 To scope it to the current repository instead, swap `--global` for `--project`.
+
+### Claude Desktop (chat and Cowork)
+
+Open **Customize → Plugins**, choose **Add marketplace**, and enter
+`NerdOutInc/nerd-out-plugins`. Then install **Nerd Out Notes** from the
+marketplace list. No terminal needed.
 
 ### Claude Code
 
@@ -48,14 +72,17 @@ Start a new thread after installing so the plugin tools are loaded.
 3. Enable the local MCP server.
 4. Authorize your agent.
 
+For Claude (Desktop, Cowork, and Claude Code), no explicit login step is
+needed: the first time the plugin's bridge connects, a browser window opens to
+sign in to your Nerd Out account and approve access. Approve, then start a new
+conversation. Tokens are cached and refreshed in `~/.mcp-auth`, so this
+happens once per Mac.
+
 For Codex:
 
 ```bash
 codex mcp login nerd-out-notes
 ```
-
-For Claude Code, run `/mcp` in a session and authenticate the Nerd Out Notes
-server.
 
 A browser window opens to sign in to your Nerd Out account and approve access.
 After approving, start a new thread. No token export is needed.

@@ -1,0 +1,14 @@
+{
+  "name": "nerd-out-notes-bridge-build",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Builds ../mcp-remote-proxy.bundle.mjs (the committed single-file mcp-remote bundle used by the plugin's stdio bridge)",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.0",
+    "mcp-remote": "0.1.38"
+  }
+}
