@@ -44,11 +44,14 @@ function validConfig() {
   };
 }
 
-function runHook(environment) {
+function runHook(
+  environment,
+  input = { hook_event_name: "UserPromptSubmit" },
+) {
   return spawnSync(process.execPath, [hookScript], {
     encoding: "utf8",
     env: environment,
-    input: JSON.stringify({ hook_event_name: "UserPromptSubmit" }),
+    input: typeof input === "string" ? input : JSON.stringify(input),
   });
 }
 
@@ -114,6 +117,21 @@ test("stays silent when the config is malformed", () => {
     CODEX_HOME: makeConfigDirectory({ version: 1 }),
     PLUGIN_ROOT: path.dirname(path.dirname(hookScript)),
   });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout, "");
+  assert.equal(result.stderr, "");
+});
+
+test("stays silent when hook input is invalid JSON", () => {
+  const result = runHook(
+    {
+      ...process.env,
+      CODEX_HOME: makeConfigDirectory(),
+      PLUGIN_ROOT: path.dirname(path.dirname(hookScript)),
+    },
+    "not-json",
+  );
 
   assert.equal(result.status, 0);
   assert.equal(result.stdout, "");
