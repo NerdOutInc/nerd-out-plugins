@@ -1,6 +1,6 @@
 ---
 name: nerd-out-journal
-description: Keep a concise, searchable journal of agent work in NerdOut. Use when the user invokes the nerd-out-journal skill ($nerd-out-journal in Codex, /nerd-out-notes:nerd-out-journal in Claude Code) or when the agent's global nerd-out-journal.json configuration exists; once configured, automatically journal every task with useful decisions, implementation work, tests, or follow-ups. Configure a workspace on first use, write a daily summary, choose an appropriate set of detailed named notes, and search the archive before repeating past decisions.
+description: Keep a concise, searchable journal of agent work in NerdOut. Use when the user invokes the nerd-out-journal skill ($nerd-out-notes:nerd-out-journal in Codex, /nerd-out-notes:nerd-out-journal in Claude Code) or when plugin lifecycle context reports a valid global nerd-out-journal.json configuration for the current agent; once configured, journal every task with useful decisions, implementation work, tests, or follow-ups. Configure a workspace on first use, write a daily summary, choose an appropriate set of detailed named notes, and search the archive before repeating past decisions.
 ---
 
 # NerdOut Journal
@@ -39,6 +39,8 @@ The expected shape is:
 }
 ```
 
+`journal.dailyNote` may be omitted; omission defaults to `true`.
+
 When the file is missing, malformed, or the saved workspace is no longer
 available, call `list_workspaces` and show the user only confirmed,
 write-ready choices. Include each workspace's name, id, role, and write status.
@@ -64,17 +66,23 @@ with `list_workspaces` before writing; if it is no longer write-ready, pause
 the journal write and ask the user to select a replacement rather than
 silently switching.
 
-If `journal.dailyNote` is `true` (the default in the example configuration),
-perform the DailyNote update in addition to the named-note work. If it is
-`false`, still journal the task in the selected named notes but skip the
-DailyNote update.
+The plugin's `UserPromptSubmit` hook checks only whether this agent's config
+exists and has the expected shape, then adds lifecycle context telling the
+agent to load this skill for meaningful work. The hook does not validate the
+workspace or write notes itself. Always perform the live workspace validation
+above after implicit activation.
+
+If `journal.dailyNote` is `true` or omitted, perform the DailyNote update in
+addition to the named-note work. If it is `false`, still journal the task in the
+selected named notes but skip the DailyNote update.
 
 Distinguish explicit from implicit activation. An explicit skill invocation
-(`$nerd-out-journal` in Codex, `/nerd-out-notes:nerd-out-journal` in Claude
-Code) may prompt for a workspace when the config is missing or invalid. An
-implicit invocation with no valid config must skip journaling for that task
-without prompting or interrupting unrelated work; wait for the user to invoke
-the skill explicitly before starting setup.
+(`$nerd-out-notes:nerd-out-journal` in Codex,
+`/nerd-out-notes:nerd-out-journal` in Claude Code) may prompt for a workspace
+when the config is missing or invalid. An implicit invocation with no valid
+config must skip journaling for that task without prompting or interrupting
+unrelated work; wait for the user to invoke the skill explicitly before
+starting setup.
 
 ## Search before writing
 

@@ -134,16 +134,26 @@ under `skills/` that contains a `SKILL.md`. It currently includes:
   write-ready NerdOut workspace on first use, saves that choice in a per-agent
   global config (`$CODEX_HOME/nerd-out-journal.json` for Codex,
   `$CLAUDE_CONFIG_DIR/nerd-out-journal.json` — default `~/.claude` — for
-  Claude Code), and then automatically records useful task notes plus a daily
-  summary with backlinks for future tasks.
+  Claude Code), and then records useful task notes plus a daily summary with
+  backlinks for future tasks. A bundled `UserPromptSubmit` hook notices the
+  valid opt-in config and adds the journal reminder to each later prompt, so
+  the skill no longer has to discover a file before it has been loaded.
 
-In Codex, invoke skills as `$nerd-out-notes` and `$nerd-out-journal`; in Claude
-Code, they are namespaced as `/nerd-out-notes:nerd-out-notes` and
+In Codex, invoke skills as `$nerd-out-notes:nerd-out-notes` and
+`$nerd-out-notes:nerd-out-journal`; in Claude Code, use
+`/nerd-out-notes:nerd-out-notes` and
 `/nerd-out-notes:nerd-out-journal`.
 
 The journal skill is summary-first and never stores credentials or full
 conversation transcripts by default. Enable MCP writes in the app before using
 it to create or update notes.
+
+After installing or updating the plugin, start a new thread so the hook is
+loaded. Codex requires a one-time review and trust decision for plugin hooks;
+open `/hooks` if Codex reports that this hook is awaiting review. The hook only
+checks the current agent's `nerd-out-journal.json` shape and injects agent
+context. It does not read note bodies, validate workspace access, or write
+notes; the journal skill and MCP server keep those responsibilities.
 
 If the agent reports a connection error, confirm the Mac app is open and the
 server is enabled. If it reports an authorization error, start a new

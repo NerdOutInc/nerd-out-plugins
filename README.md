@@ -94,7 +94,16 @@ Write tools only appear when "Allow writes" is enabled in Nerd Out Notes
 settings.
 
 The plugin supports multiple skills in its `skills/` directory. In addition to
-the direct note workflow, the journal skill (`$nerd-out-journal` in Codex,
-`/nerd-out-notes:nerd-out-journal` in Claude Code) configures a per-agent
-global `nerd-out-journal.json` workspace selection and automatically keeps
-concise named-note and DailyNote summaries in that write-ready workspace.
+the direct note workflow, the journal skill
+(`$nerd-out-notes:nerd-out-journal` in Codex,
+`/nerd-out-notes:nerd-out-journal` in Claude Code) configures a per-agent global
+`nerd-out-journal.json` workspace selection. A bundled per-prompt hook detects
+that valid opt-in config and reminds the agent to keep concise named-note and
+DailyNote summaries for meaningful work in that write-ready workspace.
+
+After installing or updating the plugin, start a new thread so its skills,
+tools, and hook are loaded. Codex requires a one-time review and trust decision
+for the plugin hook; open `/hooks` if Codex reports that the hook is awaiting
+review. The hook only reads the per-agent journal config and adds agent context;
+the journal skill still validates the live workspace and performs every note
+write through the Nerd Out MCP server.
