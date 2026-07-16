@@ -98,8 +98,10 @@ the direct note workflow, the journal skill
 (`$nerd-out-notes:nerd-out-journal` in Codex,
 `/nerd-out-notes:nerd-out-journal` in Claude Code) configures a per-agent global
 `nerd-out-journal.json` workspace selection. A bundled per-prompt hook detects
-that valid opt-in config and reminds the agent to keep concise named-note and
-DailyNote summaries for meaningful work in that write-ready workspace.
+that valid opt-in config, reminds the agent to search prior journal notes for
+relevant context when a task relates to earlier work, and reminds it to keep
+concise named-note and DailyNote summaries for meaningful work in that
+write-ready workspace.
 
 After installing or updating the plugin, start a new thread so its skills,
 tools, and hook are loaded. Codex requires a one-time review and trust decision

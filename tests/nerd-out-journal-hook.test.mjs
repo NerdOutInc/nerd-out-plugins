@@ -101,6 +101,85 @@ test("injects the Codex journal skill when Codex config is valid", () => {
   );
 });
 
+test("tells the agent to recall from the configured journal workspace", () => {
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(),
+      PLUGIN_ROOT: pluginRoot,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(context, /"Journal"/);
+  assert.match(context, /workspaceId workspace-id/);
+  assert.match(context, /keyword_search/);
+  assert.match(context, /semantic_search/);
+  assert.match(context, /read the relevant notes before deciding/);
+});
+
+test("flattens and truncates workspace names in the injected context", () => {
+  const config = validConfig();
+  config.workspace.name = `A\nB\t${"x".repeat(100)}`;
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(config),
+      PLUGIN_ROOT: pluginRoot,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.equal(context.includes("\n"), false);
+  assert.equal(context.includes(`"A B ${"x".repeat(76)}"`), true);
+  assert.equal(context.includes("x".repeat(77)), false);
+});
+
+test("escapes quotes and backslashes in the workspace name", () => {
+  const config = validConfig();
+  config.workspace.name = 'Side "quotes" \\ slash';
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(config),
+      PLUGIN_ROOT: pluginRoot,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.equal(context.includes(JSON.stringify(config.workspace.name)), true);
+});
+
+test("stays silent when the workspace id is not a plain token", () => {
+  for (const id of ["workspace\nid", "workspace id", 'ws"quote', "w".repeat(129)]) {
+    const config = validConfig();
+    config.workspace.id = id;
+
+    const result = runHook({
+      environment: {
+        ...cleanEnvironment(),
+        CODEX_HOME: makeConfigDirectory(config),
+        PLUGIN_ROOT: pluginRoot,
+      },
+    });
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout, "", `expected silence for id ${JSON.stringify(id)}`);
+    assert.equal(result.stderr, "");
+  }
+});
+
 test("injects the namespaced Claude Code skill when its config is valid", () => {
   const result = runHook({
     environment: {
@@ -118,6 +197,8 @@ test("injects the namespaced Claude Code skill when its config is valid", () => 
     /\/nerd-out-notes:nerd-out-journal/,
   );
   assert.match(output.hookSpecificOutput.additionalContext, /Claude Code/);
+  assert.match(output.hookSpecificOutput.additionalContext, /keyword_search/);
+  assert.match(output.hookSpecificOutput.additionalContext, /semantic_search/);
 });
 
 test("stays silent when the config is missing", () => {
