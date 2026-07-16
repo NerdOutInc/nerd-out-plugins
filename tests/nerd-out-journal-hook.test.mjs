@@ -101,6 +101,25 @@ test("injects the Codex journal skill when Codex config is valid", () => {
   );
 });
 
+test("tells the agent to recall from the configured journal workspace", () => {
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(),
+      PLUGIN_ROOT: pluginRoot,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(context, /"Journal"/);
+  assert.match(context, /workspaceId workspace-id/);
+  assert.match(context, /keyword_search\/semantic_search/);
+  assert.match(context, /read the relevant notes before deciding/);
+});
+
 test("injects the namespaced Claude Code skill when its config is valid", () => {
   const result = runHook({
     environment: {
@@ -118,6 +137,10 @@ test("injects the namespaced Claude Code skill when its config is valid", () => 
     /\/nerd-out-notes:nerd-out-journal/,
   );
   assert.match(output.hookSpecificOutput.additionalContext, /Claude Code/);
+  assert.match(
+    output.hookSpecificOutput.additionalContext,
+    /keyword_search\/semantic_search/,
+  );
 });
 
 test("stays silent when the config is missing", () => {

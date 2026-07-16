@@ -1,13 +1,15 @@
 ---
 name: nerd-out-journal
-description: Keep a concise, searchable journal of agent work in NerdOut. Use when the user invokes the nerd-out-journal skill ($nerd-out-notes:nerd-out-journal in Codex, /nerd-out-notes:nerd-out-journal in Claude Code) or when plugin lifecycle context reports a valid global nerd-out-journal.json configuration for the current agent; once configured, journal every task with useful decisions, implementation work, tests, or follow-ups. Configure a workspace on first use, write a daily summary, choose an appropriate set of detailed named notes, and search the archive before repeating past decisions.
+description: Keep a concise, searchable journal of agent work in NerdOut and read it back as the agent's long-term memory. Use when the user invokes the nerd-out-journal skill ($nerd-out-notes:nerd-out-journal in Codex, /nerd-out-notes:nerd-out-journal in Claude Code) or when plugin lifecycle context reports a valid global nerd-out-journal.json configuration for the current agent; once configured, search the journal at the start of tasks that may relate to prior work and journal every task with useful decisions, implementation work, tests, or follow-ups. Configure a workspace on first use, recall and cite relevant prior notes before deciding, write a daily summary, and choose an appropriate set of detailed named notes.
 ---
 
 # NerdOut Journal
 
 Use NerdOut as a global scratchpad for decisions and task history. The journal
 is deliberately summary-first: save the useful context, not a surprise
-transcript dump.
+transcript dump. It is also two-way: a journal that is written but never read
+back is dead weight, so recall from the archive at the start of related work
+is as much a part of this skill as writing at the end.
 
 ## Activation and configuration
 
@@ -61,16 +63,20 @@ non-confirmed, or not-ready workspace.
 When the skill is invoked explicitly, configure the workspace if necessary and
 then journal the current task. When the valid global configuration already
 exists, invoke this skill implicitly for every task going forward, including
-tasks where the user did not mention journaling. Validate the saved workspace
-with `list_workspaces` before writing; if it is no longer write-ready, pause
-the journal write and ask the user to select a replacement rather than
-silently switching.
+tasks where the user did not mention journaling. Implicit activation covers
+both ends of a task: recall relevant journal context before substantive work
+(see "Recall before working" below) and journal the outcome at the end.
+Validate the saved workspace with `list_workspaces` before writing; if it is
+no longer write-ready, pause the journal write and ask the user to select a
+replacement rather than silently switching.
 
 The plugin's `UserPromptSubmit` hook checks only whether this agent's config
-exists and has the expected shape, then adds lifecycle context telling the
-agent to load this skill for meaningful work. The hook does not validate the
-workspace or write notes itself. Always perform the live workspace validation
-above after implicit activation.
+exists and has the expected shape, then adds lifecycle context that names the
+configured workspace, tells the agent to search the journal when the task may
+relate to prior work, and tells it to load this skill for meaningful work. The
+hook does not validate the workspace or write notes itself. Recall searches
+may target the configured workspace directly, but always perform the live
+workspace validation above before implicit writes.
 
 If `journal.dailyNote` is `true` or omitted, perform the DailyNote update in
 addition to the named-note work. If it is `false`, still journal the task in the
@@ -84,17 +90,42 @@ config must skip journaling for that task without prompting or interrupting
 unrelated work; wait for the user to invoke the skill explicitly before
 starting setup.
 
-## Search before writing
+## Recall before working
 
-Before making a decision that may already have been recorded, search the saved
-workspace with `keyword_search` and, when available, `semantic_search`. Use
-specific terms from the task, relevant file names, and subsystem names. Read
-promising results with `read_note` and treat them as context, not authority:
-verify important claims against the current checkout.
+The archive only pays for itself when it changes what happens next. At the
+start of meaningful work, decide whether the journal could already cover part
+of the task, and search before proceeding when it might: the task continues an
+ongoing project, touches a subsystem this agent has likely worked on before,
+revisits a decision or bug that may already be recorded, or leans on context
+the user assumes is known ("like last time", "continue where we left off",
+"the usual fix").
+
+- Use `keyword_search` for exact terms: file names, paths, subsystem and
+  project names, error strings, and identifiers from the task.
+- Use `semantic_search`, when available, for concepts and paraphrases that
+  exact terms would miss.
+- Use `list_notes` or recent DailyNotes when the user points at time rather
+  than topic ("what did we do yesterday?", "where did we leave off?").
+- Read promising results with `read_note` and treat them as context, not
+  authority: verify important claims against the current checkout before
+  relying on them.
+
+When a journal note shapes the work — a decision followed, a fix reused, a
+pitfall avoided — say so in the response and name the note, so the user can
+see what the journal contributed. When searches return nothing relevant, move
+on without further reads: one or two focused searches are enough for most
+tasks, and recall must never stall the task itself.
+
+Recall also applies just before writing: when about to record a decision that
+may already be journaled, search first and extend the existing note instead of
+creating a duplicate.
 
 Always pass the configured `workspaceId` to `list_notes`, `keyword_search`,
 `semantic_search`, and `create_note`. `update_note_content` targets the note's
-own workspace and must never be used to move a note between workspaces.
+own workspace and must never be used to move a note between workspaces. If
+recall searches fail because the configured workspace is no longer available,
+continue the task without journal context and run the workspace re-validation
+flow before any write; never silently search a different workspace instead.
 
 ## Per-task journal workflow
 
@@ -103,8 +134,8 @@ At the end of meaningful work, do the following in order:
 1. Decide how many named notes are useful and how they should be organized.
    Reuse, split, merge, or create notes based on what will make future search
    and retrieval clearest; there is no fixed one-note-per-task rule. If a
-   matching note exists, read it and append or revise it instead of creating
-   needless duplicates.
+   matching note exists — often one already surfaced during recall — read it
+   and append or revise it instead of creating needless duplicates.
 2. Decide what information is worth preserving for a future agent. Capture
    durable context such as objectives, decisions and rejected alternatives,
    important files or paths, commands and tests run, outcomes, blockers, and
@@ -177,6 +208,9 @@ note but report that the daily summary did not succeed.
 - Never bind, search, or write through the journal in a workspace that is
   blocked, non-confirmed, non-writable, or not write-ready.
 - Never treat a failed MCP response as a successful journal write.
+- Never let recall stall a task: when searches fail or return nothing
+  relevant, proceed with the work, and mention the missing journal context
+  only when the user explicitly asked about prior work.
 - Never put credentials or entire conversation transcripts in the journal by
   default.
 - If the user asks to stop journaling, stop writing for the task and leave the

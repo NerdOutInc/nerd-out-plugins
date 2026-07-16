@@ -137,7 +137,11 @@ under `skills/` that contains a `SKILL.md`. It currently includes:
   Claude Code), and then records useful task notes plus a daily summary with
   backlinks for future tasks. A bundled `UserPromptSubmit` hook notices the
   valid opt-in config and adds the journal reminder to each later prompt, so
-  the skill no longer has to discover a file before it has been loaded.
+  the skill no longer has to discover a file before it has been loaded. The
+  reminder names the configured workspace and works in both directions: it
+  tells the agent to search existing journal notes when a task may relate to
+  prior work — so the journal is read back as memory, not just written — and
+  to journal the outcome at the end.
 
 In Codex, invoke skills as `$nerd-out-notes:nerd-out-notes` and
 `$nerd-out-notes:nerd-out-journal`; in Claude Code, use
@@ -152,8 +156,10 @@ After installing or updating the plugin, start a new thread so the hook is
 loaded. Codex requires a one-time review and trust decision for plugin hooks;
 open `/hooks` if Codex reports that this hook is awaiting review. The hook only
 checks the current agent's `nerd-out-journal.json` shape and injects agent
-context. It does not read note bodies, validate workspace access, or write
-notes; the journal skill and MCP server keep those responsibilities.
+context, including the configured workspace name and id so the agent can
+search the journal right away. It does not read note bodies, validate
+workspace access, or write notes; the journal skill and MCP server keep those
+responsibilities.
 
 If the agent reports a connection error, confirm the Mac app is open and the
 server is enabled. If it reports an authorization error, start a new
