@@ -56,6 +56,60 @@ claude plugin marketplace add NerdOutInc/nerd-out-plugins
 claude plugin install nerd-out-notes@nerd-out --scope user
 ```
 
+## Updating
+
+Installed plugins do not update themselves by default. Both agents install
+from a snapshot of this repository taken at install time, so run the steps
+below whenever you want the latest release.
+
+The commands below refer to the marketplace as `nerd-out`. That is the
+marketplace name from this repository's manifests, not the GitHub repository
+name, and both agents register it when you add the marketplace. If you are
+unsure what name your agent uses, run `codex plugin marketplace list` or
+`/plugin marketplace list`.
+
+### Codex
+
+If you installed through the Codex app or the `codex` CLI, upgrade the
+marketplace. This refreshes the snapshot and reinstalls the marketplace's
+installed plugins at the new version:
+
+```bash
+codex plugin marketplace upgrade nerd-out
+```
+
+The Codex app can do the same from **Plugins**: select the **Nerd Out**
+marketplace and choose its upgrade action.
+
+If you installed with `codex-marketplace`, there is no update command; re-run
+the install command to copy the latest files over the previous install:
+
+```bash
+npx codex-marketplace add NerdOutInc/nerd-out-plugins/plugins/nerd-out-notes --plugin --global
+```
+
+### Claude Code
+
+Refresh the marketplace listing, then update the plugin:
+
+```text
+/plugin marketplace update nerd-out
+/plugin update nerd-out-notes@nerd-out
+```
+
+Or from the command line:
+
+```bash
+claude plugin marketplace update nerd-out
+claude plugin update nerd-out-notes@nerd-out
+```
+
+Claude Code can also keep the plugin current automatically. Third-party
+marketplaces have auto-update disabled by default, so opt in once: run
+`/plugin`, open the **Marketplaces** tab, select **nerd-out**, and choose
+**Enable auto-update**. Updates are fetched in the background after a session
+starts and take effect on the next launch or after `/reload-plugins`.
+
 ## Nerd Out Notes
 
 `plugins/nerd-out-notes` connects Codex or Claude Code to the local MCP server
