@@ -535,6 +535,46 @@ test("falls back to the hook process cwd when the input has none", () => {
   assert.match(result.stdout, /workspaceId project-workspace-id/);
 });
 
+test("resolves a relative input cwd against the hook process cwd", () => {
+  const projectRoot = makeTemporaryDirectory();
+  const nestedProject = path.join(projectRoot, "nested");
+  fs.mkdirSync(nestedProject);
+
+  const result = runHook({
+    cwd: projectRoot,
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(configWithProject(nestedProject)),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: "nested" },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /workspaceId project-workspace-id/);
+});
+
+test("normalizes dot segments in the input cwd", () => {
+  const projectRoot = makeTemporaryDirectory();
+  const workingDirectory = path.join(projectRoot, "a", "b");
+  fs.mkdirSync(workingDirectory, { recursive: true });
+  const dottedDirectory = path.join(projectRoot, "a", "..", "a", "b");
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(configWithProject(projectRoot)),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: dottedDirectory },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /workspaceId project-workspace-id/);
+});
+
 test("treats an empty projects map as global journaling", () => {
   const config = validConfig();
   config.projects = {};

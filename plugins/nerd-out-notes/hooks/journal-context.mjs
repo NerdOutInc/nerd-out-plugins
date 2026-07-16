@@ -135,9 +135,11 @@ function buildHookOutput(input, env = process.env) {
   if (!config) return null;
 
   // Both agents pass the session's working directory in the hook input; the
-  // hook process's own working directory is the fallback.
+  // hook process's own working directory is the fallback. Path normalization
+  // resolves a relative value against the process working directory, so a
+  // provided cwd is honored in either form.
   const workingDirectory =
-    typeof input.cwd === "string" && path.isAbsolute(input.cwd)
+    typeof input.cwd === "string" && input.cwd.length > 0
       ? input.cwd
       : process.cwd();
   const projectWorkspace = resolveProjectWorkspace(
