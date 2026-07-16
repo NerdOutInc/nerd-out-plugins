@@ -55,6 +55,22 @@ function validConfig() {
   };
 }
 
+function validProjectWorkspace() {
+  return { id: "project-workspace-id", name: "Project Journal" };
+}
+
+function configWithProject(projectRoot, workspace = validProjectWorkspace()) {
+  const config = validConfig();
+  config.projects = { [projectRoot]: { workspace } };
+  return config;
+}
+
+function makeProjectDirectory(...segments) {
+  const directory = path.join(makeTemporaryDirectory(), ...segments);
+  fs.mkdirSync(directory, { recursive: true });
+  return directory;
+}
+
 function cleanEnvironment() {
   const environment = { ...process.env };
   delete environment.CLAUDE_CONFIG_DIR;
@@ -65,11 +81,13 @@ function cleanEnvironment() {
 }
 
 function runHook({
+  cwd,
   environment,
   input = { hook_event_name: "UserPromptSubmit" },
   script = hookScript,
 }) {
   return spawnSync(process.execPath, [script], {
+    cwd,
     encoding: "utf8",
     env: environment,
     input: typeof input === "string" ? input : JSON.stringify(input),
@@ -355,4 +373,281 @@ test("ignores hook events other than UserPromptSubmit", () => {
   assert.equal(result.status, 0);
   assert.equal(result.stdout, "");
   assert.equal(result.stderr, "");
+});
+
+test("binds the session to a project workspace when cwd is inside the project", () => {
+  const projectRoot = makeTemporaryDirectory();
+  const nestedDirectory = path.join(projectRoot, "packages", "app");
+  fs.mkdirSync(nestedDirectory, { recursive: true });
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(configWithProject(projectRoot)),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: nestedDirectory },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(context, /"Project Journal"/);
+  assert.match(context, /workspaceId project-workspace-id/);
+  assert.match(context, /per-project override of the global workspace "Journal"/);
+  assert.equal(context.includes("workspaceId workspace-id"), false);
+  assert.equal(context.includes(projectRoot), false);
+});
+
+test("binds the session when cwd is exactly the project root", () => {
+  const projectRoot = makeTemporaryDirectory();
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CLAUDE_CONFIG_DIR: makeConfigDirectory(configWithProject(projectRoot)),
+      CLAUDE_PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: projectRoot },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(context, /workspaceId project-workspace-id/);
+  assert.match(context, /Claude Code/);
+});
+
+test("keeps the global workspace when the session is outside every project", () => {
+  const projectRoot = makeTemporaryDirectory();
+  const unrelatedDirectory = makeTemporaryDirectory();
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(configWithProject(projectRoot)),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: unrelatedDirectory },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(context, /"Journal"/);
+  assert.match(context, /workspaceId workspace-id/);
+  assert.equal(context.includes("per-project override"), false);
+  assert.equal(context.includes("project-workspace-id"), false);
+});
+
+test("does not match a sibling directory that shares the root's prefix", () => {
+  const parentDirectory = makeTemporaryDirectory();
+  const projectRoot = path.join(parentDirectory, "proj");
+  const siblingDirectory = path.join(parentDirectory, "project-two");
+  fs.mkdirSync(projectRoot);
+  fs.mkdirSync(siblingDirectory);
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(configWithProject(projectRoot)),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: siblingDirectory },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(context, /workspaceId workspace-id/);
+  assert.equal(context.includes("project-workspace-id"), false);
+});
+
+test("prefers the longest matching project root when projects nest", () => {
+  const outerRoot = makeTemporaryDirectory();
+  const innerRoot = path.join(outerRoot, "inner");
+  const workingDirectory = path.join(innerRoot, "deep");
+  fs.mkdirSync(workingDirectory, { recursive: true });
+
+  const config = validConfig();
+  config.projects = {
+    [outerRoot]: { workspace: { id: "outer-id", name: "Outer" } },
+    [innerRoot]: { workspace: { id: "inner-id", name: "Inner" } },
+  };
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(config),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: workingDirectory },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(context, /"Inner"/);
+  assert.match(context, /workspaceId inner-id/);
+  assert.equal(context.includes("workspaceId outer-id"), false);
+});
+
+test("matches a project root saved through a symlink", () => {
+  const projectRoot = makeTemporaryDirectory();
+  const workingDirectory = path.join(projectRoot, "src");
+  fs.mkdirSync(workingDirectory);
+  const linkedRoot = path.join(makeTemporaryDirectory(), "linked");
+  fs.symlinkSync(projectRoot, linkedRoot, "dir");
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(configWithProject(linkedRoot)),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: workingDirectory },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /workspaceId project-workspace-id/);
+});
+
+test("falls back to the hook process cwd when the input has none", () => {
+  const projectRoot = makeProjectDirectory("repo");
+
+  const result = runHook({
+    cwd: projectRoot,
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(configWithProject(projectRoot)),
+      PLUGIN_ROOT: pluginRoot,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /workspaceId project-workspace-id/);
+});
+
+test("resolves a relative input cwd against the hook process cwd", () => {
+  const projectRoot = makeTemporaryDirectory();
+  const nestedProject = path.join(projectRoot, "nested");
+  fs.mkdirSync(nestedProject);
+
+  const result = runHook({
+    cwd: projectRoot,
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(configWithProject(nestedProject)),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: "nested" },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /workspaceId project-workspace-id/);
+});
+
+test("normalizes dot segments in the input cwd", () => {
+  const projectRoot = makeTemporaryDirectory();
+  const workingDirectory = path.join(projectRoot, "a", "b");
+  fs.mkdirSync(workingDirectory, { recursive: true });
+  const dottedDirectory = path.join(projectRoot, "a", "..", "a", "b");
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(configWithProject(projectRoot)),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: dottedDirectory },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /workspaceId project-workspace-id/);
+});
+
+test("treats an empty projects map as global journaling", () => {
+  const config = validConfig();
+  config.projects = {};
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(config),
+      PLUGIN_ROOT: pluginRoot,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /workspaceId workspace-id/);
+});
+
+test("stays silent when the projects map is malformed", () => {
+  const absoluteRoot = path.join(os.tmpdir(), "nerd-out-project");
+  const malformedProjects = [
+    [],
+    { "relative/path": { workspace: validProjectWorkspace() } },
+    { "/": { workspace: validProjectWorkspace() } },
+    { "/..": { workspace: validProjectWorkspace() } },
+    { [absoluteRoot]: null },
+    { [absoluteRoot]: {} },
+    { [absoluteRoot]: { workspace: { id: "bad id", name: "Project" } } },
+    { [absoluteRoot]: { workspace: { id: "project-id", name: "" } } },
+  ];
+
+  for (const projects of malformedProjects) {
+    const config = validConfig();
+    config.projects = projects;
+
+    const result = runHook({
+      environment: {
+        ...cleanEnvironment(),
+        CODEX_HOME: makeConfigDirectory(config),
+        PLUGIN_ROOT: pluginRoot,
+      },
+      input: { hook_event_name: "UserPromptSubmit", cwd: absoluteRoot },
+    });
+
+    assert.equal(result.status, 0);
+    assert.equal(
+      result.stdout,
+      "",
+      `expected silence for projects ${JSON.stringify(projects)}`,
+    );
+    assert.equal(result.stderr, "");
+  }
+});
+
+test("sanitizes the project workspace name in the injected context", () => {
+  const projectRoot = makeTemporaryDirectory();
+  const config = configWithProject(projectRoot, {
+    id: "project-workspace-id",
+    name: 'Line\nbreak "quoted"',
+  });
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(config),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: projectRoot },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.equal(context.includes("\n"), false);
+  assert.equal(context.includes(JSON.stringify('Line break "quoted"')), true);
 });

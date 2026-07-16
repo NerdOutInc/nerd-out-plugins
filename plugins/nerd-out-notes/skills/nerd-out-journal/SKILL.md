@@ -1,6 +1,6 @@
 ---
 name: nerd-out-journal
-description: Keep a concise, searchable journal of agent work in NerdOut and read it back as the agent's long-term memory. Use when the user invokes the nerd-out-journal skill ($nerd-out-notes:nerd-out-journal in Codex, /nerd-out-notes:nerd-out-journal in Claude Code) or when plugin lifecycle context reports a valid global nerd-out-journal.json configuration for the current agent; once configured, search the journal at the start of tasks that may relate to prior work and journal every task with useful decisions, implementation work, tests, or follow-ups. Configure a workspace on first use, recall and cite relevant prior notes before deciding, write a daily summary, and choose an appropriate set of detailed named notes.
+description: Keep a concise, searchable journal of agent work in NerdOut and read it back as the agent's long-term memory. Use when the user invokes the nerd-out-journal skill ($nerd-out-notes:nerd-out-journal in Codex, /nerd-out-notes:nerd-out-journal in Claude Code) or when plugin lifecycle context reports a valid global nerd-out-journal.json configuration for the current agent; once configured, search the journal at the start of tasks that may relate to prior work and journal every task with useful decisions, implementation work, tests, or follow-ups. Configure a workspace on first use, bind a project to its own workspace when the user asks, recall and cite relevant prior notes before deciding, write a daily summary, and choose an appropriate set of detailed named notes.
 ---
 
 # NerdOut Journal
@@ -37,11 +37,22 @@ The expected shape is:
   },
   "journal": {
     "dailyNote": true
+  },
+  "projects": {
+    "/absolute/path/to/project": {
+      "workspace": {
+        "id": "project-workspace-id",
+        "name": "Project workspace name"
+      }
+    }
   }
 }
 ```
 
-`journal.dailyNote` may be omitted; omission defaults to `true`.
+`journal.dailyNote` may be omitted; omission defaults to `true`. `projects`
+may also be omitted; when present it maps absolute project-root paths — never
+the filesystem root itself — to per-project workspace overrides (see
+"Per-project workspaces" below).
 
 When the file is missing, malformed, or the saved workspace is no longer
 available, call `list_workspaces` and show the user only confirmed,
@@ -72,11 +83,12 @@ replacement rather than silently switching.
 
 The plugin's `UserPromptSubmit` hook checks only whether this agent's config
 exists and has the expected shape, then adds lifecycle context that names the
-configured workspace, tells the agent to search the journal when the task may
-relate to prior work, and tells it to load this skill for meaningful work. The
-hook does not validate the workspace or write notes itself. Recall searches
-may target the configured workspace directly, but always perform the live
-workspace validation above before implicit writes.
+effective workspace (see "Per-project workspaces" below), tells the agent to
+search the journal when the task may relate to prior work, and tells it to
+load this skill for meaningful work. The hook does not validate the workspace
+or write notes itself. Recall searches may target the effective workspace
+directly, but always perform the live workspace validation above before
+implicit writes.
 
 If `journal.dailyNote` is `true` or omitted, perform the DailyNote update in
 addition to the named-note work. If it is `false`, still journal the task in the
@@ -89,6 +101,51 @@ when the config is missing or invalid. An implicit invocation with no valid
 config must skip journaling for that task without prompting or interrupting
 unrelated work; wait for the user to invoke the skill explicitly before
 starting setup.
+
+## Per-project workspaces
+
+The global workspace is the default journal for every session. A project can
+also get its own journal: when the user explicitly asks to select a workspace
+for the current project ("select a Nerd Out workspace for this project",
+"journal this repo to its own workspace"), add a project binding to the same
+per-agent config instead of changing the global selection.
+
+To bind a project:
+
+1. Resolve the project root. Agents identify a project by its folder path, so
+   use the main checkout's top-level directory: in a git repository, the
+   parent directory of `git rev-parse --path-format=absolute --git-common-dir`,
+   which maps linked worktrees back to the main checkout; outside git, the
+   session's working directory.
+2. Offer workspaces under the same rules as the global selection: confirmed,
+   write-ready choices only, chosen explicitly by name or id.
+3. Show the user the resolved absolute path and the chosen workspace, and only
+   after they confirm save the entry under `projects`, keyed by that path.
+   Leave the global `workspace` unchanged; if the config file does not exist
+   yet, run the global selection first so the file stays valid.
+
+A saved project covers its root and everything inside it, including subfolders
+and worktrees checked out under the repo (for example
+`<repo>/.claude/worktrees/<name>`). The effective journal workspace for a
+session is the entry with the longest saved root that equals or contains the
+session's working directory, falling back to the global workspace when no
+entry matches. The plugin hook performs the same resolution and names the
+effective workspace in its lifecycle context.
+
+Use the effective workspace for everything this skill does in the session:
+recall searches, named notes, and the DailyNote all target the project
+workspace when an override matches. Validation rules apply unchanged: if a
+project's saved workspace is no longer write-ready, pause and ask the user to
+update that project entry rather than silently falling back to the global
+workspace. One exception helps recall: when a
+project search finds nothing and the task clearly references older work, a
+follow-up search of the global workspace may recover notes journaled before
+the project was bound — but writes still go only to the effective workspace.
+
+When the user asks to stop journaling a project separately, confirm which
+entry and delete it so sessions fall back to the global workspace. Never add,
+change, or remove a project binding implicitly; only explicit user requests
+change the config file.
 
 ## Recall before working
 
@@ -120,12 +177,14 @@ Recall also applies just before writing: when about to record a decision that
 may already be journaled, search first and extend the existing note instead of
 creating a duplicate.
 
-Always pass the configured `workspaceId` to `list_notes`, `keyword_search`,
-`semantic_search`, and `create_note`. `update_note_content` targets the note's
-own workspace and must never be used to move a note between workspaces. If
-recall searches fail because the configured workspace is no longer available,
-continue the task without journal context and run the workspace re-validation
-flow before any write; never silently search a different workspace instead.
+Always pass the effective workspace's `workspaceId` (the project override
+when one matches, the global workspace otherwise) to `list_notes`,
+`keyword_search`, `semantic_search`, and `create_note`. `update_note_content`
+targets the note's own workspace and must never be used to move a note
+between workspaces. If recall searches fail because the effective workspace
+is no longer available, continue the task without journal context and run the
+workspace re-validation flow before any write; never silently search a
+different workspace instead.
 
 ## Per-task journal workflow
 
@@ -183,9 +242,9 @@ Follow-ups: <short list or none>
 
 When updating a DailyNote, send the detailed named note as a backlink in the
 `backlinks` field rather than pasting a fake Markdown URL. Preserve existing
-daily content by using `mode: "append"`. For the configured workspace, use the
+daily content by using `mode: "append"`. For the effective workspace, use the
 current date as the DailyNote identifier
-`date=YYYY-MM-DD&workspaceId=<configured-workspace-id>`; the journal MCP lazily
+`date=YYYY-MM-DD&workspaceId=<effective-workspace-id>`; the journal MCP lazily
 materializes a missing DailyNote from that identifier. If that
 write is rejected by workspace readiness or encryption state, save the named
 note but report that the daily summary did not succeed.
@@ -205,6 +264,8 @@ note but report that the daily summary did not succeed.
 ## Failure and safety rules
 
 - Never select a workspace silently, especially after a workspace id changes.
+- Never add, change, or remove a per-project binding without an explicit user
+  request and confirmation of the exact project path.
 - Never bind, search, or write through the journal in a workspace that is
   blocked, non-confirmed, non-writable, or not write-ready.
 - Never treat a failed MCP response as a successful journal write.
