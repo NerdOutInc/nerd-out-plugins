@@ -31,6 +31,8 @@ function hasValidJournalConfig(configPath) {
         (journal.dailyNote === undefined ||
           typeof journal.dailyNote === "boolean"));
 
+    // Keep this strict. Before any writer emits a newer config version, ship
+    // compatible readers first so older plugin installs do not go silent.
     return (
       config?.version === 1 &&
       config?.scope === "global" &&

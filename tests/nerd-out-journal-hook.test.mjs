@@ -214,6 +214,34 @@ test("uses the Claude Code home-directory fallback", () => {
   assert.equal(result.stderr, "");
 });
 
+test("stays silent when the Codex home fallback has no config", () => {
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      HOME: makeTemporaryDirectory(),
+      PLUGIN_ROOT: pluginRoot,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout, "");
+  assert.equal(result.stderr, "");
+});
+
+test("stays silent when the Claude Code home fallback has no config", () => {
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CLAUDE_PLUGIN_ROOT: pluginRoot,
+      HOME: makeTemporaryDirectory(),
+    },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout, "");
+  assert.equal(result.stderr, "");
+});
+
 test("runs when the plugin root is reached through a symlink", () => {
   const cacheDirectory = makeTemporaryDirectory();
   const linkedPluginRoot = path.join(cacheDirectory, "latest");
