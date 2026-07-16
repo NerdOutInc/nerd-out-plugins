@@ -142,9 +142,9 @@ test("flattens and truncates workspace names in the injected context", () => {
   assert.equal(context.includes("x".repeat(77)), false);
 });
 
-test("stays silent when the workspace id would need sanitizing", () => {
+test("escapes quotes and backslashes in the workspace name", () => {
   const config = validConfig();
-  config.workspace.id = "workspace\nid";
+  config.workspace.name = 'Side "quotes" \\ slash';
 
   const result = runHook({
     environment: {
@@ -155,8 +155,29 @@ test("stays silent when the workspace id would need sanitizing", () => {
   });
 
   assert.equal(result.status, 0);
-  assert.equal(result.stdout, "");
   assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.equal(context.includes(JSON.stringify(config.workspace.name)), true);
+});
+
+test("stays silent when the workspace id is not a plain token", () => {
+  for (const id of ["workspace\nid", "workspace id", 'ws"quote', "w".repeat(129)]) {
+    const config = validConfig();
+    config.workspace.id = id;
+
+    const result = runHook({
+      environment: {
+        ...cleanEnvironment(),
+        CODEX_HOME: makeConfigDirectory(config),
+        PLUGIN_ROOT: pluginRoot,
+      },
+    });
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout, "", `expected silence for id ${JSON.stringify(id)}`);
+    assert.equal(result.stderr, "");
+  }
 });
 
 test("injects the namespaced Claude Code skill when its config is valid", () => {

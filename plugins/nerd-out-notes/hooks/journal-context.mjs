@@ -53,13 +53,11 @@ function readValidJournalConfig(configPath) {
     if (!isValid) return null;
 
     // The name is display-only, so flatten and truncate it. The id is passed
-    // back to the search tools, so rather than truncate it into a plausible
-    // but wrong value, treat an id that sanitization would alter as invalid.
+    // back to the search tools and rendered unquoted, so rather than repair
+    // it, require a plain single-line token and stay silent otherwise.
     const name = sanitizeWorkspaceField(config.workspace.name).slice(0, 80);
     const { id } = config.workspace;
-    if (!name || id !== sanitizeWorkspaceField(id) || id.length > 128) {
-      return null;
-    }
+    if (!name || !/^[\w.:-]{1,128}$/.test(id)) return null;
 
     return { ...config, workspace: { id, name } };
   } catch {
@@ -82,7 +80,9 @@ function buildHookOutput(input, env = process.env) {
     hookSpecificOutput: {
       hookEventName: "UserPromptSubmit",
       additionalContext:
-        `Automatic Nerd Out journaling is enabled for ${context.agentName} by a valid per-agent config bound to the NerdOut workspace "${workspace.name}" (workspaceId ${workspace.id}). ` +
+        // JSON.stringify keeps the quoted name unambiguous even when it
+        // contains quotes or backslashes.
+        `Automatic Nerd Out journaling is enabled for ${context.agentName} by a valid per-agent config bound to the NerdOut workspace ${JSON.stringify(workspace.name)} (workspaceId ${workspace.id}). ` +
         `That journal is also ${context.agentName}'s memory: when this task may relate to previously journaled work — ongoing projects, earlier decisions or fixes, or context the user assumes is known — search that workspace with the Nerd Out keyword_search tool (plus semantic_search when available), read the relevant notes before deciding, and cite any note that informs the response. ` +
         `For this turn, load and follow ${context.skillName} before the final response if the task produces durable decisions, implementation work, test results, blockers, or follow-ups. ` +
         "Skip trivial acknowledgements and do not prompt for journal setup merely because this implicit reminder fired.",
