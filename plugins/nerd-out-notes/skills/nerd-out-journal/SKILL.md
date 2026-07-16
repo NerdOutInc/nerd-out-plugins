@@ -82,11 +82,12 @@ replacement rather than silently switching.
 
 The plugin's `UserPromptSubmit` hook checks only whether this agent's config
 exists and has the expected shape, then adds lifecycle context that names the
-configured workspace, tells the agent to search the journal when the task may
-relate to prior work, and tells it to load this skill for meaningful work. The
-hook does not validate the workspace or write notes itself. Recall searches
-may target the configured workspace directly, but always perform the live
-workspace validation above before implicit writes.
+effective workspace (see "Per-project workspaces" below), tells the agent to
+search the journal when the task may relate to prior work, and tells it to
+load this skill for meaningful work. The hook does not validate the workspace
+or write notes itself. Recall searches may target the effective workspace
+directly, but always perform the live workspace validation above before
+implicit writes.
 
 If `journal.dailyNote` is `true` or omitted, perform the DailyNote update in
 addition to the named-note work. If it is `false`, still journal the task in the
@@ -132,11 +133,10 @@ effective workspace in its lifecycle context.
 
 Use the effective workspace for everything this skill does in the session:
 recall searches, named notes, and the DailyNote all target the project
-workspace when an override matches. Wherever this document says "the
-configured workspace", read it as the effective workspace. Validation rules
-apply unchanged: if a project's saved workspace is no longer write-ready,
-pause and ask the user to update that project entry rather than silently
-falling back to the global workspace. One exception helps recall: when a
+workspace when an override matches. Validation rules apply unchanged: if a
+project's saved workspace is no longer write-ready, pause and ask the user to
+update that project entry rather than silently falling back to the global
+workspace. One exception helps recall: when a
 project search finds nothing and the task clearly references older work, a
 follow-up search of the global workspace may recover notes journaled before
 the project was bound — but writes still go only to the effective workspace.
@@ -180,7 +180,7 @@ Always pass the effective workspace's `workspaceId` (the project override
 when one matches, the global workspace otherwise) to `list_notes`,
 `keyword_search`, `semantic_search`, and `create_note`. `update_note_content`
 targets the note's own workspace and must never be used to move a note
-between workspaces. If recall searches fail because the configured workspace
+between workspaces. If recall searches fail because the effective workspace
 is no longer available, continue the task without journal context and run the
 workspace re-validation flow before any write; never silently search a
 different workspace instead.
