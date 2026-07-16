@@ -116,8 +116,47 @@ test("tells the agent to recall from the configured journal workspace", () => {
     .additionalContext;
   assert.match(context, /"Journal"/);
   assert.match(context, /workspaceId workspace-id/);
-  assert.match(context, /keyword_search\/semantic_search/);
+  assert.match(context, /keyword_search/);
+  assert.match(context, /semantic_search/);
   assert.match(context, /read the relevant notes before deciding/);
+});
+
+test("flattens and truncates workspace names in the injected context", () => {
+  const config = validConfig();
+  config.workspace.name = `A\nB\t${"x".repeat(100)}`;
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(config),
+      PLUGIN_ROOT: pluginRoot,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.equal(context.includes("\n"), false);
+  assert.equal(context.includes(`"A B ${"x".repeat(76)}"`), true);
+  assert.equal(context.includes("x".repeat(77)), false);
+});
+
+test("stays silent when the workspace id would need sanitizing", () => {
+  const config = validConfig();
+  config.workspace.id = "workspace\nid";
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(config),
+      PLUGIN_ROOT: pluginRoot,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout, "");
+  assert.equal(result.stderr, "");
 });
 
 test("injects the namespaced Claude Code skill when its config is valid", () => {
@@ -137,10 +176,8 @@ test("injects the namespaced Claude Code skill when its config is valid", () => 
     /\/nerd-out-notes:nerd-out-journal/,
   );
   assert.match(output.hookSpecificOutput.additionalContext, /Claude Code/);
-  assert.match(
-    output.hookSpecificOutput.additionalContext,
-    /keyword_search\/semantic_search/,
-  );
+  assert.match(output.hookSpecificOutput.additionalContext, /keyword_search/);
+  assert.match(output.hookSpecificOutput.additionalContext, /semantic_search/);
 });
 
 test("stays silent when the config is missing", () => {

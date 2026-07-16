@@ -19,6 +19,15 @@ function resolveJournalContext(env = process.env) {
   };
 }
 
+// Workspace fields flow from the shared NerdOut service into every prompt's
+// context, so force them onto one short line before interpolation.
+function sanitizeWorkspaceField(value) {
+  return value
+    .replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function readValidJournalConfig(configPath) {
   try {
     const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
@@ -41,8 +50,18 @@ function readValidJournalConfig(configPath) {
       typeof config?.workspace?.name === "string" &&
       config.workspace.name.length > 0 &&
       hasValidJournalSettings;
+    if (!isValid) return null;
 
-    return isValid ? config : null;
+    // The name is display-only, so flatten and truncate it. The id is passed
+    // back to the search tools, so rather than truncate it into a plausible
+    // but wrong value, treat an id that sanitization would alter as invalid.
+    const name = sanitizeWorkspaceField(config.workspace.name).slice(0, 80);
+    const { id } = config.workspace;
+    if (!name || id !== sanitizeWorkspaceField(id) || id.length > 128) {
+      return null;
+    }
+
+    return { ...config, workspace: { id, name } };
   } catch {
     return null;
   }
@@ -64,7 +83,7 @@ function buildHookOutput(input, env = process.env) {
       hookEventName: "UserPromptSubmit",
       additionalContext:
         `Automatic Nerd Out journaling is enabled for ${context.agentName} by a valid per-agent config bound to the NerdOut workspace "${workspace.name}" (workspaceId ${workspace.id}). ` +
-        `That journal is also ${context.agentName}'s memory: when this task may relate to previously journaled work — ongoing projects, earlier decisions or fixes, or context the user assumes is known — search that workspace with the Nerd Out keyword_search/semantic_search tools, read the relevant notes before deciding, and cite any note that informs the response. ` +
+        `That journal is also ${context.agentName}'s memory: when this task may relate to previously journaled work — ongoing projects, earlier decisions or fixes, or context the user assumes is known — search that workspace with the Nerd Out keyword_search tool (plus semantic_search when available), read the relevant notes before deciding, and cite any note that informs the response. ` +
         `For this turn, load and follow ${context.skillName} before the final response if the task produces durable decisions, implementation work, test results, blockers, or follow-ups. ` +
         "Skip trivial acknowledgements and do not prompt for journal setup merely because this implicit reminder fired.",
     },
