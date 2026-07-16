@@ -95,7 +95,7 @@ Or from the command line:
 
 ```bash
 claude plugin marketplace update nerd-out
-claude plugin update nerd-out-notes
+claude plugin update nerd-out-notes@nerd-out
 ```
 
 Claude Code can also keep the plugin current automatically. Third-party
