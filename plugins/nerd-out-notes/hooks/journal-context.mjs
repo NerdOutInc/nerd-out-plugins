@@ -77,6 +77,10 @@ function readValidJournalConfig(configPath) {
       if (!isPlainObject(config.projects)) return null;
       for (const [root, entry] of Object.entries(config.projects)) {
         if (!path.isAbsolute(root) || !isPlainObject(entry)) return null;
+        // A key that resolves to the filesystem root would prefix-match every
+        // session, silently turning a per-project override into a global one.
+        const resolvedRoot = path.resolve(root);
+        if (resolvedRoot === path.parse(resolvedRoot).root) return null;
         const projectWorkspace = sanitizeWorkspace(entry.workspace);
         if (!projectWorkspace) return null;
         projects.push({ root, workspace: projectWorkspace });

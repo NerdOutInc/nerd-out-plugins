@@ -50,8 +50,9 @@ The expected shape is:
 ```
 
 `journal.dailyNote` may be omitted; omission defaults to `true`. `projects`
-may also be omitted; when present it maps absolute project-root paths to
-per-project workspace overrides (see "Per-project workspaces" below).
+may also be omitted; when present it maps absolute project-root paths — never
+the filesystem root itself — to per-project workspace overrides (see
+"Per-project workspaces" below).
 
 When the file is missing, malformed, or the saved workspace is no longer
 available, call `list_workspaces` and show the user only confirmed,

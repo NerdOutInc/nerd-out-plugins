@@ -597,6 +597,8 @@ test("stays silent when the projects map is malformed", () => {
   const malformedProjects = [
     [],
     { "relative/path": { workspace: validProjectWorkspace() } },
+    { "/": { workspace: validProjectWorkspace() } },
+    { "/..": { workspace: validProjectWorkspace() } },
     { [absoluteRoot]: null },
     { [absoluteRoot]: {} },
     { [absoluteRoot]: { workspace: { id: "bad id", name: "Project" } } },
