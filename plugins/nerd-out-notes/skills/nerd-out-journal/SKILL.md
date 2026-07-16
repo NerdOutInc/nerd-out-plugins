@@ -39,6 +39,8 @@ The expected shape is:
 }
 ```
 
+`journal.dailyNote` may be omitted; omission defaults to `true`.
+
 When the file is missing, malformed, or the saved workspace is no longer
 available, call `list_workspaces` and show the user only confirmed,
 write-ready choices. Include each workspace's name, id, role, and write status.
@@ -70,10 +72,9 @@ agent to load this skill for meaningful work. The hook does not validate the
 workspace or write notes itself. Always perform the live workspace validation
 above after implicit activation.
 
-If `journal.dailyNote` is `true` (the default in the example configuration),
-perform the DailyNote update in addition to the named-note work. If it is
-`false`, still journal the task in the selected named notes but skip the
-DailyNote update.
+If `journal.dailyNote` is `true` or omitted, perform the DailyNote update in
+addition to the named-note work. If it is `false`, still journal the task in the
+selected named notes but skip the DailyNote update.
 
 Distinguish explicit from implicit activation. An explicit skill invocation
 (`$nerd-out-notes:nerd-out-journal` in Codex,

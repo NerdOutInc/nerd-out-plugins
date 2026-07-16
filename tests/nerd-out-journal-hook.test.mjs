@@ -14,6 +14,7 @@ const hookScript = path.join(
   repositoryRoot,
   "plugins/nerd-out-notes/hooks/journal-context.mjs",
 );
+const pluginRoot = path.dirname(path.dirname(hookScript));
 const temporaryDirectories = [];
 
 afterEach(() => {
@@ -22,17 +23,27 @@ afterEach(() => {
   }
 });
 
-function makeConfigDirectory(config) {
-  if (arguments.length === 0) config = validConfig();
+function makeTemporaryDirectory() {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "nerd-out-journal-"));
   temporaryDirectories.push(directory);
-  if (config !== undefined) {
-    fs.writeFileSync(
-      path.join(directory, "nerd-out-journal.json"),
-      JSON.stringify(config),
-    );
-  }
   return directory;
+}
+
+function writeConfig(directory, config = validConfig()) {
+  fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(
+    path.join(directory, "nerd-out-journal.json"),
+    JSON.stringify(config),
+  );
+  return directory;
+}
+
+function makeConfigDirectory(config = validConfig()) {
+  return writeConfig(makeTemporaryDirectory(), config);
+}
+
+function makeEmptyConfigDirectory() {
+  return makeTemporaryDirectory();
 }
 
 function validConfig() {
@@ -44,11 +55,21 @@ function validConfig() {
   };
 }
 
-function runHook(
+function cleanEnvironment() {
+  const environment = { ...process.env };
+  delete environment.CLAUDE_CONFIG_DIR;
+  delete environment.CLAUDE_PLUGIN_ROOT;
+  delete environment.CODEX_HOME;
+  delete environment.PLUGIN_ROOT;
+  return environment;
+}
+
+function runHook({
   environment,
   input = { hook_event_name: "UserPromptSubmit" },
-) {
-  return spawnSync(process.execPath, [hookScript], {
+  script = hookScript,
+}) {
+  return spawnSync(process.execPath, [script], {
     encoding: "utf8",
     env: environment,
     input: typeof input === "string" ? input : JSON.stringify(input),
@@ -58,9 +79,11 @@ function runHook(
 test("injects the Codex journal skill when Codex config is valid", () => {
   const configDirectory = makeConfigDirectory();
   const result = runHook({
-    ...process.env,
-    CODEX_HOME: configDirectory,
-    PLUGIN_ROOT: path.dirname(path.dirname(hookScript)),
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: configDirectory,
+      PLUGIN_ROOT: pluginRoot,
+    },
   });
 
   assert.equal(result.status, 0);
@@ -79,15 +102,13 @@ test("injects the Codex journal skill when Codex config is valid", () => {
 });
 
 test("injects the namespaced Claude Code skill when its config is valid", () => {
-  const environment = {
-    ...process.env,
-    CLAUDE_CONFIG_DIR: makeConfigDirectory(),
-    CLAUDE_PLUGIN_ROOT: path.dirname(path.dirname(hookScript)),
-  };
-  delete environment.CODEX_HOME;
-  delete environment.PLUGIN_ROOT;
-
-  const result = runHook(environment);
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CLAUDE_CONFIG_DIR: makeConfigDirectory(),
+      CLAUDE_PLUGIN_ROOT: pluginRoot,
+    },
+  });
 
   assert.equal(result.status, 0);
   assert.equal(result.stderr, "");
@@ -101,9 +122,11 @@ test("injects the namespaced Claude Code skill when its config is valid", () => 
 
 test("stays silent when the config is missing", () => {
   const result = runHook({
-    ...process.env,
-    CODEX_HOME: makeConfigDirectory(undefined),
-    PLUGIN_ROOT: path.dirname(path.dirname(hookScript)),
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeEmptyConfigDirectory(),
+      PLUGIN_ROOT: pluginRoot,
+    },
   });
 
   assert.equal(result.status, 0);
@@ -113,9 +136,11 @@ test("stays silent when the config is missing", () => {
 
 test("stays silent when the config is malformed", () => {
   const result = runHook({
-    ...process.env,
-    CODEX_HOME: makeConfigDirectory({ version: 1 }),
-    PLUGIN_ROOT: path.dirname(path.dirname(hookScript)),
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory({ version: 1 }),
+      PLUGIN_ROOT: pluginRoot,
+    },
   });
 
   assert.equal(result.status, 0);
@@ -124,14 +149,99 @@ test("stays silent when the config is malformed", () => {
 });
 
 test("stays silent when hook input is invalid JSON", () => {
-  const result = runHook(
-    {
-      ...process.env,
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
       CODEX_HOME: makeConfigDirectory(),
-      PLUGIN_ROOT: path.dirname(path.dirname(hookScript)),
+      PLUGIN_ROOT: pluginRoot,
     },
-    "not-json",
-  );
+    input: "not-json",
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout, "");
+  assert.equal(result.stderr, "");
+});
+
+test("defaults an omitted daily note setting to enabled", () => {
+  const config = validConfig();
+  delete config.journal;
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(config),
+      PLUGIN_ROOT: pluginRoot,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  assert.notEqual(result.stdout, "");
+  assert.equal(result.stderr, "");
+});
+
+test("uses the Codex home-directory fallback", () => {
+  const homeDirectory = makeTemporaryDirectory();
+  writeConfig(path.join(homeDirectory, ".codex"));
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      HOME: homeDirectory,
+      PLUGIN_ROOT: pluginRoot,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /\$nerd-out-notes:nerd-out-journal/);
+  assert.equal(result.stderr, "");
+});
+
+test("uses the Claude Code home-directory fallback", () => {
+  const homeDirectory = makeTemporaryDirectory();
+  writeConfig(path.join(homeDirectory, ".claude"));
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CLAUDE_PLUGIN_ROOT: pluginRoot,
+      HOME: homeDirectory,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /\/nerd-out-notes:nerd-out-journal/);
+  assert.equal(result.stderr, "");
+});
+
+test("runs when the plugin root is reached through a symlink", () => {
+  const cacheDirectory = makeTemporaryDirectory();
+  const linkedPluginRoot = path.join(cacheDirectory, "latest");
+  fs.symlinkSync(pluginRoot, linkedPluginRoot, "dir");
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(),
+      PLUGIN_ROOT: linkedPluginRoot,
+    },
+    script: path.join(linkedPluginRoot, "hooks/journal-context.mjs"),
+  });
+
+  assert.equal(result.status, 0);
+  assert.notEqual(result.stdout, "");
+  assert.equal(result.stderr, "");
+});
+
+test("ignores hook events other than UserPromptSubmit", () => {
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "SessionStart" },
+  });
 
   assert.equal(result.status, 0);
   assert.equal(result.stdout, "");
