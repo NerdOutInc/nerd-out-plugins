@@ -141,7 +141,12 @@ under `skills/` that contains a `SKILL.md`. It currently includes:
   reminder names the configured workspace and works in both directions: it
   tells the agent to search existing journal notes when a task may relate to
   prior work — so the journal is read back as memory, not just written — and
-  to journal the outcome at the end.
+  to journal the outcome at the end. A project can also get its own journal:
+  ask the agent to select a Nerd Out workspace for the current project and it
+  saves the project's root path under `projects` in the same config. Sessions
+  working anywhere inside that path — subfolders and worktrees checked out
+  under the repo included — then journal to and recall from the project's
+  workspace instead of the global one.
 
 In Codex, invoke skills as `$nerd-out-notes:nerd-out-notes` and
 `$nerd-out-notes:nerd-out-journal`; in Claude Code, use
@@ -156,10 +161,11 @@ After installing or updating the plugin, start a new thread so the hook is
 loaded. Codex requires a one-time review and trust decision for plugin hooks;
 open `/hooks` if Codex reports that this hook is awaiting review. The hook only
 checks the current agent's `nerd-out-journal.json` shape and injects agent
-context, including the configured workspace name and id so the agent can
-search the journal right away. It does not read note bodies, validate
-workspace access, or write notes; the journal skill and MCP server keep those
-responsibilities.
+context, including the workspace name and id that apply to the session — the
+project's workspace when the session runs inside a saved project path, the
+global workspace otherwise — so the agent can search the journal right away.
+It does not read note bodies, validate workspace access, or write notes; the
+journal skill and MCP server keep those responsibilities.
 
 If the agent reports a connection error, confirm the Mac app is open and the
 server is enabled. If it reports an authorization error, start a new
