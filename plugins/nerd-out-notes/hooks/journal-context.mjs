@@ -45,7 +45,7 @@ export function buildHookOutput(input, env = process.env) {
     hookSpecificOutput: {
       hookEventName: "UserPromptSubmit",
       additionalContext:
-        `Automatic Nerd Out journaling is enabled for ${context.agentName} by the valid config at ${context.configPath}. ` +
+        `Automatic Nerd Out journaling is enabled for ${context.agentName} by a valid per-agent config. ` +
         `For this turn, load and follow ${context.skillName} before the final response if the task produces durable decisions, implementation work, test results, blockers, or follow-ups. ` +
         "Skip trivial acknowledgements and do not prompt for journal setup merely because this implicit reminder fired. " +
         "If a required journal write fails, report the failure instead of claiming success.",

@@ -53,9 +53,10 @@ function runHook(environment) {
 }
 
 test("injects the Codex journal skill when Codex config is valid", () => {
+  const configDirectory = makeConfigDirectory();
   const result = runHook({
     ...process.env,
-    CODEX_HOME: makeConfigDirectory(),
+    CODEX_HOME: configDirectory,
     PLUGIN_ROOT: path.dirname(path.dirname(hookScript)),
   });
 
@@ -68,6 +69,10 @@ test("injects the Codex journal skill when Codex config is valid", () => {
     /\$nerd-out-notes:nerd-out-journal/,
   );
   assert.match(output.hookSpecificOutput.additionalContext, /Codex/);
+  assert.equal(
+    output.hookSpecificOutput.additionalContext.includes(configDirectory),
+    false,
+  );
 });
 
 test("injects the namespaced Claude Code skill when its config is valid", () => {
