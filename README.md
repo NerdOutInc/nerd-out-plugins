@@ -62,6 +62,12 @@ Installed plugins do not update themselves by default. Both agents install
 from a snapshot of this repository taken at install time, so run the steps
 below whenever you want the latest release.
 
+The commands below refer to the marketplace as `nerd-out`. That is the
+marketplace name from this repository's manifests, not the GitHub repository
+name, and both agents register it when you add the marketplace. If you are
+unsure what name your agent uses, run `codex plugin marketplace list` or
+`/plugin marketplace list`.
+
 ### Codex
 
 If you installed through the Codex app or the `codex` CLI, upgrade the
