@@ -42,8 +42,9 @@ function checkPort() {
 async function waitForApp() {
   if (await checkPort()) return true;
   log(
-    "Nerd Out Notes doesn't appear to be running. Open the Nerd Out Notes " +
-      "Mac app and enable Settings -> MCP Server; this bridge will connect " +
+    `The Nerd Out app is not running on this Mac (connection refused on ` +
+      `${HOST}:${PORT}), or its MCP server is disabled. Launch the Nerd Out ` +
+      "app and enable Settings -> MCP Server; this bridge will connect " +
       "automatically."
   );
   const deadline = Date.now() + WAIT_FOR_APP_MS;
@@ -61,8 +62,10 @@ const reachable = await waitForApp();
 if (!reachable) {
   log(
     `Gave up waiting for the Nerd Out Notes MCP server on ${SERVER_URL}. ` +
-      "Open the app, enable the MCP server, and start a new conversation " +
-      "to retry."
+      "The Nerd Out app is not running (or its MCP server is disabled in " +
+      "Settings). A locked screen does not cause this — the server keeps " +
+      "working while the Mac is locked. Launch the Nerd Out app and start " +
+      "a new conversation to retry."
   );
   process.exit(1);
 }

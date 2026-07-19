@@ -24,8 +24,15 @@ data through the local MCP server.
     token instead.
 - The server endpoint is `http://127.0.0.1:38473/mcp`.
 
-If MCP calls fail with connection errors, ask the user to open Nerd Out Notes
-for Mac and enable the local MCP server. If calls fail with authorization
+If MCP calls fail with connection errors (connection refused, server
+unreachable, or the server never appears in the tool list), the Nerd Out app
+is not running on this Mac — or its MCP server is disabled in Settings.
+Verify with `nc -z 127.0.0.1 38473`. A locked screen does NOT cause this: the
+app keeps serving MCP while the Mac is locked and while its windows are
+closed, so never report lock, sleep, or screen state as the cause. Ask the
+user to launch the Nerd Out app (it is often quit during development, since
+dev builds share port 38473) and enable the local MCP server. If calls fail
+with authorization
 errors, ask the user to re-authorize — `codex mcp login` for Codex, or `/mcp`
 in Claude Code — and complete the browser sign-in (access may have been
 revoked or expired). On legacy token setups, ask the user to reveal or
@@ -47,8 +54,8 @@ regenerate the token in Nerd Out Notes settings and update
 
 ## Writes
 
-Write tools are available only when the user enables "Allow writes" in Nerd Out
-Notes settings.
+Write tools are advertised only when at least one workspace is set to Write in
+the app's Settings -> MCP Server per-workspace access policy.
 
 - Use `create_note` for new named notes.
 - Use `update_note_content` with `mode: "append"` when adding a journal entry,
