@@ -10,6 +10,11 @@
 // mcp-remote (MIT, see LICENSE-mcp-remote.txt), which proxies stdio to
 // streamable HTTP and runs the MCP OAuth flow (browser sign-in, token cache
 // in ~/.mcp-auth, refresh) against the Nerd Out authorization server.
+//
+// This file is duplicated at plugins/nerd-out-notes/bridge/index.mjs and
+// desktop-extensions/nerd-out-notes/server/index.mjs; keep both copies
+// byte-identical. The desktop extension ships as a self-contained package,
+// so the bridge cannot import a module shared across the two locations.
 
 import net from "node:net";
 import path from "node:path";
@@ -42,9 +47,10 @@ function checkPort() {
 async function waitForApp() {
   if (await checkPort()) return true;
   log(
-    "Nerd Out Notes doesn't appear to be running. Open the Nerd Out Notes " +
-      "Mac app and enable Settings -> MCP Server; this bridge will connect " +
-      "automatically."
+    `Can't connect to the Nerd Out Notes MCP server on ${HOST}:${PORT} — ` +
+      "the Nerd Out Notes Mac app is not running, or its MCP server is " +
+      "disabled. Launch the app and enable Settings -> MCP Server; this " +
+      "bridge will connect automatically."
   );
   const deadline = Date.now() + WAIT_FOR_APP_MS;
   while (Date.now() < deadline) {
@@ -61,8 +67,10 @@ const reachable = await waitForApp();
 if (!reachable) {
   log(
     `Gave up waiting for the Nerd Out Notes MCP server on ${SERVER_URL}. ` +
-      "Open the app, enable the MCP server, and start a new conversation " +
-      "to retry."
+      "The Nerd Out Notes Mac app is not running (or its MCP server is " +
+      "disabled in Settings). A locked screen does not cause this — the " +
+      "server keeps working while the Mac is locked. Launch the app and " +
+      "start a new conversation to retry."
   );
   process.exit(1);
 }
