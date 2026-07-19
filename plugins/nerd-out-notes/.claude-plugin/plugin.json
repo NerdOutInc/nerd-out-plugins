@@ -1,6 +1,6 @@
 {
   "name": "nerd-out-notes",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Read, search, and update Nerd Out Notes through the Mac app's local MCP server.",
   "author": {
     "name": "Nerd Out Inc.",

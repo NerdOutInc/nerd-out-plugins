@@ -139,6 +139,26 @@ test("tells the agent to recall from the configured journal workspace", () => {
   assert.match(context, /read the relevant notes before deciding/);
 });
 
+test("tells the agent to open, update, and finalize the entry live", () => {
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(),
+      PLUGIN_ROOT: pluginRoot,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(context, /when substantive work begins/);
+  assert.match(context, /fresh task marker after recall/);
+  assert.match(context, /progress updates at checkpoints/);
+  assert.match(context, /finalize the entry before the final response/);
+  assert.match(context, /Skip trivial acknowledgements/);
+});
+
 test("flattens and truncates workspace names in the injected context", () => {
   const config = validConfig();
   config.workspace.name = `A\nB\t${"x".repeat(100)}`;
@@ -217,6 +237,10 @@ test("injects the namespaced Claude Code skill when its config is valid", () => 
   assert.match(output.hookSpecificOutput.additionalContext, /Claude Code/);
   assert.match(output.hookSpecificOutput.additionalContext, /keyword_search/);
   assert.match(output.hookSpecificOutput.additionalContext, /semantic_search/);
+  assert.match(
+    output.hookSpecificOutput.additionalContext,
+    /progress updates at checkpoints/,
+  );
 });
 
 test("stays silent when the config is missing", () => {
