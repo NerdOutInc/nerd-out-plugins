@@ -10,6 +10,11 @@
 // mcp-remote (MIT, see LICENSE-mcp-remote.txt), which proxies stdio to
 // streamable HTTP and runs the MCP OAuth flow (browser sign-in, token cache
 // in ~/.mcp-auth, refresh) against the Nerd Out authorization server.
+//
+// This file is duplicated at plugins/nerd-out-notes/bridge/index.mjs and
+// desktop-extensions/nerd-out-notes/server/index.mjs; keep both copies
+// byte-identical. The desktop extension ships as a self-contained package,
+// so the bridge cannot import a module shared across the two locations.
 
 import net from "node:net";
 import path from "node:path";

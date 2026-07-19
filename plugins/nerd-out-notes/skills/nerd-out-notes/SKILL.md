@@ -34,9 +34,9 @@ user to launch the Nerd Out Notes Mac app (it is often quit during
 development, since dev builds share port 38473) and enable the local MCP
 server. If calls fail with authorization errors, ask the user to
 re-authorize — `codex mcp login` for Codex, or `/mcp` in Claude Code — and
-complete the browser sign-in (access may have been revoked or expired). On legacy token setups, ask the user to reveal or
-regenerate the token in Nerd Out Notes settings and update
-`NERD_OUT_MCP_TOKEN`.
+complete the browser sign-in (access may have been revoked or expired).
+On legacy token setups, ask the user to reveal or regenerate the token in
+Nerd Out Notes settings and update `NERD_OUT_MCP_TOKEN`.
 
 ## Tool Use
 
