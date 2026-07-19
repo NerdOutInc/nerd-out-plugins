@@ -24,9 +24,10 @@ data through the local MCP server.
     token instead.
 - The server endpoint is `http://127.0.0.1:38473/mcp`.
 
-If MCP calls fail with connection errors (unable to connect, server
-unreachable, or the server never appears in the tool list), the Nerd Out
-Notes Mac app is not running — or its MCP server is disabled in Settings.
+If the Nerd Out Notes server never appears in the tool list, or MCP calls
+fail with connection errors (unable to connect, server unreachable), the
+Nerd Out Notes Mac app is not running — or its MCP server is disabled in
+Settings.
 Verify with `nc -z 127.0.0.1 38473`. A locked screen does NOT cause this: the
 app keeps serving MCP while the Mac is locked and while its windows are
 closed, so never report lock, sleep, or screen state as the cause. Ask the
