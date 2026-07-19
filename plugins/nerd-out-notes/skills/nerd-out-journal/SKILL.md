@@ -269,8 +269,8 @@ note but report that the daily summary did not succeed.
 - Never bind, search, or write through the journal in a workspace that is
   blocked, non-confirmed, non-writable, or not write-ready.
 - Never treat a failed MCP response as a successful journal write.
-- If the MCP server is unreachable (connection refused on `127.0.0.1:38473`),
-  the Nerd Out app is not running on this Mac — report that plainly (a locked
+- If the MCP server is unreachable (unable to connect to `127.0.0.1:38473`),
+  the Nerd Out Notes Mac app is not running — report that plainly (a locked
   screen or closed windows never cause this) and skip journaling for the task.
 - Never let recall stall a task: when searches fail or return nothing
   relevant, proceed with the work, and mention the missing journal context

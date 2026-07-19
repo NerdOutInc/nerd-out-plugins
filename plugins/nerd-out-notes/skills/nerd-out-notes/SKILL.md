@@ -24,18 +24,17 @@ data through the local MCP server.
     token instead.
 - The server endpoint is `http://127.0.0.1:38473/mcp`.
 
-If MCP calls fail with connection errors (connection refused, server
-unreachable, or the server never appears in the tool list), the Nerd Out app
-is not running on this Mac — or its MCP server is disabled in Settings.
+If MCP calls fail with connection errors (unable to connect, server
+unreachable, or the server never appears in the tool list), the Nerd Out
+Notes Mac app is not running — or its MCP server is disabled in Settings.
 Verify with `nc -z 127.0.0.1 38473`. A locked screen does NOT cause this: the
 app keeps serving MCP while the Mac is locked and while its windows are
 closed, so never report lock, sleep, or screen state as the cause. Ask the
-user to launch the Nerd Out app (it is often quit during development, since
-dev builds share port 38473) and enable the local MCP server. If calls fail
-with authorization
-errors, ask the user to re-authorize — `codex mcp login` for Codex, or `/mcp`
-in Claude Code — and complete the browser sign-in (access may have been
-revoked or expired). On legacy token setups, ask the user to reveal or
+user to launch the Nerd Out Notes Mac app (it is often quit during
+development, since dev builds share port 38473) and enable the local MCP
+server. If calls fail with authorization errors, ask the user to
+re-authorize — `codex mcp login` for Codex, or `/mcp` in Claude Code — and
+complete the browser sign-in (access may have been revoked or expired). On legacy token setups, ask the user to reveal or
 regenerate the token in Nerd Out Notes settings and update
 `NERD_OUT_MCP_TOKEN`.
 
