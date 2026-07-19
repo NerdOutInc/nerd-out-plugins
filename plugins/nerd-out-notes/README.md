@@ -134,14 +134,18 @@ under `skills/` that contains a `SKILL.md`. It currently includes:
   write-ready NerdOut workspace on first use, saves that choice in a per-agent
   global config (`$CODEX_HOME/nerd-out-journal.json` for Codex,
   `$CLAUDE_CONFIG_DIR/nerd-out-journal.json` — default `~/.claude` — for
-  Claude Code), and then records useful task notes plus a daily summary with
-  backlinks for future tasks. A bundled `UserPromptSubmit` hook notices the
-  valid opt-in config and adds the journal reminder to each later prompt, so
-  the skill no longer has to discover a file before it has been loaded. The
-  reminder names the configured workspace and works in both directions: it
-  tells the agent to search existing journal notes when a task may relate to
-  prior work — so the journal is read back as memory, not just written — and
-  to journal the outcome at the end. A project can also get its own journal:
+  Claude Code), and then journals live: it opens a marker-identified entry
+  when substantive work begins, appends short progress updates at
+  checkpoints, and closes with a final block plus a daily summary with
+  backlinks for future tasks — so an interrupted session leaves a partial,
+  resumable record instead of nothing. A bundled `UserPromptSubmit` hook
+  notices the valid opt-in config and adds the journal reminder to each
+  later prompt, so the skill no longer has to discover a file before it has
+  been loaded. The reminder names the configured workspace and works in both
+  directions: it tells the agent to search existing journal notes when a
+  task may relate to prior work — so the journal is read back as memory, not
+  just written — and to open, update, and finalize the task's entry as the
+  work happens. A project can also get its own journal:
   ask the agent to select a Nerd Out workspace for the current project and it
   saves the project's root path under `projects` in the same config. Sessions
   working anywhere inside that path — subfolders and worktrees checked out

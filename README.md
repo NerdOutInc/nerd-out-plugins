@@ -153,9 +153,12 @@ the direct note workflow, the journal skill
 `/nerd-out-notes:nerd-out-journal` in Claude Code) configures a per-agent global
 `nerd-out-journal.json` workspace selection. A bundled per-prompt hook detects
 that valid opt-in config, reminds the agent to search prior journal notes for
-relevant context when a task relates to earlier work, and reminds it to keep
-concise named-note and DailyNote summaries for meaningful work in that
-write-ready workspace. Asking the agent to select a workspace for the current
+relevant context when a task relates to earlier work, and reminds it to
+journal meaningful work live in that write-ready workspace: open a
+marker-identified entry when substantive work begins, append short progress
+updates at checkpoints, and close with a final block plus a concise
+DailyNote summary — so an interrupted session leaves a partial record
+instead of nothing. Asking the agent to select a workspace for the current
 project adds a per-project override to the same config, so sessions working
 anywhere inside that project's folder (worktrees included) journal to the
 project's own workspace instead of the global one.

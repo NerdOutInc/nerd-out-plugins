@@ -1,5 +1,5 @@
 {
-  "description": "Activate opted-in Nerd Out journaling and journal recall for meaningful tasks.",
+  "description": "Activate opted-in Nerd Out journaling — recall plus live progress entries — for meaningful tasks.",
   "hooks": {
     "UserPromptSubmit": [
       {
