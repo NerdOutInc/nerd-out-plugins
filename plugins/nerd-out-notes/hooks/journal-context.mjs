@@ -122,9 +122,9 @@ function isInsideDirectory(directory, root) {
 // the current subdirectory while mapping it onto the main checkout before
 // matching configured project roots. If Git is unavailable or this is not a
 // normal non-bare checkout, retain the existing filesystem-only behavior.
-function resolveCanonicalWorkingDirectory(workingDirectory) {
+function resolveCanonicalWorkingDirectory(workingDirectory, env) {
   const currentDirectory = normalizeDirectory(workingDirectory);
-  const gitEnvironment = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
+  const gitEnvironment = { ...env, GIT_TERMINAL_PROMPT: "0" };
   delete gitEnvironment.GIT_COMMON_DIR;
   delete gitEnvironment.GIT_DIR;
   delete gitEnvironment.GIT_WORK_TREE;
@@ -177,9 +177,12 @@ function resolveCanonicalWorkingDirectory(workingDirectory) {
 // first mapped to the equivalent path under the main checkout, whether they
 // live inside the repo or in an agent-managed external worktree directory. The
 // longest matching root wins when saved projects nest.
-function resolveProjectWorkspace(projects, workingDirectory) {
+function resolveProjectWorkspace(projects, workingDirectory, env) {
   if (projects.length === 0) return null;
-  const currentDirectory = resolveCanonicalWorkingDirectory(workingDirectory);
+  const currentDirectory = resolveCanonicalWorkingDirectory(
+    workingDirectory,
+    env,
+  );
   let bestRoot = null;
   let bestWorkspace = null;
   for (const { root, workspace } of projects) {
@@ -219,6 +222,7 @@ function buildHookOutput(input, env = process.env) {
   const projectWorkspace = resolveProjectWorkspace(
     config.projects,
     workingDirectory,
+    env,
   );
 
   // Name the workspace and its id here so the agent can search the journal
