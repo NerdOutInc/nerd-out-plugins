@@ -15,6 +15,7 @@ const hookScript = path.join(
   "plugins/nerd-out-notes/hooks/journal-context.mjs",
 );
 const pluginRoot = path.dirname(path.dirname(hookScript));
+const GIT_TEST_TIMEOUT_MS = 10_000;
 const temporaryDirectories = [];
 
 afterEach(() => {
@@ -72,11 +73,17 @@ function makeProjectDirectory(...segments) {
 }
 
 function runGit(cwd, ...args) {
-  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+    timeout: GIT_TEST_TIMEOUT_MS,
+    windowsHide: true,
+  });
   assert.equal(
     result.status,
     0,
-    `git ${args.join(" ")} failed: ${result.stderr}`,
+    `git ${args.join(" ")} failed: ${result.error?.message ?? result.stderr}`,
   );
   return result.stdout;
 }
@@ -95,6 +102,7 @@ function makeRepositoryWithLinkedWorktree() {
     "-c",
     "user.email=tests@nerdout.test",
     "commit",
+    "--no-gpg-sign",
     "--quiet",
     "-m",
     "Initial test fixture",
