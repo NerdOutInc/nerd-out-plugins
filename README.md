@@ -160,12 +160,14 @@ updates at checkpoints, and close with a final block plus a concise
 DailyNote summary — so an interrupted session leaves a partial record
 instead of nothing. Asking the agent to select a workspace for the current
 project adds a per-project override to the same config, so sessions working
-anywhere inside that project's folder (worktrees included) journal to the
-project's own workspace instead of the global one.
+anywhere inside that project's folder — including Codex- or Claude-managed
+linked worktrees stored elsewhere on disk — journal to the project's own
+workspace instead of the global one.
 
 After installing or updating the plugin, start a new thread so its skills,
 tools, and hook are loaded. Codex requires a one-time review and trust decision
 for the plugin hook; open `/hooks` if Codex reports that the hook is awaiting
-review. The hook only reads the per-agent journal config and adds agent context;
-the journal skill still validates the live workspace and performs every note
-write through the Nerd Out MCP server.
+review. The hook reads the per-agent journal config, asks local Git for
+worktree metadata when available, and adds agent context; the journal skill
+still validates the live workspace and performs every note write through the
+Nerd Out MCP server.

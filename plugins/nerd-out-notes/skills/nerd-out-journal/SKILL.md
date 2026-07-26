@@ -131,11 +131,15 @@ To bind a project:
 
 A saved project covers its root and everything inside it, including subfolders
 and worktrees checked out under the repo (for example
-`<repo>/.claude/worktrees/<name>`). The effective journal workspace for a
-session is the entry with the longest saved root that equals or contains the
-session's working directory, falling back to the global workspace when no
-entry matches. The plugin hook performs the same resolution and names the
-effective workspace in its lifecycle context.
+`<repo>/.claude/worktrees/<name>`) or elsewhere (for example an agent-managed
+worktree directory). For a linked Git worktree, the plugin hook maps the
+session's current relative subdirectory onto the main checkout resolved from
+Git's common directory before matching project roots. The effective journal
+workspace is the entry with the longest saved root that equals or contains
+that canonical directory, falling back to the global workspace when no entry
+matches. Outside Git, or when Git metadata cannot be read, the hook retains
+filesystem-path matching and names the effective workspace in its lifecycle
+context.
 
 Use the effective workspace for everything this skill does in the session:
 recall searches, named notes, and the DailyNote all target the project

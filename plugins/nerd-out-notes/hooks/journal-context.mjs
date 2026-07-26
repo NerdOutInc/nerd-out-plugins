@@ -1,6 +1,9 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+const GIT_RESOLUTION_TIMEOUT_MS = 2_000;
 
 function resolveJournalContext(env = process.env) {
   // Codex sets both root variables for Claude plugin compatibility; Claude Code
@@ -104,12 +107,82 @@ function normalizeDirectory(directory) {
   }
 }
 
-// A project entry covers its saved root and everything under it, so sessions
-// started in a subfolder — or in a worktree checked out inside the repo, such
-// as <repo>/.claude/worktrees/<name> — inherit the project workspace. The
-// longest matching root wins when saved projects nest.
-function resolveProjectWorkspace(projects, workingDirectory) {
+function isInsideDirectory(directory, root) {
+  const relativeDirectory = path.relative(root, directory);
+  return (
+    relativeDirectory === "" ||
+    (relativeDirectory !== ".." &&
+      !relativeDirectory.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relativeDirectory))
+  );
+}
+
+// Project bindings use the main checkout's path as their stable identity, but
+// Codex and Claude Code may place linked worktrees elsewhere on disk. Preserve
+// the current subdirectory while mapping it onto the main checkout before
+// matching configured project roots. If Git is unavailable or this is not a
+// normal non-bare checkout, retain the existing filesystem-only behavior.
+function resolveCanonicalWorkingDirectory(workingDirectory, env) {
   const currentDirectory = normalizeDirectory(workingDirectory);
+  const gitEnvironment = { ...env, GIT_TERMINAL_PROMPT: "0" };
+  delete gitEnvironment.GIT_COMMON_DIR;
+  delete gitEnvironment.GIT_DIR;
+  delete gitEnvironment.GIT_WORK_TREE;
+
+  const result = spawnSync(
+    "git",
+    [
+      "-C",
+      currentDirectory,
+      "rev-parse",
+      "--path-format=absolute",
+      "--show-toplevel",
+      "--git-common-dir",
+    ],
+    {
+      encoding: "utf8",
+      env: gitEnvironment,
+      maxBuffer: 16 * 1024,
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: GIT_RESOLUTION_TIMEOUT_MS,
+      windowsHide: true,
+    },
+  );
+  if (result.error || result.status !== 0 || typeof result.stdout !== "string") {
+    return currentDirectory;
+  }
+
+  const lines = result.stdout.split(/\r?\n/);
+  if (lines.at(-1) === "") lines.pop();
+  if (lines.length !== 2 || lines.some((line) => line.length === 0)) {
+    return currentDirectory;
+  }
+
+  const checkoutRoot = normalizeDirectory(lines[0]);
+  const commonDirectory = normalizeDirectory(lines[1]);
+  if (
+    path.basename(commonDirectory) !== ".git" ||
+    !isInsideDirectory(currentDirectory, checkoutRoot)
+  ) {
+    return currentDirectory;
+  }
+
+  const mainCheckoutRoot = normalizeDirectory(path.dirname(commonDirectory));
+  const relativeDirectory = path.relative(checkoutRoot, currentDirectory);
+  return normalizeDirectory(path.join(mainCheckoutRoot, relativeDirectory));
+}
+
+// A project entry covers its saved root and everything under it, so sessions
+// started in a subfolder inherit the project workspace. Linked worktrees are
+// first mapped to the equivalent path under the main checkout, whether they
+// live inside the repo or in an agent-managed external worktree directory. The
+// longest matching root wins when saved projects nest.
+function resolveProjectWorkspace(projects, workingDirectory, env) {
+  if (projects.length === 0) return null;
+  const currentDirectory = resolveCanonicalWorkingDirectory(
+    workingDirectory,
+    env,
+  );
   let bestRoot = null;
   let bestWorkspace = null;
   for (const { root, workspace } of projects) {
@@ -149,6 +222,7 @@ function buildHookOutput(input, env = process.env) {
   const projectWorkspace = resolveProjectWorkspace(
     config.projects,
     workingDirectory,
+    env,
   );
 
   // Name the workspace and its id here so the agent can search the journal
