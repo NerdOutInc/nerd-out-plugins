@@ -71,6 +71,53 @@ function makeProjectDirectory(...segments) {
   return directory;
 }
 
+function runGit(cwd, ...args) {
+  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+  assert.equal(
+    result.status,
+    0,
+    `git ${args.join(" ")} failed: ${result.stderr}`,
+  );
+  return result.stdout;
+}
+
+function makeRepositoryWithLinkedWorktree() {
+  const mainCheckout = makeProjectDirectory("main-checkout");
+  const nestedProject = path.join(mainCheckout, "packages", "app");
+  fs.mkdirSync(nestedProject, { recursive: true });
+  fs.writeFileSync(path.join(nestedProject, "README.md"), "# Test project\n");
+  runGit(mainCheckout, "init", "--quiet");
+  runGit(mainCheckout, "add", "packages/app/README.md");
+  runGit(
+    mainCheckout,
+    "-c",
+    "user.name=Nerd Out Tests",
+    "-c",
+    "user.email=tests@nerdout.test",
+    "commit",
+    "--quiet",
+    "-m",
+    "Initial test fixture",
+  );
+
+  const linkedWorktree = path.join(
+    makeTemporaryDirectory(),
+    "agent-worktrees",
+    "linked-checkout",
+  );
+  fs.mkdirSync(path.dirname(linkedWorktree), { recursive: true });
+  runGit(
+    mainCheckout,
+    "worktree",
+    "add",
+    "--quiet",
+    "--detach",
+    linkedWorktree,
+    "HEAD",
+  );
+  return { linkedWorktree, mainCheckout, nestedProject };
+}
+
 function cleanEnvironment() {
   const environment = { ...process.env };
   delete environment.CLAUDE_CONFIG_DIR;
@@ -444,6 +491,50 @@ test("binds the session when cwd is exactly the project root", () => {
   assert.match(context, /Claude Code/);
 });
 
+test("maps an external Codex worktree to its main checkout project", () => {
+  const { linkedWorktree, mainCheckout } = makeRepositoryWithLinkedWorktree();
+  const workingDirectory = path.join(linkedWorktree, "packages", "app");
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(configWithProject(mainCheckout)),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: workingDirectory },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(context, /workspaceId project-workspace-id/);
+  assert.match(context, /Codex/);
+  assert.equal(context.includes("workspaceId workspace-id"), false);
+});
+
+test("maps an external Claude Code worktree to a nested project root", () => {
+  const { linkedWorktree, nestedProject } = makeRepositoryWithLinkedWorktree();
+  const workingDirectory = path.join(linkedWorktree, "packages", "app");
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CLAUDE_CONFIG_DIR: makeConfigDirectory(configWithProject(nestedProject)),
+      CLAUDE_PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: workingDirectory },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(context, /workspaceId project-workspace-id/);
+  assert.match(context, /Claude Code/);
+  assert.equal(context.includes("workspaceId workspace-id"), false);
+});
+
 test("keeps the global workspace when the session is outside every project", () => {
   const projectRoot = makeTemporaryDirectory();
   const unrelatedDirectory = makeTemporaryDirectory();
@@ -465,6 +556,26 @@ test("keeps the global workspace when the session is outside every project", () 
   assert.match(context, /workspaceId workspace-id/);
   assert.equal(context.includes("per-project override"), false);
   assert.equal(context.includes("project-workspace-id"), false);
+});
+
+test("keeps filesystem matching when Git is unavailable", () => {
+  const projectRoot = makeTemporaryDirectory();
+  const nestedDirectory = path.join(projectRoot, "nested");
+  fs.mkdirSync(nestedDirectory);
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(configWithProject(projectRoot)),
+      PATH: "",
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: nestedDirectory },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /workspaceId project-workspace-id/);
 });
 
 test("does not match a sibling directory that shares the root's prefix", () => {
