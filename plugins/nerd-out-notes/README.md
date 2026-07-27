@@ -15,7 +15,10 @@ runs a bundled copy of [`mcp-remote`](https://github.com/geelen/mcp-remote)
 server and handles the MCP OAuth browser sign-in, caching tokens in
 `~/.mcp-auth`. The bridge runs `node` from your PATH (any Node.js 18+). Both
 Claude (`.mcp.json`) and Codex (`.codex-plugin/mcp.json`) register the same
-bridge, so the two agents share one connection path and one token cache.
+bridge implementation, but pass their own OAuth client names and keep
+separate credential caches under `~/.mcp-auth/nerd-out-notes/`. Nerd Out's
+Authorized clients list can therefore show and revoke **Claude** and
+**Codex** independently instead of listing both as **MCP CLI Proxy**.
 
 The bundle is regenerated with `cd bridge/build && npm install && npm run build`
 (see `bridge/build/build.mjs`) — do not edit `bridge/mcp-remote-proxy.bundle.mjs`
@@ -75,9 +78,14 @@ Start a new thread after installing so the plugin tools are loaded.
 No explicit login step is needed for either agent: the first time the
 plugin's bridge connects (in Claude Desktop, Cowork, Claude Code, or Codex),
 a browser window opens to sign in to your Nerd Out account and approve
-access. Approve, then start a new conversation or thread. Tokens are cached
-and refreshed in `~/.mcp-auth` and shared between Claude and Codex, so this
-happens once per Mac.
+access. Approve, then start a new conversation or thread. Each agent
+authorizes once because its dynamic OAuth registration and refreshed tokens
+are cached separately under `~/.mcp-auth/nerd-out-notes/`.
+
+After upgrading from a version that displayed **MCP CLI Proxy**, authorize
+Claude and Codex again to create the newly named registrations. Existing
+**MCP CLI Proxy** rows cannot be mapped back to a host reliably; revoke those
+legacy rows in Nerd Out after the named clients are working.
 
 > **Server name:** the plugin registers its server as `nerd-out-notes`, but the
 > installed name may be namespaced — Claude Code registers plugin servers as
@@ -174,6 +182,7 @@ journal skill and MCP server keep those responsibilities.
 If the agent reports a connection error, confirm the Mac app is open and the
 server is enabled. If it reports an authorization error, start a new
 conversation so the bridge re-runs the browser sign-in (access may have been
-revoked or expired); deleting `~/.mcp-auth` forces a fresh sign-in. If you
-don't see the server, use `codex mcp list` or `claude mcp list` to confirm
-its exact name.
+revoked or expired); deleting the affected agent's directory under
+`~/.mcp-auth/nerd-out-notes/` forces a fresh sign-in without clearing the
+other agent. If you don't see the server, use `codex mcp list` or
+`claude mcp list` to confirm its exact name.

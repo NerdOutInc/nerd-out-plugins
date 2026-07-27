@@ -3,7 +3,7 @@
     "nerd-out-notes": {
       "type": "stdio",
       "command": "node",
-      "args": ["./bridge/index.mjs"],
+      "args": ["./bridge/index.mjs", "--client-name", "Codex"],
       "cwd": "."
     }
   }
