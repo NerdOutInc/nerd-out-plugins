@@ -24,6 +24,10 @@ test("client names are validated before they reach OAuth metadata", () => {
     /requires a non-empty value/
   );
   assert.throws(
+    () => parseClientName(["--client-name", "--transport"]),
+    /requires a non-empty value/
+  );
+  assert.throws(
     () =>
       parseClientName([
         "--client-name",

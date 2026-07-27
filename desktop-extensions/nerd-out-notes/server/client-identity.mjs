@@ -14,7 +14,7 @@ export function parseClientName(args) {
   }
 
   const clientName = args[flagIndex + 1]?.trim();
-  if (!clientName) {
+  if (!clientName || clientName.startsWith("-")) {
     throw new Error(`${CLIENT_NAME_FLAG} requires a non-empty value.`);
   }
   if (clientName.length > MAX_CLIENT_NAME_LENGTH) {
