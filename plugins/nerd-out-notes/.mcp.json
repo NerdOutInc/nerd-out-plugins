@@ -3,7 +3,11 @@
     "nerd-out-notes": {
       "type": "stdio",
       "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/bridge/index.mjs"]
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/bridge/index.mjs",
+        "--client-name",
+        "Claude"
+      ]
     }
   }
 }

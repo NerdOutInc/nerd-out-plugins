@@ -137,6 +137,13 @@ For Claude Code, run `/mcp` in a session and authenticate the Nerd Out Notes
 server. Plugin servers are namespaced, so it appears as
 `plugin:nerd-out-notes:nerd-out-notes`; `claude mcp list` shows the exact name.
 
+Current plugin versions register useful OAuth client names: **Codex** for the
+Codex plugin, **Claude** for the shared Claude plugin, and **Claude Desktop**
+for the standalone desktop extension. Their credentials are cached separately,
+so each can be revoked independently. Rows named **MCP CLI Proxy** came from
+older plugin versions and cannot be assigned back to a host reliably; after
+the named registrations work, revoke those legacy rows in Nerd Out.
+
 Older app builds without OAuth support can still use the shared bearer token —
 see the legacy setup section in the
 [plugin README](plugins/nerd-out-notes/README.md).

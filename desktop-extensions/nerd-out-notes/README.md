@@ -33,10 +33,12 @@ Claude Desktop ── stdio ──> server/index.mjs ── spawns ──> bundl
 - `server/index.mjs` waits for the Mac app's loopback server to be reachable,
   then runs the bundled single-file `mcp-remote`
   (`server/mcp-remote-proxy.bundle.mjs`, MIT — `server/LICENSE-mcp-remote.txt`)
-  with `--transport http-only`.
+  with `--transport http-only` and the OAuth client name
+  **Claude Desktop**.
 - `mcp-remote` handles MCP OAuth: it discovers the authorization server
   (`https://nerd-out-notes.vercel.app`), registers a client, opens the
-  browser for sign-in, and caches/refreshes tokens under `~/.mcp-auth`.
+  browser for sign-in, and caches/refreshes tokens under
+  `~/.mcp-auth/nerd-out-notes/claude-desktop`.
 - The access token's audience is the loopback URL, matching the Mac app's
   token verification, and note content only ever moves over the loopback
   interface.
@@ -59,8 +61,11 @@ The `.mcpb` artifact is not committed; attach it to a GitHub release.
   open the Mac app and enable Settings -> MCP Server, then toggle the
   extension.
 - **Sign-in errors**: access may have been revoked or expired. Toggle the
-  extension to re-trigger the browser sign-in. If it loops, delete the
-  cached entries for this server under `~/.mcp-auth` and try again.
+  extension to re-trigger the browser sign-in. If it loops, delete
+  `~/.mcp-auth/nerd-out-notes/claude-desktop` and try again.
+- **Still listed as MCP CLI Proxy**: that is an older registration whose
+  original host cannot be identified safely. Once **Claude Desktop** is
+  authorized and working, revoke the legacy row in Nerd Out.
 - **Which Claude surface is this for?** Claude Desktop chat only. Claude Code
   and Cowork users should install the
   [Claude plugin](../../plugins/nerd-out-notes) instead.

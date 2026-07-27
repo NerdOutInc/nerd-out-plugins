@@ -9,17 +9,25 @@
 // the Mac app's loopback server, then hands off to a bundled copy of
 // mcp-remote (MIT, see LICENSE-mcp-remote.txt), which proxies stdio to
 // streamable HTTP and runs the MCP OAuth flow (browser sign-in, token cache
-// in ~/.mcp-auth, refresh) against the Nerd Out authorization server.
+// in ~/.mcp-auth, refresh) against the Nerd Out authorization server. Each
+// host passes a display name and gets an isolated OAuth registration/cache,
+// so Nerd Out can show and revoke Claude, Claude Desktop, and Codex
+// independently.
 //
-// This file is duplicated at plugins/nerd-out-notes/bridge/index.mjs and
-// desktop-extensions/nerd-out-notes/server/index.mjs; keep both copies
-// byte-identical. The desktop extension ships as a self-contained package,
-// so the bridge cannot import a module shared across the two locations.
+// This bridge and client-identity.mjs are duplicated under
+// desktop-extensions/nerd-out-notes/server; keep both pairs byte-identical.
+// The desktop extension ships as a self-contained package, so it cannot
+// import modules shared with the plugin.
 
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import {
+  clientCacheDirectory,
+  parseClientName,
+  proxyArgs,
+} from "./client-identity.mjs";
 
 const SERVER_URL = "http://127.0.0.1:38473/mcp";
 const HOST = "127.0.0.1";
@@ -29,6 +37,14 @@ const POLL_INTERVAL_MS = 2_000;
 
 function log(message) {
   process.stderr.write(`[nerd-out-notes] ${message}\n`);
+}
+
+let clientName;
+try {
+  clientName = parseClientName(process.argv.slice(2));
+} catch (error) {
+  log(error instanceof Error ? error.message : String(error));
+  process.exit(2);
 }
 
 function checkPort() {
@@ -81,8 +97,14 @@ const bundlePath = path.join(
 );
 const child = spawn(
   process.execPath,
-  [bundlePath, SERVER_URL, "--transport", "http-only"],
-  { stdio: "inherit" }
+  proxyArgs(bundlePath, SERVER_URL, clientName),
+  {
+    env: {
+      ...process.env,
+      MCP_REMOTE_CONFIG_DIR: clientCacheDirectory(clientName),
+    },
+    stdio: "inherit",
+  }
 );
 
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
