@@ -11,7 +11,8 @@
 // streamable HTTP and runs the MCP OAuth flow (browser sign-in, token cache
 // in ~/.mcp-auth, refresh) against the Nerd Out authorization server. Each
 // host passes a display name and gets an isolated OAuth registration/cache,
-// so Nerd Out can show and revoke Claude and Codex independently.
+// so Nerd Out can show and revoke Claude, Claude Desktop, and Codex
+// independently.
 //
 // This bridge and client-identity.mjs are duplicated under
 // desktop-extensions/nerd-out-notes/server; keep both pairs byte-identical.
