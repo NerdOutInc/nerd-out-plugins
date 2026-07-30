@@ -16,7 +16,11 @@ server and handles the MCP OAuth browser sign-in, caching tokens in
 `~/.mcp-auth`. The bridge runs `node` from your PATH (any Node.js 18+). Both
 Claude (`.mcp.json`) and Codex (`.codex-plugin/mcp.json`) register the same
 bridge implementation, but pass their own OAuth client names and keep
-separate credential caches under `~/.mcp-auth/recall/`. Recall's
+separate credential caches under `~/.mcp-auth/recall/`. When Recall's
+one-click installer has prepared the integration, the bridge and journal hook
+use Recall's pinned private Node runtime. Otherwise they fall back to `node`
+from your PATH (Node.js 18+), which keeps manual and non-Recall installs
+working. Recall's
 Authorized clients list can therefore show and revoke **Claude** and
 **Codex** independently instead of listing both as **MCP CLI Proxy**.
 
@@ -25,6 +29,11 @@ The bundle is regenerated with `cd bridge/build && npm install && npm run build`
 by hand.
 
 ## Install
+
+The direct-download Recall Mac app can perform this setup from
+**Settings → Integrations**. It installs the marketplace/plugin and prepares a
+pinned private Node + ACP runtime in one action. OAuth consent still happens
+on first agent use, and workspace access remains explicit.
 
 ### Codex
 
@@ -39,10 +48,15 @@ the plugin in every project (this plugin talks to the per-user Recall Mac app,
 so it isn't project-specific):
 
 ```bash
-npx codex-marketplace add NerdOutInc/recall-plugins/plugins/recall --plugin --global
+codex plugin marketplace add NerdOutInc/recall-plugins \
+  --ref main \
+  --sparse .agents/plugins \
+  --sparse plugins/recall
+codex plugin add recall@recall
 ```
 
-To scope it to the current repository instead, swap `--global` for `--project`.
+Older Codex versions without `codex plugin` can use
+`npx codex-marketplace add NerdOutInc/recall-plugins/plugins/recall --plugin --global`.
 
 ### Claude Desktop (chat and Cowork)
 
@@ -80,9 +94,10 @@ create `recall-journal.json` and select a workspace.
 ## Setup
 
 1. Open Recall for Mac.
-2. Open Settings -> MCP Server.
-3. Enable the local MCP server.
-4. Authorize your agent.
+2. Open Settings → Integrations and install the agent, or complete the manual
+   install above.
+3. Open Settings → MCP Server and choose block/read/write access per workspace.
+4. Start a new agent thread and authorize that host.
 
 No explicit login step is needed for either agent: the first time the
 plugin's bridge connects (in Claude Desktop, Cowork, Claude Code, or Codex),

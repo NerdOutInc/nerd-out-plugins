@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+recall_node="$HOME/Library/Application Support/Recall/AgentRuntime/bin/recall-node"
+
+if [ -x "$recall_node" ]; then
+  exec "$recall_node" "$@"
+fi
+
+if command -v node >/dev/null 2>&1; then
+  exec node "$@"
+fi
+
+printf '%s\n' \
+  "[recall] Node.js is not available. Open Recall for Mac, then use Settings -> Integrations to prepare this agent." \
+  >&2
+exit 1

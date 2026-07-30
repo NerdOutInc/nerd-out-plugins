@@ -2,6 +2,18 @@
 
 AI plugins for the Recall notes app.
 
+## Install from Recall for Mac
+
+Open **Settings → Integrations** in Recall for Mac. The direct-download build
+can detect Claude Code and Codex, install this marketplace and the Recall
+plugin, enable the local MCP listener, and prepare the pinned ACP runtime with
+one click. The sandboxed App Store build links to the verified manual steps
+below.
+
+Installation does not silently authorize note access. Start a new agent thread
+after installation; Recall asks that host for OAuth consent on first use, and
+workspace block/read/write access remains a separate setting.
+
 ## Codex Plugins
 
 ### Install from the Codex app
@@ -27,16 +39,22 @@ marketplace.
 Install the Recall Codex plugin globally (available in every project):
 
 ```bash
+codex plugin marketplace add NerdOutInc/recall-plugins \
+  --ref main \
+  --sparse .agents/plugins \
+  --sparse plugins/recall
+codex plugin add recall@recall
+```
+
+Older Codex versions that do not yet include `codex plugin` can use the
+community marketplace helper:
+
+```bash
 npx codex-marketplace add NerdOutInc/recall-plugins/plugins/recall --plugin --global
 ```
 
-Install all Codex plugins in this repository:
-
-```bash
-npx codex-marketplace add NerdOutInc/recall-plugins --plugins --global
-```
-
-To scope a plugin to the current repository instead, swap `--global` for `--project`.
+For the helper only, swap `--global` for `--project` to scope the plugin to
+the current repository.
 
 ## Claude Code Plugins
 
@@ -153,7 +171,9 @@ see the legacy setup section in the
 Start a new thread after installing and authorizing so the plugin tools are
 loaded.
 
-Write tools only appear when "Allow writes" is enabled in Recall settings.
+Write tools appear when at least one confirmed workspace is set to
+**Read & write** in Recall's MCP Server settings. A workspace omitted from the
+policy remains blocked.
 
 The plugin supports multiple skills in its `skills/` directory. In addition to
 the direct note workflow, the journal skill
