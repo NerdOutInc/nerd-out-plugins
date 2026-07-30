@@ -1,17 +1,17 @@
 {
-  "name": "nerd-out",
+  "name": "recall",
   "owner": {
     "name": "Nerd Out Inc."
   },
-  "description": "Plugins for Nerd Out products.",
+  "description": "Plugin for the Recall notes app.",
   "plugins": [
     {
-      "name": "nerd-out-notes",
-      "source": "./plugins/nerd-out-notes",
-      "description": "Read, search, and update Nerd Out Notes through the Mac app's local MCP server.",
+      "name": "recall",
+      "source": "./plugins/recall",
+      "description": "Read, search, and update notes in Recall through the Mac app's local MCP server.",
       "category": "productivity",
       "keywords": [
-        "nerd-out",
+        "recall",
         "notes",
         "mcp",
         "local-first",

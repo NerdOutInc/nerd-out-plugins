@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "recall": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["./bridge/index.mjs", "--client-name", "Codex"],
+      "cwd": "."
+    }
+  }
+}

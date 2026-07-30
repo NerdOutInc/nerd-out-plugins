@@ -1,0 +1,18 @@
+{
+  "name": "recall",
+  "version": "0.11.0",
+  "description": "Read, search, and update notes in Recall through the Mac app's local MCP server.",
+  "author": {
+    "name": "Nerd Out Inc.",
+    "url": "https://github.com/NerdOutInc"
+  },
+  "homepage": "https://github.com/NerdOutInc/recall-plugins/tree/main/plugins/recall",
+  "repository": "https://github.com/NerdOutInc/recall-plugins",
+  "keywords": [
+    "recall",
+    "notes",
+    "mcp",
+    "local-first",
+    "productivity"
+  ]
+}

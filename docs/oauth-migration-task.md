@@ -1,4 +1,4 @@
-# Task: migrate the `nerd-out-notes` Codex plugin to MCP OAuth
+# Task: migrate the `recall` Codex plugin to MCP OAuth
 
 > **Superseded (2026-07-01).** This brief has been replaced by
 > **[`docs/oauth-migration-plan.md`](./oauth-migration-plan.md)** — a full
