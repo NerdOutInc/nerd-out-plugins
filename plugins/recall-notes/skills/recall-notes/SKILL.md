@@ -3,7 +3,7 @@ name: recall-notes
 description: Use Recall's local MCP server to list, read, search, and optionally update the signed-in user's notes.
 ---
 
-# Recall Notes
+# Recall
 
 Use this skill when the user asks the agent to work with their notes in Recall
 through the local MCP server.
@@ -24,7 +24,7 @@ through the local MCP server.
     token instead.
 - The server endpoint is `http://127.0.0.1:38473/mcp`.
 
-If the Recall Notes server never appears in the tool list, or MCP calls
+If the Recall server never appears in the tool list, or MCP calls
 fail with connection errors (unable to connect, server unreachable), the
 Recall Mac app is not running — or its MCP server is disabled in
 Settings.

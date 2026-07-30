@@ -109,14 +109,21 @@ test("host manifests supply useful OAuth client names", async () => {
 });
 
 test("marketplace and package manifests use Recall identities", async () => {
-  const [codexMarketplace, claudeMarketplace, codexPlugin, claudePlugin, desktop] =
-    await Promise.all([
-      readJson(".agents/plugins/marketplace.json"),
-      readJson(".claude-plugin/marketplace.json"),
-      readJson("plugins/recall-notes/.codex-plugin/plugin.json"),
-      readJson("plugins/recall-notes/.claude-plugin/plugin.json"),
-      readJson("desktop-extensions/recall-notes/manifest.json"),
-    ]);
+  const [
+    codexMarketplace,
+    claudeMarketplace,
+    codexPlugin,
+    claudePlugin,
+    desktop,
+    rootReadme,
+  ] = await Promise.all([
+    readJson(".agents/plugins/marketplace.json"),
+    readJson(".claude-plugin/marketplace.json"),
+    readJson("plugins/recall-notes/.codex-plugin/plugin.json"),
+    readJson("plugins/recall-notes/.claude-plugin/plugin.json"),
+    readJson("desktop-extensions/recall-notes/manifest.json"),
+    readFile(new URL("README.md", repoRoot), "utf8"),
+  ]);
 
   assert.equal(codexMarketplace.name, "recall");
   assert.equal(codexMarketplace.plugins[0].name, "recall-notes");
@@ -127,9 +134,17 @@ test("marketplace and package manifests use Recall identities", async () => {
   assert.equal(claudeMarketplace.name, "recall");
   assert.equal(claudeMarketplace.plugins[0].name, "recall-notes");
   assert.equal(claudeMarketplace.plugins[0].source, "./plugins/recall-notes");
+  assert.equal(
+    claudeMarketplace.description,
+    "Plugin for the Recall notes app."
+  );
   assert.equal(codexPlugin.name, "recall-notes");
+  assert.equal(codexPlugin.interface.displayName, "Recall");
   assert.equal(claudePlugin.name, "recall-notes");
   assert.equal(desktop.name, "recall-notes");
+  assert.equal(desktop.display_name, "Recall");
+  assert.match(rootReadme, /AI plugins for the Recall notes app\./);
+  assert.doesNotMatch(rootReadme, new RegExp(["Recall", "Notes"].join(" ")));
 
   for (const repositoryUrl of [
     codexPlugin.repository,

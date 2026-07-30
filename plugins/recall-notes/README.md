@@ -1,4 +1,4 @@
-# Recall Notes Plugin
+# Recall Plugin
 
 Use Claude (Desktop, Cowork, or Claude Code) or Codex with the local MCP
 server hosted by Recall for Mac.
@@ -31,7 +31,7 @@ by hand.
 In the Codex app, add
 `https://github.com/NerdOutInc/recall-plugins` as a plugin marketplace. Leave
 **Sparse paths** blank, or include both `.agents/plugins` and
-`plugins/recall-notes` on separate lines. Then install **Recall Notes** from
+`plugins/recall-notes` on separate lines. Then install **Recall** from
 the Recall marketplace.
 
 Alternatively, install from the command line. Install globally so Codex can use
@@ -47,7 +47,7 @@ To scope it to the current repository instead, swap `--global` for `--project`.
 ### Claude Desktop (chat and Cowork)
 
 Open **Customize → Plugins**, choose **Add marketplace**, and enter
-`NerdOutInc/recall-plugins`. Then install **Recall Notes** from the
+`NerdOutInc/recall-plugins`. Then install **Recall** from the
 marketplace list. No terminal needed.
 
 ### Claude Code
@@ -73,7 +73,7 @@ Start a new thread after installing so the plugin tools are loaded.
 Recall uses new marketplace, plugin, MCP server, skill, journal-config, and
 OAuth-cache identifiers. Existing installations do not update across those
 identity changes automatically. Add the Recall marketplace, install
-**Recall Notes**, start a new thread, and approve the browser sign-in once for
+**Recall**, start a new thread, and approve the browser sign-in once for
 each host. Journal users should invoke `$recall-notes:recall-journal` once to
 create `recall-journal.json` and select a workspace.
 

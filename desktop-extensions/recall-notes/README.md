@@ -1,4 +1,4 @@
-# Recall Notes — Claude Desktop Extension
+# Recall — Claude Desktop Extension
 
 A Claude Desktop extension (`.mcpb` bundle) that connects Claude Desktop to
 the local MCP server hosted by Recall for Mac.

@@ -1,6 +1,6 @@
 # Recall Plugins
 
-Plugins and agent integrations for Recall products.
+AI plugins for the Recall notes app.
 
 ## Codex Plugins
 
@@ -19,12 +19,12 @@ plugins/recall-notes
 ```
 
 The marketplace manifest and plugin directory must both be included in a sparse
-checkout. Add the marketplace, then install **Recall Notes** from the Recall
+checkout. Add the marketplace, then install **Recall** from the Recall
 marketplace.
 
 ### Install from the command line
 
-Install the Recall Notes Codex plugin globally (available in every project):
+Install the Recall Codex plugin globally (available in every project):
 
 ```bash
 npx codex-marketplace add NerdOutInc/recall-plugins/plugins/recall-notes --plugin --global
@@ -61,7 +61,7 @@ claude plugin install recall-notes@recall --scope user
 The marketplace, plugin, MCP server, skills, journal config, and OAuth cache
 now use Recall identifiers. Existing installations are not upgraded across
 those identity changes automatically: add the Recall marketplace, install
-**Recall Notes**, start a new thread, and approve the browser sign-in once for
+**Recall**, start a new thread, and approve the browser sign-in once for
 each host. Invoke `$recall-notes:recall-journal` once if you use journaling so
 the agent can create and select a workspace in `recall-journal.json`.
 
@@ -119,7 +119,7 @@ marketplaces have auto-update disabled by default, so opt in once: run
 **Enable auto-update**. Updates are fetched in the background after a session
 starts and take effect on the next launch or after `/reload-plugins`.
 
-## Recall Notes
+## Recall
 
 `plugins/recall-notes` connects Codex or Claude Code to the local MCP server
 hosted by the Recall Mac app. The plugin does not run a notes server

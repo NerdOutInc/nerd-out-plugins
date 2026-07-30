@@ -18,7 +18,7 @@
   "skills": "./skills/",
   "mcpServers": "./.codex-plugin/mcp.json",
   "interface": {
-    "displayName": "Recall Notes",
+    "displayName": "Recall",
     "shortDescription": "Read, search, and update notes in Recall.",
     "longDescription": "Connect Codex to the Recall Mac app's local MCP server so Codex can list, read, search, and, when allowed, update your signed-in notes without running a separate notes service.",
     "developerName": "Nerd Out Inc.",

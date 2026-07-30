@@ -3,7 +3,7 @@
   "owner": {
     "name": "Nerd Out Inc."
   },
-  "description": "Plugins for Recall products.",
+  "description": "Plugin for the Recall notes app.",
   "plugins": [
     {
       "name": "recall-notes",
