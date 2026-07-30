@@ -1,14 +1,14 @@
 {
-  "name": "nerd-out",
+  "name": "recall",
   "interface": {
-    "displayName": "Nerd Out"
+    "displayName": "Recall"
   },
   "plugins": [
     {
-      "name": "nerd-out-notes",
+      "name": "recall-notes",
       "source": {
         "source": "local",
-        "path": "./plugins/nerd-out-notes"
+        "path": "./plugins/recall-notes"
       },
       "policy": {
         "installation": "AVAILABLE",

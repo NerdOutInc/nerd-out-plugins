@@ -1,0 +1,116 @@
+#!/usr/bin/env node
+// Stdio bridge to Recall's local MCP server.
+//
+// Claude clients treat plain-http URLs differently per surface: Claude Code
+// connects to http://127.0.0.1:38473/mcp directly, but Claude Desktop's chat
+// surface routes url-type MCP servers through cloud custom connectors, which
+// require public HTTPS and can never reach a loopback listener. A stdio
+// server has no URL, so every surface runs it locally. This wrapper waits for
+// the Mac app's loopback server, then hands off to a bundled copy of
+// mcp-remote (MIT, see LICENSE-mcp-remote.txt), which proxies stdio to
+// streamable HTTP and runs the MCP OAuth flow (browser sign-in, token cache
+// in ~/.mcp-auth, refresh) against the Recall authorization server. Each
+// host passes a display name and gets an isolated OAuth registration/cache,
+// so Recall can show and revoke Claude, Claude Desktop, and Codex
+// independently.
+//
+// This bridge and client-identity.mjs are duplicated under
+// desktop-extensions/recall-notes/server; keep both pairs byte-identical.
+// The desktop extension ships as a self-contained package, so it cannot
+// import modules shared with the plugin.
+
+import net from "node:net";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawn } from "node:child_process";
+import {
+  clientCacheDirectory,
+  parseClientName,
+  proxyArgs,
+} from "./client-identity.mjs";
+
+const SERVER_URL = "http://127.0.0.1:38473/mcp";
+const HOST = "127.0.0.1";
+const PORT = 38473;
+const WAIT_FOR_APP_MS = 60_000;
+const POLL_INTERVAL_MS = 2_000;
+
+function log(message) {
+  process.stderr.write(`[recall-notes] ${message}\n`);
+}
+
+let clientName;
+try {
+  clientName = parseClientName(process.argv.slice(2));
+} catch (error) {
+  log(error instanceof Error ? error.message : String(error));
+  process.exit(2);
+}
+
+function checkPort() {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host: HOST, port: PORT });
+    const done = (result) => {
+      socket.destroy();
+      resolve(result);
+    };
+    socket.setTimeout(1_500, () => done(false));
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+  });
+}
+
+async function waitForApp() {
+  if (await checkPort()) return true;
+  log(
+    `Can't connect to the Recall MCP server on ${HOST}:${PORT} — ` +
+      "the Recall Mac app is not running, or its MCP server is " +
+      "disabled. Launch the app and enable Settings -> MCP Server; this " +
+      "bridge will connect automatically."
+  );
+  const deadline = Date.now() + WAIT_FOR_APP_MS;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    if (await checkPort()) {
+      log("Recall is now reachable.");
+      return true;
+    }
+  }
+  return false;
+}
+
+const reachable = await waitForApp();
+if (!reachable) {
+  log(
+    `Gave up waiting for the Recall MCP server on ${SERVER_URL}. ` +
+      "The Recall Mac app is not running (or its MCP server is " +
+      "disabled in Settings). A locked screen does not cause this — the " +
+      "server keeps working while the Mac is locked. Launch the app and " +
+      "start a new conversation to retry."
+  );
+  process.exit(1);
+}
+
+const bundlePath = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "mcp-remote-proxy.bundle.mjs"
+);
+const child = spawn(
+  process.execPath,
+  proxyArgs(bundlePath, SERVER_URL, clientName),
+  {
+    env: {
+      ...process.env,
+      MCP_REMOTE_CONFIG_DIR: clientCacheDirectory(clientName),
+    },
+    stdio: "inherit",
+  }
+);
+
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+  process.on(signal, () => child.kill(signal));
+}
+
+child.on("exit", (code, signal) => {
+  process.exit(signal ? 1 : (code ?? 1));
+});

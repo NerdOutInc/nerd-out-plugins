@@ -1,6 +1,0 @@
-interface:
-  display_name: "NerdOut Journal"
-  short_description: "Journal decisions and live progress in NerdOut and recall them in later tasks"
-  default_prompt: "Use $nerd-out-notes:nerd-out-journal to configure the global workspace, bind this project to its own workspace, recall prior journal notes, or journal this task with live progress."
-policy:
-  allow_implicit_invocation: true

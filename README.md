@@ -1,6 +1,6 @@
-# Nerd Out Plugins
+# Recall Plugins
 
-Plugins and agent integrations for Nerd Out products.
+Plugins and agent integrations for Recall products.
 
 ## Codex Plugins
 
@@ -8,32 +8,32 @@ Plugins and agent integrations for Nerd Out products.
 
 Open **Plugins**, choose **Create -> Add plugin marketplace**, and enter:
 
-- Source: `https://github.com/NerdOutInc/nerd-out-plugins`
+- Source: `https://github.com/NerdOutInc/recall-plugins`
 - Git ref: `main`
 - Sparse paths: leave blank to load the whole marketplace, or enter both paths
   below on separate lines:
 
 ```text
 .agents/plugins
-plugins/nerd-out-notes
+plugins/recall-notes
 ```
 
 The marketplace manifest and plugin directory must both be included in a sparse
-checkout. Add the marketplace, then install **Nerd Out Notes** from the Nerd Out
+checkout. Add the marketplace, then install **Recall Notes** from the Recall
 marketplace.
 
 ### Install from the command line
 
-Install the Nerd Out Notes Codex plugin globally (available in every project):
+Install the Recall Notes Codex plugin globally (available in every project):
 
 ```bash
-npx codex-marketplace add NerdOutInc/nerd-out-plugins/plugins/nerd-out-notes --plugin --global
+npx codex-marketplace add NerdOutInc/recall-plugins/plugins/recall-notes --plugin --global
 ```
 
 Install all Codex plugins in this repository:
 
 ```bash
-npx codex-marketplace add NerdOutInc/nerd-out-plugins --plugins --global
+npx codex-marketplace add NerdOutInc/recall-plugins --plugins --global
 ```
 
 To scope a plugin to the current repository instead, swap `--global` for `--project`.
@@ -44,17 +44,26 @@ The same plugins work in Claude Code. Add this repository as a plugin
 marketplace, then install the plugin:
 
 ```text
-/plugin marketplace add NerdOutInc/nerd-out-plugins
-/plugin install nerd-out-notes@nerd-out
+/plugin marketplace add NerdOutInc/recall-plugins
+/plugin install recall-notes@recall
 ```
 
 Or from the command line (user scope makes the plugin available in every
 project, which fits this plugin since it talks to the per-user Mac app):
 
 ```bash
-claude plugin marketplace add NerdOutInc/nerd-out-plugins
-claude plugin install nerd-out-notes@nerd-out --scope user
+claude plugin marketplace add NerdOutInc/recall-plugins
+claude plugin install recall-notes@recall --scope user
 ```
+
+## Moving an existing install to Recall
+
+The marketplace, plugin, MCP server, skills, journal config, and OAuth cache
+now use Recall identifiers. Existing installations are not upgraded across
+those identity changes automatically: add the Recall marketplace, install
+**Recall Notes**, start a new thread, and approve the browser sign-in once for
+each host. Invoke `$recall-notes:recall-journal` once if you use journaling so
+the agent can create and select a workspace in `recall-journal.json`.
 
 ## Updating
 
@@ -62,7 +71,7 @@ Installed plugins do not update themselves by default. Both agents install
 from a snapshot of this repository taken at install time, so run the steps
 below whenever you want the latest release.
 
-The commands below refer to the marketplace as `nerd-out`. That is the
+The commands below refer to the marketplace as `recall`. That is the
 marketplace name from this repository's manifests, not the GitHub repository
 name, and both agents register it when you add the marketplace. If you are
 unsure what name your agent uses, run `codex plugin marketplace list` or
@@ -75,17 +84,17 @@ marketplace. This refreshes the snapshot and reinstalls the marketplace's
 installed plugins at the new version:
 
 ```bash
-codex plugin marketplace upgrade nerd-out
+codex plugin marketplace upgrade recall
 ```
 
-The Codex app can do the same from **Plugins**: select the **Nerd Out**
+The Codex app can do the same from **Plugins**: select the **Recall**
 marketplace and choose its upgrade action.
 
 If you installed with `codex-marketplace`, there is no update command; re-run
 the install command to copy the latest files over the previous install:
 
 ```bash
-npx codex-marketplace add NerdOutInc/nerd-out-plugins/plugins/nerd-out-notes --plugin --global
+npx codex-marketplace add NerdOutInc/recall-plugins/plugins/recall-notes --plugin --global
 ```
 
 ### Claude Code
@@ -93,72 +102,64 @@ npx codex-marketplace add NerdOutInc/nerd-out-plugins/plugins/nerd-out-notes --p
 Refresh the marketplace listing, then update the plugin:
 
 ```text
-/plugin marketplace update nerd-out
-/plugin update nerd-out-notes@nerd-out
+/plugin marketplace update recall
+/plugin update recall-notes@recall
 ```
 
 Or from the command line:
 
 ```bash
-claude plugin marketplace update nerd-out
-claude plugin update nerd-out-notes@nerd-out
+claude plugin marketplace update recall
+claude plugin update recall-notes@recall
 ```
 
 Claude Code can also keep the plugin current automatically. Third-party
 marketplaces have auto-update disabled by default, so opt in once: run
-`/plugin`, open the **Marketplaces** tab, select **nerd-out**, and choose
+`/plugin`, open the **Marketplaces** tab, select **recall**, and choose
 **Enable auto-update**. Updates are fetched in the background after a session
 starts and take effect on the next launch or after `/reload-plugins`.
 
-## Nerd Out Notes
+## Recall Notes
 
-`plugins/nerd-out-notes` connects Codex or Claude Code to the local MCP server
-hosted by the Nerd Out Notes Mac app. The plugin does not run a notes server
+`plugins/recall-notes` connects Codex or Claude Code to the local MCP server
+hosted by the Recall Mac app. The plugin does not run a notes server
 itself; it points the agent at the loopback endpoint already managed by the
 signed-in Mac app.
 
 To use it:
 
-1. Open Nerd Out Notes for Mac.
+1. Open Recall for Mac.
 2. Go to Settings -> MCP Server.
 3. Enable the local MCP server.
-4. Authorize your agent (browser sign-in + consent).
+4. Start a new thread. The bridge opens a browser for Recall sign-in and
+   consent the first time that host connects.
 
-For Codex:
-
-```bash
-codex mcp login nerd-out-notes
-```
-
-If `codex mcp login` can't find the server, run `codex mcp list` to see the
-exact name Codex registered it under and use that.
-
-For Claude Code, run `/mcp` in a session and authenticate the Nerd Out Notes
-server. Plugin servers are namespaced, so it appears as
-`plugin:nerd-out-notes:nerd-out-notes`; `claude mcp list` shows the exact name.
+No explicit login command is needed. If the server does not appear, run
+`codex mcp list` or `claude mcp list` to inspect the registered name. Claude
+Code plugin servers are namespaced, so it normally appears as
+`plugin:recall-notes:recall-notes`.
 
 Current plugin versions register useful OAuth client names: **Codex** for the
 Codex plugin, **Claude** for the shared Claude plugin, and **Claude Desktop**
 for the standalone desktop extension. Their credentials are cached separately,
 so each can be revoked independently. Rows named **MCP CLI Proxy** came from
 older plugin versions and cannot be assigned back to a host reliably; after
-the named registrations work, revoke those legacy rows in Nerd Out.
+the named registrations work, revoke those legacy rows in Recall.
 
 Older app builds without OAuth support can still use the shared bearer token —
 see the legacy setup section in the
-[plugin README](plugins/nerd-out-notes/README.md).
+[plugin README](plugins/recall-notes/README.md).
 
 Start a new thread after installing and authorizing so the plugin tools are
 loaded.
 
-Write tools only appear when "Allow writes" is enabled in Nerd Out Notes
-settings.
+Write tools only appear when "Allow writes" is enabled in Recall settings.
 
 The plugin supports multiple skills in its `skills/` directory. In addition to
 the direct note workflow, the journal skill
-(`$nerd-out-notes:nerd-out-journal` in Codex,
-`/nerd-out-notes:nerd-out-journal` in Claude Code) configures a per-agent global
-`nerd-out-journal.json` workspace selection. A bundled per-prompt hook detects
+(`$recall-notes:recall-journal` in Codex,
+`/recall-notes:recall-journal` in Claude Code) configures a per-agent global
+`recall-journal.json` workspace selection. A bundled per-prompt hook detects
 that valid opt-in config, reminds the agent to search prior journal notes for
 relevant context when a task relates to earlier work, and reminds it to
 journal meaningful work live in that write-ready workspace: open a
@@ -177,4 +178,4 @@ for the plugin hook; open `/hooks` if Codex reports that the hook is awaiting
 review. The hook reads the per-agent journal config, asks local Git for
 worktree metadata when available, and adds agent context; the journal skill
 still validates the live workspace and performs every note write through the
-Nerd Out MCP server.
+Recall MCP server.
