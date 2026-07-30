@@ -4,7 +4,7 @@ A Claude Desktop extension (`.mcpb` bundle) that connects Claude Desktop to
 the local MCP server hosted by Recall for Mac.
 
 This is the fallback install path for Claude Desktop chat. The
-[Claude plugin](../../plugins/recall-notes) is the primary path — it bundles
+[Claude plugin](../../plugins/recall) is the primary path — it bundles
 the same stdio bridge plus the skills — but its bridge runs on the Node.js
 found on your PATH. This extension instead runs on **Claude Desktop's built-in
 Node runtime**, so it works on Macs with no Node install at all, and installs
@@ -12,7 +12,7 @@ by double-clicking one file.
 
 ## Install (end users)
 
-1. Download `recall-notes.mcpb` from the latest release.
+1. Download `recall.mcpb` from the latest release.
 2. Double-click the file, or in Claude Desktop open **Settings ->
    Extensions -> Advanced settings -> Install Extension…** and pick it.
 3. Open Recall for Mac and enable **Settings -> MCP Server**.
@@ -38,19 +38,19 @@ Claude Desktop ── stdio ──> server/index.mjs ── spawns ──> bundl
 - `mcp-remote` handles MCP OAuth: it discovers the authorization server
   (`https://recall.nerdout.com`), registers a client, opens the
   browser for sign-in, and caches/refreshes tokens under
-  `~/.mcp-auth/recall-notes/claude-desktop`.
+  `~/.mcp-auth/recall/claude-desktop`.
 - The access token's audience is the loopback URL, matching the Mac app's
   token verification, and note content only ever moves over the loopback
   interface.
 
-The bridge files are copies of `plugins/recall-notes/bridge/` — regenerate
+The bridge files are copies of `plugins/recall/bridge/` — regenerate
 the bundle there (`bridge/build/`) and re-copy when upgrading mcp-remote.
 
 ## Build
 
 ```bash
-cd desktop-extensions/recall-notes
-npx @anthropic-ai/mcpb pack . recall-notes.mcpb
+cd desktop-extensions/recall
+npx @anthropic-ai/mcpb pack . recall.mcpb
 ```
 
 The `.mcpb` artifact is not committed; attach it to a GitHub release.
@@ -62,10 +62,10 @@ The `.mcpb` artifact is not committed; attach it to a GitHub release.
   extension.
 - **Sign-in errors**: access may have been revoked or expired. Toggle the
   extension to re-trigger the browser sign-in. If it loops, delete
-  `~/.mcp-auth/recall-notes/claude-desktop` and try again.
+  `~/.mcp-auth/recall/claude-desktop` and try again.
 - **Still listed as MCP CLI Proxy**: that is an older registration whose
   original host cannot be identified safely. Once **Claude Desktop** is
   authorized and working, revoke the legacy row in Recall.
 - **Which Claude surface is this for?** Claude Desktop chat only. Claude Code
   and Cowork users should install the
-  [Claude plugin](../../plugins/recall-notes) instead.
+  [Claude plugin](../../plugins/recall) instead.

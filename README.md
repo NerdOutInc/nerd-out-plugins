@@ -15,7 +15,7 @@ Open **Plugins**, choose **Create -> Add plugin marketplace**, and enter:
 
 ```text
 .agents/plugins
-plugins/recall-notes
+plugins/recall
 ```
 
 The marketplace manifest and plugin directory must both be included in a sparse
@@ -27,7 +27,7 @@ marketplace.
 Install the Recall Codex plugin globally (available in every project):
 
 ```bash
-npx codex-marketplace add NerdOutInc/recall-plugins/plugins/recall-notes --plugin --global
+npx codex-marketplace add NerdOutInc/recall-plugins/plugins/recall --plugin --global
 ```
 
 Install all Codex plugins in this repository:
@@ -45,7 +45,7 @@ marketplace, then install the plugin:
 
 ```text
 /plugin marketplace add NerdOutInc/recall-plugins
-/plugin install recall-notes@recall
+/plugin install recall@recall
 ```
 
 Or from the command line (user scope makes the plugin available in every
@@ -53,7 +53,7 @@ project, which fits this plugin since it talks to the per-user Mac app):
 
 ```bash
 claude plugin marketplace add NerdOutInc/recall-plugins
-claude plugin install recall-notes@recall --scope user
+claude plugin install recall@recall --scope user
 ```
 
 ## Moving an existing install to Recall
@@ -62,7 +62,7 @@ The marketplace, plugin, MCP server, skills, journal config, and OAuth cache
 now use Recall identifiers. Existing installations are not upgraded across
 those identity changes automatically: add the Recall marketplace, install
 **Recall**, start a new thread, and approve the browser sign-in once for
-each host. Invoke `$recall-notes:recall-journal` once if you use journaling so
+each host. Invoke `$recall:recall-journal` once if you use journaling so
 the agent can create and select a workspace in `recall-journal.json`.
 
 ## Updating
@@ -94,7 +94,7 @@ If you installed with `codex-marketplace`, there is no update command; re-run
 the install command to copy the latest files over the previous install:
 
 ```bash
-npx codex-marketplace add NerdOutInc/recall-plugins/plugins/recall-notes --plugin --global
+npx codex-marketplace add NerdOutInc/recall-plugins/plugins/recall --plugin --global
 ```
 
 ### Claude Code
@@ -103,14 +103,14 @@ Refresh the marketplace listing, then update the plugin:
 
 ```text
 /plugin marketplace update recall
-/plugin update recall-notes@recall
+/plugin update recall@recall
 ```
 
 Or from the command line:
 
 ```bash
 claude plugin marketplace update recall
-claude plugin update recall-notes@recall
+claude plugin update recall@recall
 ```
 
 Claude Code can also keep the plugin current automatically. Third-party
@@ -121,7 +121,7 @@ starts and take effect on the next launch or after `/reload-plugins`.
 
 ## Recall
 
-`plugins/recall-notes` connects Codex or Claude Code to the local MCP server
+`plugins/recall` connects Codex or Claude Code to the local MCP server
 hosted by the Recall Mac app. The plugin does not run a notes server
 itself; it points the agent at the loopback endpoint already managed by the
 signed-in Mac app.
@@ -137,7 +137,7 @@ To use it:
 No explicit login command is needed. If the server does not appear, run
 `codex mcp list` or `claude mcp list` to inspect the registered name. Claude
 Code plugin servers are namespaced, so it normally appears as
-`plugin:recall-notes:recall-notes`.
+`plugin:recall:recall`.
 
 Current plugin versions register useful OAuth client names: **Codex** for the
 Codex plugin, **Claude** for the shared Claude plugin, and **Claude Desktop**
@@ -148,7 +148,7 @@ the named registrations work, revoke those legacy rows in Recall.
 
 Older app builds without OAuth support can still use the shared bearer token —
 see the legacy setup section in the
-[plugin README](plugins/recall-notes/README.md).
+[plugin README](plugins/recall/README.md).
 
 Start a new thread after installing and authorizing so the plugin tools are
 loaded.
@@ -157,8 +157,8 @@ Write tools only appear when "Allow writes" is enabled in Recall settings.
 
 The plugin supports multiple skills in its `skills/` directory. In addition to
 the direct note workflow, the journal skill
-(`$recall-notes:recall-journal` in Codex,
-`/recall-notes:recall-journal` in Claude Code) configures a per-agent global
+(`$recall:recall-journal` in Codex,
+`/recall:recall-journal` in Claude Code) configures a per-agent global
 `recall-journal.json` workspace selection. A bundled per-prompt hook detects
 that valid opt-in config, reminds the agent to search prior journal notes for
 relevant context when a task relates to earlier work, and reminds it to

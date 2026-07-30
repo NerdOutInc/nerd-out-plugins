@@ -1,16 +1,19 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 
 import {
   DEFAULT_CLIENT_NAME,
   clientCacheDirectory,
   parseClientName,
   proxyArgs,
-} from "../plugins/recall-notes/bridge/client-identity.mjs";
+} from "../plugins/recall/bridge/client-identity.mjs";
 
 const repoRoot = new URL("../", import.meta.url);
+const execFileAsync = promisify(execFile);
 
 async function readJson(relativePath) {
   return JSON.parse(await readFile(new URL(relativePath, repoRoot), "utf8"));
@@ -48,11 +51,11 @@ test("each client receives distinct mcp-remote storage", () => {
 
   assert.equal(
     clientCacheDirectory("Codex", baseDirectory),
-    path.join(baseDirectory, "recall-notes", "codex")
+    path.join(baseDirectory, "recall", "codex")
   );
   assert.equal(
     clientCacheDirectory("Claude Desktop", baseDirectory),
-    path.join(baseDirectory, "recall-notes", "claude-desktop")
+    path.join(baseDirectory, "recall", "claude-desktop")
   );
   assert.notEqual(
     clientCacheDirectory("Codex", baseDirectory),
@@ -77,7 +80,7 @@ test("the bridge passes the supported dynamic-registration override", () => {
 test("the committed mcp-remote bundle supports the required overrides", async () => {
   const bundle = await readFile(
     new URL(
-      "plugins/recall-notes/bridge/mcp-remote-proxy.bundle.mjs",
+      "plugins/recall/bridge/mcp-remote-proxy.bundle.mjs",
       repoRoot
     ),
     "utf8"
@@ -89,16 +92,16 @@ test("the committed mcp-remote bundle supports the required overrides", async ()
 
 test("host manifests supply useful OAuth client names", async () => {
   const [codex, claude, desktop] = await Promise.all([
-    readJson("plugins/recall-notes/.codex-plugin/mcp.json"),
-    readJson("plugins/recall-notes/.mcp.json"),
-    readJson("desktop-extensions/recall-notes/manifest.json"),
+    readJson("plugins/recall/.codex-plugin/mcp.json"),
+    readJson("plugins/recall/.mcp.json"),
+    readJson("desktop-extensions/recall/manifest.json"),
   ]);
 
-  assert.deepEqual(codex.mcpServers["recall-notes"].args.slice(-2), [
+  assert.deepEqual(codex.mcpServers["recall"].args.slice(-2), [
     "--client-name",
     "Codex",
   ]);
-  assert.deepEqual(claude.mcpServers["recall-notes"].args.slice(-2), [
+  assert.deepEqual(claude.mcpServers["recall"].args.slice(-2), [
     "--client-name",
     "Claude",
   ]);
@@ -119,29 +122,29 @@ test("marketplace and package manifests use Recall identities", async () => {
   ] = await Promise.all([
     readJson(".agents/plugins/marketplace.json"),
     readJson(".claude-plugin/marketplace.json"),
-    readJson("plugins/recall-notes/.codex-plugin/plugin.json"),
-    readJson("plugins/recall-notes/.claude-plugin/plugin.json"),
-    readJson("desktop-extensions/recall-notes/manifest.json"),
+    readJson("plugins/recall/.codex-plugin/plugin.json"),
+    readJson("plugins/recall/.claude-plugin/plugin.json"),
+    readJson("desktop-extensions/recall/manifest.json"),
     readFile(new URL("README.md", repoRoot), "utf8"),
   ]);
 
   assert.equal(codexMarketplace.name, "recall");
-  assert.equal(codexMarketplace.plugins[0].name, "recall-notes");
+  assert.equal(codexMarketplace.plugins[0].name, "recall");
   assert.equal(
     codexMarketplace.plugins[0].source.path,
-    "./plugins/recall-notes"
+    "./plugins/recall"
   );
   assert.equal(claudeMarketplace.name, "recall");
-  assert.equal(claudeMarketplace.plugins[0].name, "recall-notes");
-  assert.equal(claudeMarketplace.plugins[0].source, "./plugins/recall-notes");
+  assert.equal(claudeMarketplace.plugins[0].name, "recall");
+  assert.equal(claudeMarketplace.plugins[0].source, "./plugins/recall");
   assert.equal(
     claudeMarketplace.description,
     "Plugin for the Recall notes app."
   );
-  assert.equal(codexPlugin.name, "recall-notes");
+  assert.equal(codexPlugin.name, "recall");
   assert.equal(codexPlugin.interface.displayName, "Recall");
-  assert.equal(claudePlugin.name, "recall-notes");
-  assert.equal(desktop.name, "recall-notes");
+  assert.equal(claudePlugin.name, "recall");
+  assert.equal(desktop.name, "recall");
   assert.equal(desktop.display_name, "Recall");
   assert.match(rootReadme, /AI plugins for the Recall notes app\./);
   assert.doesNotMatch(rootReadme, new RegExp(["Recall", "Notes"].join(" ")));
@@ -156,27 +159,46 @@ test("marketplace and package manifests use Recall identities", async () => {
   }
 });
 
+test("tracked paths and content use only the recall plugin identifier", async () => {
+  const formerIdentifier = ["recall", "notes"].join("-");
+  const { stdout } = await execFileAsync("git", ["ls-files", "-z"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+  const trackedPaths = stdout.split("\0").filter(Boolean);
+
+  for (const trackedPath of trackedPaths) {
+    assert.doesNotMatch(trackedPath, new RegExp(formerIdentifier));
+    const content = await readFile(new URL(trackedPath, repoRoot));
+    assert.equal(
+      content.includes(formerIdentifier),
+      false,
+      `${trackedPath} contains the former plugin identifier`,
+    );
+  }
+});
+
 test("the plugin and desktop-extension bridge copies stay byte-identical", async () => {
   const [pluginIndex, desktopIndex, pluginIdentity, desktopIdentity] =
     await Promise.all([
       readFile(
-        new URL("plugins/recall-notes/bridge/index.mjs", repoRoot),
+        new URL("plugins/recall/bridge/index.mjs", repoRoot),
         "utf8"
       ),
       readFile(
         new URL(
-          "desktop-extensions/recall-notes/server/index.mjs",
+          "desktop-extensions/recall/server/index.mjs",
           repoRoot
         ),
         "utf8"
       ),
       readFile(
-        new URL("plugins/recall-notes/bridge/client-identity.mjs", repoRoot),
+        new URL("plugins/recall/bridge/client-identity.mjs", repoRoot),
         "utf8"
       ),
       readFile(
         new URL(
-          "desktop-extensions/recall-notes/server/client-identity.mjs",
+          "desktop-extensions/recall/server/client-identity.mjs",
           repoRoot
         ),
         "utf8"

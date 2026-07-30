@@ -1,6 +1,6 @@
 ---
 name: recall-journal
-description: Keep a concise, searchable journal of agent work in Recall and read it back as the agent's long-term memory. Use when the user invokes the recall-journal skill ($recall-notes:recall-journal in Codex, /recall-notes:recall-journal in Claude Code) or when plugin lifecycle context reports a valid global recall-journal.json configuration for the current agent; once configured, search the journal at the start of tasks that may relate to prior work and journal every task with useful decisions, implementation work, tests, or follow-ups — live, as the work happens, not only at the end. Configure a workspace on first use, bind a project to its own workspace when the user asks, recall and cite relevant prior notes before deciding, open the task's entry under a unique task marker when substantive work begins, append progress at checkpoints, write a daily summary, and choose an appropriate set of detailed named notes.
+description: Keep a concise, searchable journal of agent work in Recall and read it back as the agent's long-term memory. Use when the user invokes the recall-journal skill ($recall:recall-journal in Codex, /recall:recall-journal in Claude Code) or when plugin lifecycle context reports a valid global recall-journal.json configuration for the current agent; once configured, search the journal at the start of tasks that may relate to prior work and journal every task with useful decisions, implementation work, tests, or follow-ups — live, as the work happens, not only at the end. Configure a workspace on first use, bind a project to its own workspace when the user asks, recall and cite relevant prior notes before deciding, open the task's entry under a unique task marker when substantive work begins, append progress at checkpoints, write a daily summary, and choose an appropriate set of detailed named notes.
 ---
 
 # Recall Journal
@@ -100,8 +100,8 @@ addition to the named-note work. If it is `false`, still journal the task in the
 selected named notes but skip the DailyNote update.
 
 Distinguish explicit from implicit activation. An explicit skill invocation
-(`$recall-notes:recall-journal` in Codex,
-`/recall-notes:recall-journal` in Claude Code) may prompt for a workspace
+(`$recall:recall-journal` in Codex,
+`/recall:recall-journal` in Claude Code) may prompt for a workspace
 when the config is missing or invalid. An implicit invocation with no valid
 config must skip journaling for that task without prompting or interrupting
 unrelated work; wait for the user to invoke the skill explicitly before

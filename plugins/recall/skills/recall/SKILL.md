@@ -1,5 +1,5 @@
 ---
-name: recall-notes
+name: recall
 description: Use Recall's local MCP server to list, read, search, and optionally update the signed-in user's notes.
 ---
 
@@ -18,7 +18,7 @@ through the local MCP server.
     `codex mcp list` to inspect the registered name if the server is absent.
   - **Claude Code:** start a new conversation after installation and complete
     the browser sign-in on first connection. Plugin servers are namespaced, so
-    the server appears as `plugin:recall-notes:recall-notes`; use
+    the server appears as `plugin:recall:recall`; use
     `claude mcp list` to inspect the exact name.
   - Legacy setups on older app builds may use the `NERD_OUT_MCP_TOKEN` bearer
     token instead.

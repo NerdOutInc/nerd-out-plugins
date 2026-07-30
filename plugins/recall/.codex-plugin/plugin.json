@@ -1,12 +1,12 @@
 {
-  "name": "recall-notes",
+  "name": "recall",
   "version": "0.11.0",
   "description": "Use Recall's local MCP server from Codex.",
   "author": {
     "name": "Nerd Out Inc.",
     "url": "https://github.com/NerdOutInc"
   },
-  "homepage": "https://github.com/NerdOutInc/recall-plugins/tree/main/plugins/recall-notes",
+  "homepage": "https://github.com/NerdOutInc/recall-plugins/tree/main/plugins/recall",
   "repository": "https://github.com/NerdOutInc/recall-plugins",
   "keywords": [
     "recall",

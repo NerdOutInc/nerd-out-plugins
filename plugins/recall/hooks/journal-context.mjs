@@ -17,8 +17,8 @@ function resolveJournalContext(env = process.env) {
     agentName: isCodex ? "Codex" : "Claude Code",
     configPath: path.join(configDirectory, "recall-journal.json"),
     skillName: isCodex
-      ? "$recall-notes:recall-journal"
-      : "/recall-notes:recall-journal",
+      ? "$recall:recall-journal"
+      : "/recall:recall-journal",
   };
 }
 

@@ -6,8 +6,8 @@
   "description": "Plugin for the Recall notes app.",
   "plugins": [
     {
-      "name": "recall-notes",
-      "source": "./plugins/recall-notes",
+      "name": "recall",
+      "source": "./plugins/recall",
       "description": "Read, search, and update notes in Recall through the Mac app's local MCP server.",
       "category": "productivity",
       "keywords": [

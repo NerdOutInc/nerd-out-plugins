@@ -15,7 +15,7 @@
 // independently.
 //
 // This bridge and client-identity.mjs are duplicated under
-// desktop-extensions/recall-notes/server; keep both pairs byte-identical.
+// desktop-extensions/recall/server; keep both pairs byte-identical.
 // The desktop extension ships as a self-contained package, so it cannot
 // import modules shared with the plugin.
 
@@ -36,7 +36,7 @@ const WAIT_FOR_APP_MS = 60_000;
 const POLL_INTERVAL_MS = 2_000;
 
 function log(message) {
-  process.stderr.write(`[recall-notes] ${message}\n`);
+  process.stderr.write(`[recall] ${message}\n`);
 }
 
 let clientName;

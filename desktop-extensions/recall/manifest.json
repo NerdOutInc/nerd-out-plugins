@@ -1,6 +1,6 @@
 {
   "manifest_version": "0.3",
-  "name": "recall-notes",
+  "name": "recall",
   "display_name": "Recall",
   "version": "0.6.0",
   "description": "Read, search, and update notes in Recall through the Mac app's local MCP server.",
@@ -9,8 +9,8 @@
     "name": "Nerd Out Inc.",
     "url": "https://github.com/NerdOutInc"
   },
-  "homepage": "https://github.com/NerdOutInc/recall-plugins/tree/main/desktop-extensions/recall-notes",
-  "documentation": "https://github.com/NerdOutInc/recall-plugins/tree/main/desktop-extensions/recall-notes",
+  "homepage": "https://github.com/NerdOutInc/recall-plugins/tree/main/desktop-extensions/recall",
+  "documentation": "https://github.com/NerdOutInc/recall-plugins/tree/main/desktop-extensions/recall",
   "support": "https://github.com/NerdOutInc/recall-plugins/issues",
   "icon": "icon.png",
   "server": {

@@ -3,7 +3,8 @@
 *Supersedes `docs/oauth-migration-task.md`. This document covers the full path from the current shared-bearer-token auth to MCP OAuth for the Recall loopback MCP server: the missing web-app authorization server (the real blocker), the native Mac-app cutover, the settings/UX changes, and the small `recall-plugins` Codex plugin change — sequenced so that existing bearer users never break.*
 
 > **Naming update (2026-07-30).** Current product and plugin references use
-> Recall, `recall-plugins`, and `recall-notes`. Historical source identifiers
+> Recall for the product, `recall` for the plugin, and `recall-plugins` for
+> this repository. Historical source identifiers
 > such as the still-canonical `nerd-out-app` repository, the former bearer
 > environment variable, and dated issuer discussions remain literal evidence
 > from the migration period.
@@ -14,7 +15,7 @@
 
 ## 1. Overview & goal
 
-The `recall-notes` Codex plugin authenticates to a loopback-only MCP server hosted inside the **Recall for Mac** app at `http://127.0.0.1:38473/mcp`. Today that server accepts exactly one credential: a shared bearer token the user pastes into the `NERD_OUT_MCP_TOKEN` env var (32-byte CSPRNG secret, base64url-no-pad, stored in the Keychain — `McpKeychain.loadOrCreate()`/`generateToken()`, validated by a constant-time compare in `McpHttpProtocol.authorize` at lines 272–278).
+The `recall` Codex plugin authenticates to a loopback-only MCP server hosted inside the **Recall for Mac** app at `http://127.0.0.1:38473/mcp`. Today that server accepts exactly one credential: a shared bearer token the user pastes into the `NERD_OUT_MCP_TOKEN` env var (32-byte CSPRNG secret, base64url-no-pad, stored in the Keychain — `McpKeychain.loadOrCreate()`/`generateToken()`, validated by a constant-time compare in `McpHttpProtocol.authorize` at lines 272–278).
 
 **Goal:** move that server to **MCP OAuth 2.1**, so the user runs `codex mcp login` once (browser sign-in + consent) instead of exporting a long-lived shared secret, and so each token is bound to a specific Supabase user (`sub`) with scoped access (`notes:read` / `notes:write`).
 
@@ -243,14 +244,14 @@ Changes:
 
 ## 6. Plugin change (`recall-plugins`) — the minimal diff
 
-Gated on §9 steps A–E (app AS live + Phase 0 passed). Expect ~4 files. Note this plugin is installed via `npx codex-marketplace add NerdOutInc/recall-plugins/plugins/recall-notes --plugin --global` (a marketplace install, **not** a `.claude`-style install) — this matters for the login-name question (§7).
+Gated on §9 steps A–E (app AS live + Phase 0 passed). Expect ~4 files. Note this plugin is installed via `npx codex-marketplace add NerdOutInc/recall-plugins/plugins/recall --plugin --global` (a marketplace install, **not** a `.claude`-style install) — this matters for the login-name question (§7).
 
-### 6.1 `plugins/recall-notes/.mcp.json` — remove `bearer_token_env_var`
+### 6.1 `plugins/recall/.mcp.json` — remove `bearer_token_env_var`
 **Before:**
 ```json
 {
   "mcpServers": {
-    "recall-notes": {
+    "recall": {
       "type": "http",
       "url": "http://127.0.0.1:38473/mcp",
       "bearer_token_env_var": "NERD_OUT_MCP_TOKEN"
@@ -262,7 +263,7 @@ Gated on §9 steps A–E (app AS live + Phase 0 passed). Expect ~4 files. Note t
 ```json
 {
   "mcpServers": {
-    "recall-notes": {
+    "recall": {
       "type": "http",
       "url": "http://127.0.0.1:38473/mcp"
     }
@@ -271,19 +272,19 @@ Gated on §9 steps A–E (app AS live + Phase 0 passed). Expect ~4 files. Note t
 ```
 Add an OAuth field **only if Phase 0 proves one is required.** Verified Codex HTTP-server keys are `url` (required), `type`, `bearer_token_env_var`, `http_headers`, `env_http_headers`, plus two **optional** per-server OAuth keys that exist in the config reference and the codex 0.130.0 binary's config parser: `oauth_resource` ("Optional RFC 8707 OAuth resource parameter to include during MCP login") and `scopes` (scopes to request when the server doesn't advertise `scopes_supported`). **Default posture: set neither** — the server `url` is the resource and PRM discovery supplies scopes; add `oauth_resource` only if Phase 0 shows discovery mis-derives the resource (§7). OAuth callback keys (`mcp_oauth_callback_port`, `mcp_oauth_callback_url`) are **top-level** config, not per-server — do not put them in `.mcp.json`.
 
-### 6.2 `plugins/recall-notes/README.md` — rewrite setup to the login flow
+### 6.2 `plugins/recall/README.md` — rewrite setup to the login flow
 Replace the "Reveal token / `export NERD_OUT_MCP_TOKEN`" section with:
-1. Install: `npx codex-marketplace add NerdOutInc/recall-plugins/plugins/recall-notes --plugin --global` (same command users already use).
+1. Install: `npx codex-marketplace add NerdOutInc/recall-plugins/plugins/recall --plugin --global` (same command users already use).
 2. Open Recall for Mac → Settings → MCP Server → enable.
-3. `codex mcp login <verified-name>` (use the **verified** name from Phase 0 — plain `recall-notes` vs. a marketplace/plugin-namespaced form) → browser sign-in + consent.
+3. `codex mcp login <verified-name>` (use the **verified** name from Phase 0 — plain `recall` vs. a marketplace/plugin-namespaced form) → browser sign-in + consent.
 4. Start a new Codex thread; no token export needed.
 5. **Collapsed "Legacy token setup"** `<details>` section for users on older app builds during rollout (server still accepts bearer).
 6. Update the troubleshooting note that currently references `NERD_OUT_MCP_TOKEN`.
 
-### 6.3 `plugins/recall-notes/.codex-plugin/plugin.json` — bump version
+### 6.3 `plugins/recall/.codex-plugin/plugin.json` — bump version
 `"version": "0.1.0"` → `"0.2.0"`.
 
-### 6.4 `plugins/recall-notes/skills/recall-notes/SKILL.md` — update token references
+### 6.4 `plugins/recall/skills/recall/SKILL.md` — update token references
 The current SKILL.md **does** reference the token (Setup Checks bullet "Codex must have `NERD_OUT_MCP_TOKEN` set…" and the authorization-error troubleshooting guidance). Update these to the `codex mcp login` flow. (Prior brief said "unlikely to need changes" — it does need a small edit.)
 
 ---
@@ -292,13 +293,13 @@ The current SKILL.md **does** reference the token (Setup Checks bullet "Codex mu
 
 **Do this before publishing the plugin.** Requires a Mac build where `currentOAuthConfig()` returns non-nil (§4) and the AS (§3) is deployed over HTTPS.
 
-1. Make a scratch copy of the plugin with `bearer_token_env_var` removed and install it **the real way** — `npx codex-marketplace add NerdOutInc/recall-plugins/plugins/recall-notes --plugin --global` (pointed at the scratch copy / a fork) — so the test matches how users actually install, including any server-name namespacing the marketplace applies.
+1. Make a scratch copy of the plugin with `bearer_token_env_var` removed and install it **the real way** — `npx codex-marketplace add NerdOutInc/recall-plugins/plugins/recall --plugin --global` (pointed at the scratch copy / a fork) — so the test matches how users actually install, including any server-name namespacing the marketplace applies.
 2. `codex mcp login <name>` → confirm a browser opens, Supabase sign-in + consent completes, Codex stores a token.
 3. Fresh Codex thread: exercise `list_notes`, `read_note`, keyword + semantic search, index status, collaborators; with "Allow writes" on, `create_note` / `update_note_content`.
 4. Confirm **refresh** (token auto-renews) and **revoke** (revoke the grant in-app/AS → Codex re-prompts; note the ≤5-min access-token residual window from §5).
 
 **Unknowns to resolve and record before publishing:**
-- **Unknown 1 — Login server name:** is it `recall-notes` (plain) or a plugin/marketplace-namespaced form? Codex plugin server policy lives under `[plugins."<plugin>".mcp_servers.<server>]` in `config.toml`, so a marketplace-installed plugin may namespace the server differently from a local `.mcp.json`. Because this plugin is installed via `codex-marketplace add` (§6), test the login name **on a marketplace install specifically**, not a hand-copied `.mcp.json`. Update README with whatever actually works. *Note the naming split already in the tree:* the plugin declares its server as `recall-notes` (`.mcp.json`), but the web app's own manual client-config generator (`buildMcpClientConfigs`, `mcp-client-config.ts:35`) emits `codex mcp add recall …` — i.e. the non-plugin path uses the server name **`recall`**. Don't assume the two agree; the plugin's `login` name is whatever the marketplace-installed `.mcp.json` server key resolves to, which Phase 0 must confirm empirically.
+- **Unknown 1 — Login server name:** is it `recall` (plain) or a plugin/marketplace-namespaced form? Codex plugin server policy lives under `[plugins."<plugin>".mcp_servers.<server>]` in `config.toml`, so a marketplace-installed plugin may namespace the server differently from a local `.mcp.json`. Because this plugin is installed via `codex-marketplace add` (§6), test the login name **on a marketplace install specifically**, not a hand-copied `.mcp.json`. Update README with whatever actually works. *Note the naming split already in the tree:* the plugin declares its server as `recall` (`.mcp.json`), but the web app's own manual client-config generator (`buildMcpClientConfigs`, `mcp-client-config.ts:35`) emits `codex mcp add recall …` — i.e. the non-plugin path uses the server name **`recall`**. Don't assume the two agree; the plugin's `login` name is whatever the marketplace-installed `.mcp.json` server key resolves to, which Phase 0 must confirm empirically.
 - **Unknown 2 — Callback port:** does Codex's default ephemeral loopback port work (it should, if the AS accepts any loopback port per RFC 8252 §7.3 with the literal-host allowlist — §3.3/§3.4), or must the user set a fixed top-level `mcp_oauth_callback_port` / `mcp_oauth_callback_url`? Document only if a fixed port is genuinely required.
 - **Unknown 3 — Does removing `bearer_token_env_var` alone switch Codex to OAuth?** (A `.mcp.json` with `bearer_token_env_var` set never tries OAuth.) Confirm no additional documented opt-in key is needed. **Do not invent config keys.**
 - **Unknown 4 — Discovery chain / where Codex fetches PRM (blocks the §3.2 native-only decision).** Confirm the exact order and origin: does Codex fetch `/.well-known/oauth-protected-resource` from the **resource** (loopback server) first, follow `authorization_servers[0]` to the AS, then fetch `/.well-known/oauth-authorization-server` from the **AS** origin? If instead Codex expects PRM at the AS origin, native-only PRM breaks and we must add a web-side PRM route (§3.2). Verify **which** well-known URL is fetched first and from which origin before committing to native-only PRM.

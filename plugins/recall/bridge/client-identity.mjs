@@ -39,7 +39,7 @@ export function clientCacheDirectory(
       .replace(/^-+|-+$/g, "")
       .slice(0, 64) || "mcp-client";
 
-  return path.join(baseDirectory, "recall-notes", slug);
+  return path.join(baseDirectory, "recall", slug);
 }
 
 export function proxyArgs(bundlePath, serverUrl, clientName) {

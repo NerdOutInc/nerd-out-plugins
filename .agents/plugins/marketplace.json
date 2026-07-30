@@ -5,10 +5,10 @@
   },
   "plugins": [
     {
-      "name": "recall-notes",
+      "name": "recall",
       "source": {
         "source": "local",
-        "path": "./plugins/recall-notes"
+        "path": "./plugins/recall"
       },
       "policy": {
         "installation": "AVAILABLE",

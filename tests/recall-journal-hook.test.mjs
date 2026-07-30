@@ -12,7 +12,7 @@ const repositoryRoot = path.resolve(
 );
 const hookScript = path.join(
   repositoryRoot,
-  "plugins/recall-notes/hooks/journal-context.mjs",
+  "plugins/recall/hooks/journal-context.mjs",
 );
 const pluginRoot = path.dirname(path.dirname(hookScript));
 const GIT_TEST_TIMEOUT_MS = 10_000;
@@ -165,7 +165,7 @@ test("injects the Codex journal skill when Codex config is valid", () => {
   assert.equal(output.hookSpecificOutput.hookEventName, "UserPromptSubmit");
   assert.match(
     output.hookSpecificOutput.additionalContext,
-    /\$recall-notes:recall-journal/,
+    /\$recall:recall-journal/,
   );
   assert.match(output.hookSpecificOutput.additionalContext, /Codex/);
   assert.equal(
@@ -287,7 +287,7 @@ test("injects the namespaced Claude Code skill when its config is valid", () => 
   const output = JSON.parse(result.stdout);
   assert.match(
     output.hookSpecificOutput.additionalContext,
-    /\/recall-notes:recall-journal/,
+    /\/recall:recall-journal/,
   );
   assert.match(output.hookSpecificOutput.additionalContext, /Claude Code/);
   assert.match(output.hookSpecificOutput.additionalContext, /keyword_search/);
@@ -371,7 +371,7 @@ test("uses the Codex home-directory fallback", () => {
   });
 
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /\$recall-notes:recall-journal/);
+  assert.match(result.stdout, /\$recall:recall-journal/);
   assert.equal(result.stderr, "");
 });
 
@@ -388,7 +388,7 @@ test("uses the Claude Code home-directory fallback", () => {
   });
 
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /\/recall-notes:recall-journal/);
+  assert.match(result.stdout, /\/recall:recall-journal/);
   assert.equal(result.stderr, "");
 });
 
