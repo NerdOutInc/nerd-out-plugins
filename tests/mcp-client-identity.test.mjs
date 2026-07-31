@@ -111,6 +111,32 @@ test("host manifests supply useful OAuth client names", async () => {
   ]);
 });
 
+test("plugin manifests prefer Recall's pinned Node runtime", async () => {
+  const [codex, claude, hooks, launcher] = await Promise.all([
+    readJson("plugins/recall/.codex-plugin/mcp.json"),
+    readJson("plugins/recall/.mcp.json"),
+    readJson("plugins/recall/hooks/hooks.json"),
+    readFile(new URL("plugins/recall/bridge/recall-node", repoRoot), "utf8"),
+  ]);
+
+  assert.equal(codex.mcpServers.recall.command, "/bin/sh");
+  assert.equal(codex.mcpServers.recall.args[0], "./bridge/recall-node");
+  assert.equal(claude.mcpServers.recall.command, "/bin/sh");
+  assert.equal(
+    claude.mcpServers.recall.args[0],
+    "${CLAUDE_PLUGIN_ROOT}/bridge/recall-node"
+  );
+  assert.match(
+    hooks.hooks.UserPromptSubmit[0].hooks[0].command,
+    /bridge\/recall-node/
+  );
+  assert.match(
+    launcher,
+    /Library\/Application Support\/Recall\/AgentRuntime\/bin\/recall-node/
+  );
+  assert.match(launcher, /command -v node/);
+});
+
 test("marketplace and package manifests use Recall identities", async () => {
   const [
     codexMarketplace,
