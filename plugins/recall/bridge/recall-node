@@ -3,15 +3,23 @@ set -eu
 
 recall_node="$HOME/Library/Application Support/Recall/AgentRuntime/bin/recall-node"
 
-if [ -x "$recall_node" ]; then
+node_is_supported() {
+  "$1" -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 18 ? 0 : 1)' \
+    >/dev/null 2>&1
+}
+
+if [ -x "$recall_node" ] && node_is_supported "$recall_node"; then
   exec "$recall_node" "$@"
 fi
 
-if command -v node >/dev/null 2>&1; then
-  exec node "$@"
+if node_path=$(command -v node 2>/dev/null) &&
+  [ -x "$node_path" ] &&
+  node_is_supported "$node_path"
+then
+  exec "$node_path" "$@"
 fi
 
 printf '%s\n' \
-  "[recall] Node.js is not available. Open Recall for Mac, then use Settings -> Integrations to prepare this agent." \
+  "[recall] Node.js 18 or newer is not available. Open Recall for Mac, then use Settings -> Integrations to prepare this agent." \
   >&2
 exit 1

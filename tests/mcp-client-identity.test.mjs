@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
@@ -135,6 +136,69 @@ test("plugin manifests prefer Recall's pinned Node runtime", async () => {
     /Library\/Application Support\/Recall\/AgentRuntime\/bin\/recall-node/
   );
   assert.match(launcher, /command -v node/);
+});
+
+test("host manifests share the bumped runtime-launcher version", async () => {
+  const [codexPlugin, claudePlugin] = await Promise.all([
+    readJson("plugins/recall/.codex-plugin/plugin.json"),
+    readJson("plugins/recall/.claude-plugin/plugin.json"),
+  ]);
+
+  assert.equal(codexPlugin.version, "0.11.1");
+  assert.equal(claudePlugin.version, codexPlugin.version);
+});
+
+test("the launcher validates private and PATH Node runtimes before use", async (t) => {
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "recall-node-test-"));
+  t.after(() => rm(temporaryRoot, { force: true, recursive: true }));
+
+  const privateBin = path.join(
+    temporaryRoot,
+    "Library",
+    "Application Support",
+    "Recall",
+    "AgentRuntime",
+    "bin"
+  );
+  const pathBin = path.join(temporaryRoot, "path-bin");
+  await Promise.all([mkdir(privateBin, { recursive: true }), mkdir(pathBin, { recursive: true })]);
+
+  const privateNode = path.join(privateBin, "recall-node");
+  const pathNode = path.join(pathBin, "node");
+  const launcher = new URL("plugins/recall/bridge/recall-node", repoRoot);
+  const executable = (label, supported = true) => `#!/bin/sh
+if [ "\${1:-}" = "-e" ]; then exit ${supported ? 0 : 1}; fi
+printf '${label}:%s\\n' "$*"
+`;
+
+  await Promise.all([
+    writeFile(privateNode, executable("private"), { mode: 0o755 }),
+    writeFile(pathNode, executable("path"), { mode: 0o755 }),
+  ]);
+  await Promise.all([chmod(privateNode, 0o755), chmod(pathNode, 0o755)]);
+
+  const environment = { ...process.env, HOME: temporaryRoot, PATH: pathBin };
+  const privateResult = await execFileAsync("/bin/sh", [launcher.pathname, "bridge.mjs"], {
+    encoding: "utf8",
+    env: environment,
+  });
+  assert.equal(privateResult.stdout, "private:bridge.mjs\n");
+
+  await writeFile(privateNode, executable("private", false), { mode: 0o755 });
+  const fallbackResult = await execFileAsync("/bin/sh", [launcher.pathname, "bridge.mjs"], {
+    encoding: "utf8",
+    env: environment,
+  });
+  assert.equal(fallbackResult.stdout, "path:bridge.mjs\n");
+
+  await writeFile(pathNode, executable("path", false), { mode: 0o755 });
+  await assert.rejects(
+    execFileAsync("/bin/sh", [launcher.pathname, "bridge.mjs"], {
+      encoding: "utf8",
+      env: environment,
+    }),
+    /Node\.js 18 or newer is not available/
+  );
 });
 
 test("marketplace and package manifests use Recall identities", async () => {

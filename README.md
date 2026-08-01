@@ -83,6 +83,18 @@ those identity changes automatically: add the Recall marketplace, install
 each host. Invoke `$recall:recall-journal` once if you use journaling so
 the agent can create and select a workspace in `recall-journal.json`.
 
+After the new Recall plugin works and its browser sign-in succeeds, retire the
+legacy plugin so its hooks and MCP connection do not run alongside Recall:
+
+```bash
+claude plugin disable nerd-out-notes@nerd-out --scope user
+codex plugin remove nerd-out-notes@nerd-out
+```
+
+Run only the command for the host you migrated. Recall's direct-download Mac
+app performs this cleanup automatically, but only after it verifies the
+replacement plugin. Sandboxed builds and manual installs use the steps above.
+
 ## Updating
 
 Installed plugins do not update themselves by default. Both agents install

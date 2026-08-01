@@ -18,9 +18,10 @@ Claude (`.mcp.json`) and Codex (`.codex-plugin/mcp.json`) register the same
 bridge implementation, but pass their own OAuth client names and keep
 separate credential caches under `~/.mcp-auth/recall/`. When Recall's
 one-click installer has prepared the integration, the bridge and journal hook
-use Recall's pinned private Node runtime. Otherwise they fall back to `node`
-from your PATH (Node.js 18+), which keeps manual and non-Recall installs
-working. Recall's
+use Recall's pinned private Node runtime after verifying that it launches a
+supported Node version. Otherwise they fall back to Node.js 18+ from your
+PATH, which keeps manual and non-Recall installs working even if an old private
+runtime is damaged. Recall's
 Authorized clients list can therefore show and revoke **Claude** and
 **Codex** independently instead of listing both as **MCP CLI Proxy**.
 
@@ -91,6 +92,18 @@ identity changes automatically. Add the Recall marketplace, install
 each host. Journal users should invoke `$recall:recall-journal` once to
 create `recall-journal.json` and select a workspace.
 
+After the new Recall plugin works and its browser sign-in succeeds, retire the
+legacy plugin so its hooks and MCP connection do not run alongside Recall:
+
+```bash
+claude plugin disable nerd-out-notes@nerd-out --scope user
+codex plugin remove nerd-out-notes@nerd-out
+```
+
+Run only the command for the host you migrated. Recall's direct-download Mac
+app performs this cleanup automatically, but only after it verifies the
+replacement plugin. Sandboxed builds and manual installs use the steps above.
+
 ## Setup
 
 1. Open Recall for Mac.
@@ -150,11 +163,12 @@ connects) replaces this setup.
 
 ## Tools
 
-When the server is enabled, the agent can list notes, read note content, run
-keyword and semantic search, check semantic index status, and list
-collaborators for shared notes. When "Allow writes" is enabled, it can also
-create or update named notes, append to or materialize DailyNotes, and add real
-backlink nodes through `update_note_content`.
+Recall advertises `list_notes`, `read_note`, `keyword_search`,
+`semantic_search`, `get_index_status`, and `list_workspaces`. The
+`create_note` and `update_note_content` write tools appear when at least one
+workspace is set to **Read & write** in Recall's MCP Server settings. Reads and
+writes are filtered independently by each workspace's Block / Read only / Read
+& write policy; an unconfigured workspace stays blocked.
 
 ## Skills
 
