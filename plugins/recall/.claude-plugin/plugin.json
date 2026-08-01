@@ -1,6 +1,6 @@
 {
   "name": "recall",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "Read, search, and update notes in Recall through the Mac app's local MCP server.",
   "author": {
     "name": "Nerd Out Inc.",
