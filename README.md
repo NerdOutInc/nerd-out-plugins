@@ -10,9 +10,12 @@ plugin, enable the local MCP listener, and prepare the pinned ACP runtime with
 one click. The sandboxed App Store build links to the verified manual steps
 below.
 
-Installation does not silently authorize note access. Start a new agent thread
-after installation; Recall asks that host for OAuth consent on first use, and
-workspace block/read/write access remains a separate setting.
+Installation does not silently authorize note access. Plugin `0.12.0` adds a
+versioned OAuth coordinator that compatible Direct Recall builds can use to
+present the existing explicit consent page inside Recall while writing the
+exact Claude or Codex credential cache. Older Recall builds and normal plugin
+first use retain the browser flow. Workspace block/read/write access remains a
+separate setting in every path.
 
 ## Codex Plugins
 
@@ -162,7 +165,8 @@ To use it:
 2. Go to Settings -> MCP Server.
 3. Enable the local MCP server.
 4. Start a new thread. The bridge opens a browser for Recall sign-in and
-   consent the first time that host connects.
+   consent the first time that host connects, unless a compatible Direct Recall
+   build already connected this exact host through its in-app consent flow.
 
 No explicit login command is needed. If the server does not appear, run
 `codex mcp list` or `claude mcp list` to inspect the registered name. Claude
