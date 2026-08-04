@@ -12,8 +12,11 @@ HTTPS and can never reach a loopback listener), so this plugin ships a
 **stdio bridge** instead of a URL: `bridge/index.mjs` waits for the app, then
 runs a bundled copy of [`mcp-remote`](https://github.com/geelen/mcp-remote)
 (MIT — `bridge/LICENSE-mcp-remote.txt`) that proxies stdio to the loopback
-server and handles the MCP OAuth browser sign-in, caching tokens in
-`~/.mcp-auth`. The bridge runs `node` from your PATH (any Node.js 18+). Both
+server and handles MCP OAuth, caching tokens in `~/.mcp-auth`. Normal first use
+opens the browser. Plugin `0.12.0` also ships a versioned OAuth coordinator that
+a compatible Direct Recall build can use to present the same explicit consent
+inside Recall without changing cache ownership. The bridge runs `node` from
+your PATH (any Node.js 18+). Both
 Claude (`.mcp.json`) and Codex (`.codex-plugin/mcp.json`) register the same
 bridge implementation, but pass their own OAuth client names and keep
 separate credential caches under `~/.mcp-auth/recall/`. When Recall's
@@ -25,16 +28,18 @@ runtime is damaged. Recall's
 Authorized clients list can therefore show and revoke **Claude** and
 **Codex** independently instead of listing both as **MCP CLI Proxy**.
 
-The bundle is regenerated with `cd bridge/build && npm install && npm run build`
-(see `bridge/build/build.mjs`) — do not edit `bridge/mcp-remote-proxy.bundle.mjs`
-by hand.
+The proxy and coordinator bundles are regenerated from tracked source with
+`cd bridge/build && npm ci && npm run build` (see `bridge/build/build.mjs`) — do
+not edit either generated bundle by hand. `npm run verify` type-checks and tests
+the source, then byte-compares the committed artifacts.
 
 ## Install
 
 The direct-download Recall Mac app can perform this setup from
 **Settings → Integrations**. It installs the marketplace/plugin and prepares a
-pinned private Node + ACP runtime in one action. OAuth consent still happens
-on first agent use, and workspace access remains explicit.
+pinned private Node + ACP runtime in one action. Compatible builds can continue
+into in-app OAuth consent; older builds leave consent to first agent use.
+Workspace access remains explicit either way.
 
 ### Codex
 
@@ -112,12 +117,12 @@ replacement plugin. Sandboxed builds and manual installs use the steps above.
 3. Open Settings → MCP Server and choose block/read/write access per workspace.
 4. Start a new agent thread and authorize that host.
 
-No explicit login step is needed for either agent: the first time the
-plugin's bridge connects (in Claude Desktop, Cowork, Claude Code, or Codex),
-a browser window opens to sign in to your Recall account and approve
-access. Approve, then start a new conversation or thread. Each agent
-authorizes once because its dynamic OAuth registration and refreshed tokens
-are cached separately under `~/.mcp-auth/recall/`.
+No separate login command is needed. A compatible Direct Recall build can
+present the server-owned consent page in Recall during installation; otherwise
+the first bridge connection opens a browser for the same sign-in and consent.
+Approve, then start a new conversation or thread. Each agent authorizes once
+because its dynamic OAuth registration and refreshed tokens are cached
+separately under `~/.mcp-auth/recall/`.
 
 After upgrading from a version that displayed **MCP CLI Proxy**, authorize
 Claude and Codex again to create the newly named registrations. Existing

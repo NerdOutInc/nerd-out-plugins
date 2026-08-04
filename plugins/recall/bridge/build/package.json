@@ -3,12 +3,25 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Builds ../mcp-remote-proxy.bundle.mjs (the committed single-file mcp-remote bundle used by the plugin's stdio bridge)",
+  "description": "Builds Recall's committed OAuth coordinator and patched mcp-remote runtime bundles from tracked source.",
   "scripts": {
-    "build": "node build.mjs"
+    "build": "node build.mjs",
+    "check": "prettier --check . && tsc && node build.mjs --check",
+    "test": "vitest run",
+    "verify": "npm run check && npm test"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "@types/express": "5.0.0",
+    "@types/node": "22.13.10",
     "esbuild": "0.25.0",
-    "mcp-remote": "0.1.38"
+    "express": "4.22.2",
+    "open": "10.1.0",
+    "prettier": "3.5.3",
+    "strict-url-sanitise": "0.0.1",
+    "typescript": "5.8.2",
+    "undici": "7.29.0",
+    "vitest": "3.2.7",
+    "zod": "4.1.13"
   }
 }

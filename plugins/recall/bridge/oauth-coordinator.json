@@ -1,0 +1,14 @@
+{
+  "authorizationContractVersion": 1,
+  "entrypoint": "./oauth-coordinator.bundle.mjs",
+  "mcpRemoteVersion": "0.1.38",
+  "modes": [
+    "inspect",
+    "authorize",
+    "verify-only"
+  ],
+  "supportedClients": [
+    "Claude",
+    "Codex"
+  ]
+}

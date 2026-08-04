@@ -1,0 +1,42 @@
+name: Validate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: plugins/recall/bridge/build/package-lock.json
+
+      - name: Install bridge build dependencies
+        run: npm ci
+        working-directory: plugins/recall/bridge/build
+
+      - name: Verify tracked source and generated artifacts
+        run: npm run verify
+        working-directory: plugins/recall/bridge/build
+
+      - name: Audit bridge build dependencies
+        run: npm audit --audit-level=moderate
+        working-directory: plugins/recall/bridge/build
+
+      - name: Run repository integration tests
+        run: node --test tests/*.test.mjs

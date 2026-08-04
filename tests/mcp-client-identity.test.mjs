@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access as fsAccess,
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -91,6 +99,26 @@ test("the committed mcp-remote bundle supports the required overrides", async ()
   assert.match(bundle, /MCP_REMOTE_CONFIG_DIR/);
 });
 
+test("normal bridge entrypoints bind OAuth tokens to the same MCP resource", async () => {
+  const [proxySource, clientSource] = await Promise.all(
+    ["proxy.ts", "client.ts"].map((file) =>
+      readFile(
+        new URL(
+          `plugins/recall/bridge/build/vendor/mcp-remote/src/${file}`,
+          repoRoot
+        ),
+        "utf8"
+      )
+    )
+  );
+
+  assert.match(
+    proxySource,
+    /authorizeResource:\s*authorizeResource\s*\|\|\s*serverUrl/
+  );
+  assert.match(clientSource, /authorizeResource:\s*serverUrl/);
+});
+
 test("host manifests supply useful OAuth client names", async () => {
   const [codex, claude, desktop] = await Promise.all([
     readJson("plugins/recall/.codex-plugin/mcp.json"),
@@ -138,14 +166,80 @@ test("plugin manifests prefer Recall's pinned Node runtime", async () => {
   assert.match(launcher, /command -v node/);
 });
 
-test("host manifests share the bumped runtime-launcher version", async () => {
+test("host manifests share the coordinator-capable plugin version", async () => {
   const [codexPlugin, claudePlugin] = await Promise.all([
     readJson("plugins/recall/.codex-plugin/plugin.json"),
     readJson("plugins/recall/.claude-plugin/plugin.json"),
   ]);
 
-  assert.equal(codexPlugin.version, "0.11.1");
+  assert.equal(codexPlugin.version, "0.12.0");
   assert.equal(claudePlugin.version, codexPlugin.version);
+});
+
+test("the versioned in-app OAuth coordinator is generated and inspect stays read-only", async (t) => {
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "recall-coordinator-inspect-"));
+  t.after(() => rm(temporaryRoot, { force: true, recursive: true }));
+  const coordinator = new URL(
+    "plugins/recall/bridge/oauth-coordinator.bundle.mjs",
+    repoRoot
+  );
+  const manifest = await readJson(
+    "plugins/recall/bridge/oauth-coordinator.json"
+  );
+
+  assert.deepEqual(manifest, {
+    authorizationContractVersion: 1,
+    entrypoint: "./oauth-coordinator.bundle.mjs",
+    mcpRemoteVersion: "0.1.38",
+    modes: ["inspect", "authorize", "verify-only"],
+    supportedClients: ["Claude", "Codex"],
+  });
+
+  const { stdout, stderr } = await execFileAsync(
+    process.execPath,
+    [
+      coordinator.pathname,
+      "--mode",
+      "inspect",
+      "--client-name",
+      "Claude",
+    ],
+    {
+      encoding: "utf8",
+      env: { ...process.env, MCP_REMOTE_CONFIG_DIR: temporaryRoot },
+    }
+  );
+  const records = stdout
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  assert.deepEqual(
+    records.map(({ mode, protocolVersion, status, type }) => ({
+      mode,
+      protocolVersion,
+      status,
+      type,
+    })),
+    [
+      {
+        mode: "inspect",
+        protocolVersion: 1,
+        status: "missing",
+        type: "status",
+      },
+      {
+        mode: "inspect",
+        protocolVersion: 1,
+        status: "missing",
+        type: "result",
+      },
+    ]
+  );
+  assert.equal(stderr, "");
+  await assert.rejects(
+    fsAccess(path.join(temporaryRoot, "recall")),
+    /ENOENT/
+  );
 });
 
 test("the launcher validates private and PATH Node runtimes before use", async (t) => {
@@ -269,7 +363,7 @@ test("tracked paths and content use only the recall plugin identifier", async ()
 });
 
 test("the plugin and desktop-extension bridge copies stay byte-identical", async () => {
-  const [pluginIndex, desktopIndex, pluginIdentity, desktopIdentity] =
+  const [pluginIndex, desktopIndex, pluginIdentity, desktopIdentity, pluginProxy, desktopProxy] =
     await Promise.all([
       readFile(
         new URL("plugins/recall/bridge/index.mjs", repoRoot),
@@ -293,8 +387,18 @@ test("the plugin and desktop-extension bridge copies stay byte-identical", async
         ),
         "utf8"
       ),
+      readFile(
+        new URL("plugins/recall/bridge/mcp-remote-proxy.bundle.mjs", repoRoot)
+      ),
+      readFile(
+        new URL(
+          "desktop-extensions/recall/server/mcp-remote-proxy.bundle.mjs",
+          repoRoot
+        )
+      ),
     ]);
 
   assert.equal(desktopIndex, pluginIndex);
   assert.equal(desktopIdentity, pluginIdentity);
+  assert.deepEqual(desktopProxy, pluginProxy);
 });
