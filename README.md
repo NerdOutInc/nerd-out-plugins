@@ -212,8 +212,11 @@ workspace instead of the global one.
 
 After installing or updating the plugin, start a new thread so its skills,
 tools, and hook are loaded. Codex requires a one-time review and trust decision
-for the plugin hook; open `/hooks` if Codex reports that the hook is awaiting
-review. The hook reads the per-agent journal config, asks local Git for
-worktree metadata when available, and adds agent context; the journal skill
-still validates the live workspace and performs every note write through the
-Recall MCP server.
+for the plugin hook. The first explicit `$recall:recall-journal` invocation
+checks the active Codex hook inventory and asks the user to open `/hooks` when
+the Recall handler is new, modified, disabled, or missing. The skill never
+changes or bypasses hook trust; Claude Code skips this Codex-only preflight
+because it has no separate per-hook trust switch. The hook reads the per-agent
+journal config, asks local Git for worktree metadata when available, and adds
+agent context; the journal skill still validates the live workspace and
+performs every note write through the Recall MCP server.

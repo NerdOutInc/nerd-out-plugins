@@ -216,13 +216,18 @@ it to create or update notes.
 
 After installing or updating the plugin, start a new thread so the hook is
 loaded. Codex requires a one-time review and trust decision for plugin hooks;
-open `/hooks` if Codex reports that this hook is awaiting review. The hook only
-checks the current agent's `recall-journal.json` shape and injects agent
-context, including the workspace name and id that apply to the session — the
-project's workspace when the session runs inside a saved project path, the
-global workspace otherwise — so the agent can search the journal right away.
-It does not read note bodies, validate workspace access, or write notes; the
-journal skill and MCP server keep those responsibilities.
+the first explicit `$recall:recall-journal` invocation checks Codex's active
+hook inventory and asks you to use `/hooks` when the Recall handler is new,
+modified, disabled, or missing. Hook trust remains your decision: the skill
+can detect and explain the state but never changes Codex's trust configuration
+or bypasses the review. Claude Code has no separate per-hook trust switch, so
+this preflight is Codex-only. The hook itself only checks the current agent's
+`recall-journal.json` shape and injects agent context, including the workspace
+name and id that apply to the session — the project's workspace when the
+session runs inside a saved project path, the global workspace otherwise — so
+the agent can search the journal right away. It does not read note bodies,
+validate workspace access, or write notes; the journal skill and MCP server
+keep those responsibilities.
 
 If the agent reports a connection error, confirm the Mac app is open and the
 server is enabled. If it reports an authorization error, start a new
