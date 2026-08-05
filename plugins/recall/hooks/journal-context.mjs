@@ -76,7 +76,7 @@ function sanitizeDestination(value) {
   return recallProject ? { recallProject, workspace } : { workspace };
 }
 
-function sanitizeProjectDestinations(projectsValue) {
+function sanitizeProjectDestinations(projectsValue, sanitizeEntry = sanitizeDestination) {
   if (projectsValue === undefined) return [];
   if (!isPlainObject(projectsValue)) return null;
 
@@ -87,7 +87,7 @@ function sanitizeProjectDestinations(projectsValue) {
     // session, silently turning a per-project override into a global one.
     const resolvedRoot = path.resolve(root);
     if (resolvedRoot === path.parse(resolvedRoot).root) return null;
-    const destination = sanitizeDestination(entry);
+    const destination = sanitizeEntry(entry);
     if (!destination) return null;
     projects.push({ destination, root });
   }
@@ -111,7 +111,11 @@ function readValidJournalConfig(configPath) {
       const globalDestination = sanitizeDestination({
         workspace: config.workspace,
       });
-      const projects = sanitizeProjectDestinations(config.projects);
+      // v1 project entries only define a workspace. Ignore newer destination
+      // fields so a manually augmented legacy config keeps its old behavior.
+      const projects = sanitizeProjectDestinations(config.projects, (entry) =>
+        sanitizeDestination({ workspace: entry?.workspace }),
+      );
       if (!globalDestination || !projects) return null;
       return { globalDestination, projects };
     }

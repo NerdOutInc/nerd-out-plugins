@@ -205,6 +205,28 @@ test("accepts a v2 global destination without a Recall Project", () => {
   assert.equal(context.includes("projectId"), false);
 });
 
+test("keeps v1 project entries workspace-only when newer fields are malformed", () => {
+  const projectRoot = makeTemporaryDirectory();
+  const config = configWithProject(projectRoot);
+  config.projects[projectRoot].recallProject = null;
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(config),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: projectRoot },
+  });
+
+  assert.equal(result.status, 0);
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(context, /workspaceId project-workspace-id/);
+  assert.match(context, /does not select a Recall Project/);
+  assert.equal(context.includes("projectId"), false);
+});
+
 test("injects the configured Recall Project and exact named-note targeting", () => {
   const config = validV2Config();
   config.global.recallProject = recallProject();
