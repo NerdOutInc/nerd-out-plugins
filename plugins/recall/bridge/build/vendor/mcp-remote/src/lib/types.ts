@@ -39,6 +39,8 @@ export interface OAuthProviderOptions {
   protectedResourceMetadata?: ProtectedResourceMetadata
   /** Scope extracted from WWW-Authenticate header */
   wwwAuthenticateScope?: string
+  /** Rotate a cached dynamic registration whose scope differs from this value. */
+  requiredClientScope?: string
   /** Optional owner for presenting the fully prepared authorization URL. */
   authorizationUrlHandler?: (authorizationUrl: URL) => Promise<void>
 }

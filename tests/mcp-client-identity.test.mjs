@@ -83,6 +83,7 @@ test("the bridge passes the supported dynamic-registration override", () => {
   assert.notEqual(metadataFlagIndex, -1);
   assert.deepEqual(JSON.parse(args[metadataFlagIndex + 1]), {
     client_name: "Codex",
+    scope: "notes:read notes:write",
   });
 });
 
@@ -172,8 +173,10 @@ test("host manifests share the coordinator-capable plugin version", async () => 
     readJson("plugins/recall/.claude-plugin/plugin.json"),
   ]);
 
-  assert.equal(codexPlugin.version, "0.12.0");
+  assert.equal(codexPlugin.version, "0.12.1");
   assert.equal(claudePlugin.version, codexPlugin.version);
+  const desktop = await readJson("desktop-extensions/recall/manifest.json");
+  assert.equal(desktop.version, "0.7.1");
 });
 
 test("the versioned in-app OAuth coordinator is generated and inspect stays read-only", async (t) => {

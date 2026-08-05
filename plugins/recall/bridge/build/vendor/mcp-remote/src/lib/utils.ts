@@ -2,7 +2,7 @@ import { OAuthClientProvider, UnauthorizedError } from '@modelcontextprotocol/sd
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { StreamableHTTPClientTransport, StreamableHTTPError } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
-import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
+import { type FetchLike, Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { OAuthError } from '@modelcontextprotocol/sdk/server/auth/errors.js'
 import { OAuthClientInformationFull, OAuthClientInformationFullSchema } from '@modelcontextprotocol/sdk/shared/auth.js'
 import { OAuthCallbackServerOptions, StaticOAuthClientInformationFull, StaticOAuthClientMetadata } from './types'
@@ -21,7 +21,14 @@ import fs from 'fs'
 import { readFile, rm } from 'fs/promises'
 import path from 'path'
 import { version as MCP_REMOTE_VERSION } from '../../package.json'
-import { EnvHttpProxyAgent, fetch, Headers, RequestInit, setGlobalDispatcher } from 'undici'
+import {
+  EnvHttpProxyAgent,
+  fetch,
+  Headers,
+  RequestInit,
+  Response as UndiciResponse,
+  setGlobalDispatcher,
+} from 'undici'
 
 // Global type declaration for typescript
 declare global {
@@ -398,6 +405,7 @@ export async function connectToRemoteServer(
 ): Promise<Transport> {
   log(`[${pid}] Connecting to remote server: ${serverUrl}`)
   const url = new URL(serverUrl)
+  const scopedFetch = fetchWithRequiredClientScope(authProvider)
 
   // Create transport with eventSourceInit to pass Authorization header if present
   const eventSourceInit = {
@@ -433,6 +441,7 @@ export async function connectToRemoteServer(
       })
     : new StreamableHTTPClientTransport(url, {
         authProvider,
+        fetch: scopedFetch,
         requestInit: { headers },
       })
 
@@ -451,7 +460,11 @@ export async function connectToRemoteServer(
         // the client is already connected. So let's just create a one-off client to make a single request and figure
         // out if we're actually talking to an HTTP server or not.
         debugLog('Creating test transport for HTTP-only connection test')
-        const testTransport = new StreamableHTTPClientTransport(url, { authProvider, requestInit: { headers } })
+        const testTransport = new StreamableHTTPClientTransport(url, {
+          authProvider,
+          fetch: scopedFetch,
+          requestInit: { headers },
+        })
         const testClient = new Client({ name: 'mcp-remote-fallback-test', version: '0.0.0' }, { capabilities: {} })
         await testClient.connect(testTransport)
       }
@@ -561,6 +574,50 @@ export async function connectToRemoteServer(
       throw error
     }
   }
+}
+
+function fetchWithRequiredClientScope(authProvider: OAuthClientProvider): FetchLike {
+  const requiredScope = (
+    authProvider as OAuthClientProvider & {
+      options?: { requiredClientScope?: string }
+    }
+  ).options?.requiredClientScope
+  if (!requiredScope || !isOAuthScope(requiredScope)) return fetch as unknown as FetchLike
+
+  return async (url, init) => {
+    const response = await fetch(url, init as RequestInit)
+    if (response.status !== 401 && response.status !== 403) {
+      return response as unknown as globalThis.Response
+    }
+    const challenge = response.headers.get('www-authenticate')
+    if (!challenge) return response as unknown as globalThis.Response
+    if (
+      response.status === 403 &&
+      !/error=(?:"insufficient_scope"|insufficient_scope(?:[\s,]|$))/.test(challenge)
+    ) {
+      return response as unknown as globalThis.Response
+    }
+    const headers = new Headers(response.headers)
+    const scope = `scope="${requiredScope}"`
+    // Match the SDK's first-occurrence parser exactly so no earlier stale scope survives.
+    const scopeParameter = /scope=(?:"[^"]+"|[^\s,]+)/
+    headers.set(
+      'www-authenticate',
+      scopeParameter.test(challenge)
+        ? challenge.replace(scopeParameter, () => scope)
+        : `${challenge}, ${scope}`,
+    )
+    return new UndiciResponse(response.body, {
+      headers,
+      status: response.status,
+      statusText: response.statusText,
+    }) as unknown as globalThis.Response
+  }
+}
+
+function isOAuthScope(scope: string): boolean {
+  const token = "[!#$%&'*+\\-.^_`|~:/0-9A-Za-z]+"
+  return new RegExp(`^${token}(?: ${token})*$`).test(scope)
 }
 
 /**

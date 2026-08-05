@@ -13,13 +13,15 @@ HTTPS and can never reach a loopback listener), so this plugin ships a
 runs a bundled copy of [`mcp-remote`](https://github.com/geelen/mcp-remote)
 (MIT — `bridge/LICENSE-mcp-remote.txt`) that proxies stdio to the loopback
 server and handles MCP OAuth, caching tokens in `~/.mcp-auth`. Normal first use
-opens the browser. Plugin `0.12.0` also ships a versioned OAuth coordinator that
-a compatible Direct Recall build can use to present the same explicit consent
-inside Recall without changing cache ownership. The bridge runs `node` from
-your PATH (any Node.js 18+). Both
-Claude (`.mcp.json`) and Codex (`.codex-plugin/mcp.json`) register the same
-bridge implementation, but pass their own OAuth client names and keep
-separate credential caches under `~/.mcp-auth/recall/`. When Recall's
+opens the browser. Plugin `0.12.0` added a versioned OAuth coordinator, and
+`0.12.1` keeps both the coordinator and normal browser-first-use registration
+aligned with Recall's read + write consent scopes. A compatible Direct Recall
+build can use the coordinator to present the same explicit consent inside
+Recall without changing cache ownership. The bridge runs `node` from your PATH
+(any Node.js 18+). Both Claude (`.mcp.json`) and Codex
+(`.codex-plugin/mcp.json`) register the same bridge implementation, but pass
+their own OAuth client names and keep separate credential caches under
+`~/.mcp-auth/recall/`. When Recall's
 one-click installer has prepared the integration, the bridge and journal hook
 use Recall's pinned private Node runtime after verifying that it launches a
 supported Node version. Otherwise they fall back to Node.js 18+ from your

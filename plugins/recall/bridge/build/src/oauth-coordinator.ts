@@ -11,7 +11,7 @@ import fs from "node:fs/promises";
 import type { Server } from "node:http";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { clientCacheDirectory } from "../../client-identity.mjs";
+import { clientCacheDirectory, RECALL_OAUTH_SCOPE } from "../../client-identity.mjs";
 import { createLazyAuthCoordinator } from "../vendor/mcp-remote/src/lib/coordination";
 import {
   acquireCredentialMutationLock,
@@ -20,7 +20,10 @@ import {
   getConfigFilePath,
   type CredentialMutationLease,
 } from "../vendor/mcp-remote/src/lib/mcp-auth-config";
-import { CoordinatedNodeOAuthClientProvider } from "../vendor/mcp-remote/src/lib/coordinated-node-oauth-client-provider";
+import {
+  CoordinatedNodeOAuthClientProvider,
+  sameScopeSet,
+} from "../vendor/mcp-remote/src/lib/coordinated-node-oauth-client-provider";
 import {
   connectToRemoteServer,
   discoverOAuthServerInfo,
@@ -191,6 +194,21 @@ function defaultCallbackPort(serverUrlHash: string): number {
   return 3335 + (offset % 45_816);
 }
 
+async function cachedClientHasScope(
+  serverUrlHash: string,
+  requiredScope: string
+): Promise<boolean> {
+  const client = await readValidatedJson(
+    getConfigFilePath(serverUrlHash, "client_info.json"),
+    OAuthClientInformationFullSchema
+  );
+  const scope =
+    client.value && typeof (client.value as { scope?: unknown }).scope === "string"
+      ? (client.value as { scope: string }).scope
+      : undefined;
+  return sameScopeSet(scope, requiredScope);
+}
+
 export function validateAuthorizationUrl(
   authorizationUrl: URL,
   authorizationServerUrl: string,
@@ -247,10 +265,7 @@ export function validateAuthorizationUrl(
   }
 }
 
-async function runNetworkedMode(
-  args: CoordinatorArguments,
-  snapshot: CacheSnapshot
-): Promise<void> {
+async function runNetworkedMode(args: CoordinatorArguments): Promise<void> {
   const serverUrlHash = getServerUrlHash(args.serverUrl);
   let credentialLease: CredentialMutationLease | undefined;
   let provider: CoordinatedNodeOAuthClientProvider | undefined;
@@ -308,11 +323,13 @@ async function runNetworkedMode(
         clientName: args.clientName,
         host: "127.0.0.1",
         protectedResourceMetadata: discovery.protectedResourceMetadata,
+        requiredClientScope: args.mode === "authorize" ? RECALL_OAUTH_SCOPE : undefined,
         serverUrl: discovery.authorizationServerUrl,
         serverUrlHash,
         staticOAuthClientMetadata: {
           client_name: args.clientName,
           redirect_uris: [callbackUrl],
+          scope: RECALL_OAUTH_SCOPE,
         },
         wwwAuthenticateScope: discovery.wwwAuthenticateScope,
       },
@@ -351,7 +368,7 @@ async function runNetworkedMode(
       writeRecord({
         authorizationUrl: authorizationUrl.toString(),
         callbackUrl,
-        clientId: snapshot.clientId,
+        clientId: (await inspectCache(serverUrlHash)).clientId,
         mode: args.mode,
         status: "awaiting-consent",
         type: "authorization_required",
@@ -460,8 +477,21 @@ export async function runCoordinator(args: CoordinatorArguments): Promise<void> 
     });
     return;
   }
+  if (
+    args.mode === "verify-only" &&
+    !(await cachedClientHasScope(serverUrlHash, RECALL_OAUTH_SCOPE))
+  ) {
+    writeRecord({
+      clientId: snapshot.clientId,
+      mode: args.mode,
+      reason: "authorization-required",
+      status: "invalid",
+      type: "result",
+    });
+    return;
+  }
 
-  await runNetworkedMode(args, snapshot);
+  await runNetworkedMode(args);
 }
 
 async function main(): Promise<void> {
