@@ -72,6 +72,7 @@ async function runProxy(
     serverUrlHash,
     authorizationServerMetadata: discoveryResult.authorizationServerMetadata,
     protectedResourceMetadata: discoveryResult.protectedResourceMetadata,
+    requiredClientScope: staticOAuthClientMetadata?.scope,
     wwwAuthenticateScope: discoveryResult.wwwAuthenticateScope,
   })
 

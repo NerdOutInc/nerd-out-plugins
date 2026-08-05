@@ -2,6 +2,7 @@ import os from "node:os";
 import path from "node:path";
 
 export const DEFAULT_CLIENT_NAME = "Recall MCP Client";
+export const RECALL_OAUTH_SCOPE = "notes:read notes:write";
 const CLIENT_NAME_FLAG = "--client-name";
 const MAX_CLIENT_NAME_LENGTH = 100;
 
@@ -49,6 +50,6 @@ export function proxyArgs(bundlePath, serverUrl, clientName) {
     "--transport",
     "http-only",
     "--static-oauth-client-metadata",
-    JSON.stringify({ client_name: clientName }),
+    JSON.stringify({ client_name: clientName, scope: RECALL_OAUTH_SCOPE }),
   ];
 }

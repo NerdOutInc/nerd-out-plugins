@@ -10,12 +10,14 @@ plugin, enable the local MCP listener, and prepare the pinned ACP runtime with
 one click. The sandboxed App Store build links to the verified manual steps
 below.
 
-Installation does not silently authorize note access. Plugin `0.12.0` adds a
-versioned OAuth coordinator that compatible Direct Recall builds can use to
-present the existing explicit consent page inside Recall while writing the
-exact Claude or Codex credential cache. Older Recall builds and normal plugin
-first use retain the browser flow. Workspace block/read/write access remains a
-separate setting in every path.
+Installation does not silently authorize note access. Plugin `0.12.0` added a
+versioned OAuth coordinator, and `0.12.1` keeps both the coordinator and normal
+browser-first-use registration aligned with Recall's read + write consent
+scopes. Compatible Direct Recall builds can use it to present the existing
+explicit consent page inside Recall while writing the exact Claude or Codex
+credential cache. Older Recall builds and normal plugin first use retain the
+browser flow. Workspace block/read/write access remains a separate setting in
+every path.
 
 ## Codex Plugins
 

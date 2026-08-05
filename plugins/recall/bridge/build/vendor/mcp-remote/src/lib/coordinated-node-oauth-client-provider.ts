@@ -13,6 +13,7 @@ import type { OAuthProviderOptions } from './types'
 export class CoordinatedNodeOAuthClientProvider extends NodeOAuthClientProvider {
   private credentialLease?: CredentialMutationLease
   private credentialLeasePromise?: Promise<CredentialMutationLease>
+  private scopeCompatibilityChecked = false
 
   constructor(
     options: OAuthProviderOptions,
@@ -33,7 +34,22 @@ export class CoordinatedNodeOAuthClientProvider extends NodeOAuthClientProvider 
 
   override async clientInformation(): Promise<OAuthClientInformationFull | undefined> {
     await this.acquireCredentialLease()
-    return super.clientInformation()
+    const client = await super.clientInformation()
+    const requiredScope = this.options.requiredClientScope
+    if (!this.scopeCompatibilityChecked && client && requiredScope && !sameScopeSet(client.scope, requiredScope)) {
+      this.scopeCompatibilityChecked = true
+      await super.invalidateCredentials('all')
+      return undefined
+    }
+    this.scopeCompatibilityChecked = true
+    return client
+  }
+
+  override async saveClientInformation(clientInformation: OAuthClientInformationFull): Promise<void> {
+    const requiredScope = this.options.requiredClientScope
+    await super.saveClientInformation(
+      requiredScope && !clientInformation.scope ? { ...clientInformation, scope: requiredScope } : clientInformation,
+    )
   }
 
   override async saveTokens(tokens: OAuthTokens): Promise<void> {
@@ -51,4 +67,10 @@ export class CoordinatedNodeOAuthClientProvider extends NodeOAuthClientProvider 
     this.credentialLeasePromise = undefined
     await lease?.release()
   }
+}
+
+export function sameScopeSet(left: string | undefined, right: string): boolean {
+  const leftScopes = new Set(left?.split(/\s+/).filter(Boolean) ?? [])
+  const rightScopes = new Set(right.split(/\s+/).filter(Boolean))
+  return leftScopes.size === rightScopes.size && [...leftScopes].every((scope) => rightScopes.has(scope))
 }
