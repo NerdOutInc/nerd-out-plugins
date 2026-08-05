@@ -56,6 +56,20 @@ function validConfig() {
   };
 }
 
+function validV2Config() {
+  return {
+    version: 2,
+    journal: { dailyNote: true },
+    global: {
+      workspace: { id: "workspace-id", name: "Journal" },
+    },
+  };
+}
+
+function recallProject(id = "recall-project-id", name = "Roadmap") {
+  return { id, name };
+}
+
 function validProjectWorkspace() {
   return { id: "project-workspace-id", name: "Project Journal" };
 }
@@ -172,6 +186,144 @@ test("injects the Codex journal skill when Codex config is valid", () => {
     output.hookSpecificOutput.additionalContext.includes(configDirectory),
     false,
   );
+});
+
+test("accepts a v2 global destination without a Recall Project", () => {
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(validV2Config()),
+      PLUGIN_ROOT: pluginRoot,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(context, /workspaceId workspace-id/);
+  assert.match(context, /does not select a Recall Project/);
+  assert.equal(context.includes("projectId"), false);
+});
+
+test("injects the configured Recall Project and exact named-note targeting", () => {
+  const config = validV2Config();
+  config.global.recallProject = recallProject();
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(config),
+      PLUGIN_ROOT: pluginRoot,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(context, /Recall Project "Roadmap"/);
+  assert.match(context, /projectId recall-project-id/);
+  assert.match(context, /pass both workspaceId workspace-id and projectId recall-project-id/);
+  assert.match(context, /DailyNote workspace-level/);
+});
+
+test("activates a project-only v2 config only inside the configured filesystem project", () => {
+  const projectRoot = makeTemporaryDirectory();
+  const config = {
+    version: 2,
+    journal: { dailyNote: true },
+    projects: {
+      [projectRoot]: {
+        recallProject: recallProject("repo-project", "Repository"),
+        workspace: { id: "repo-workspace", name: "Engineering" },
+      },
+    },
+  };
+  const configDirectory = makeConfigDirectory(config);
+
+  const inside = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: configDirectory,
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: projectRoot },
+  });
+  assert.match(inside.stdout, /workspaceId repo-workspace/);
+  assert.match(inside.stdout, /projectId repo-project/);
+  assert.equal(inside.stdout.includes(projectRoot), false);
+
+  const outside = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: configDirectory,
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: {
+      hook_event_name: "UserPromptSubmit",
+      cwd: makeTemporaryDirectory(),
+    },
+  });
+  assert.equal(outside.status, 0);
+  assert.equal(outside.stdout, "");
+});
+
+test("prefers a v2 filesystem-project destination and its Recall Project over global", () => {
+  const projectRoot = makeTemporaryDirectory();
+  const config = validV2Config();
+  config.global.recallProject = recallProject("global-project", "Global Project");
+  config.projects = {
+    [projectRoot]: {
+      recallProject: recallProject("repo-project", "Repository"),
+      workspace: { id: "repo-workspace", name: "Engineering" },
+    },
+  };
+
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(config),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: projectRoot },
+  });
+
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(context, /workspaceId repo-workspace/);
+  assert.match(context, /projectId repo-project/);
+  assert.match(context, /per-project override/);
+  assert.equal(context.includes("pass both workspaceId workspace-id"), false);
+});
+
+test("rejects invalid v2 destinations and explicit null Recall Projects", () => {
+  const projectRoot = makeTemporaryDirectory();
+  const malformed = [
+    { version: 2, global: { workspace: validProjectWorkspace(), recallProject: null } },
+    { version: 2, global: null },
+    { version: 2, projects: {} },
+    {
+      version: 2,
+      projects: {
+        [projectRoot]: {
+          recallProject: { id: "bad id", name: "Project" },
+          workspace: validProjectWorkspace(),
+        },
+      },
+    },
+  ];
+
+  for (const config of malformed) {
+    const result = runHook({
+      environment: {
+        ...cleanEnvironment(),
+        CODEX_HOME: makeConfigDirectory(config),
+        PLUGIN_ROOT: pluginRoot,
+      },
+      input: { hook_event_name: "UserPromptSubmit", cwd: projectRoot },
+    });
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout, "", JSON.stringify(config));
+  }
 });
 
 test("tells the agent to recall from the configured journal workspace", () => {

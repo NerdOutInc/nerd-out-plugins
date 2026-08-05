@@ -50,6 +50,9 @@ Recall settings and update `NERD_OUT_MCP_TOKEN`.
 - Use `semantic_search` for meaning-based discovery, and fall back to keyword
   search if semantic search is unavailable.
 - Use `get_index_status` when search readiness is unclear.
+- Use `list_projects` with an explicit `workspaceId` to discover the live Recall
+  Projects in that workspace. A `projectId` filter on list or search also
+  requires that `workspaceId`; Project-filtered note results exclude DailyNotes.
 - Use `list_note_collaborators` only for shared named notes.
 
 ## Writes
@@ -57,7 +60,9 @@ Recall settings and update `NERD_OUT_MCP_TOKEN`.
 Write tools are advertised only when at least one workspace is set to Write in
 the app's Settings -> MCP Server per-workspace access policy.
 
-- Use `create_note` for new named notes.
+- Use `create_note` for new named notes. To file one in a Recall Project, pass
+  both the selected `workspaceId` and a `projectId` returned by `list_projects`;
+  never guess an id or silently retry without it after a Project-target error.
 - Use `update_note_content` with `mode: "append"` when adding a journal entry,
   update, or note section.
 - Use `update_note_content` with `mode: "replace"` only when the user explicitly

@@ -13,12 +13,12 @@ HTTPS and can never reach a loopback listener), so this plugin ships a
 runs a bundled copy of [`mcp-remote`](https://github.com/geelen/mcp-remote)
 (MIT — `bridge/LICENSE-mcp-remote.txt`) that proxies stdio to the loopback
 server and handles MCP OAuth, caching tokens in `~/.mcp-auth`. Normal first use
-opens the browser. Plugin `0.12.0` added a versioned OAuth coordinator, and
-`0.12.1` keeps both the coordinator and normal browser-first-use registration
-aligned with Recall's read + write consent scopes. A compatible Direct Recall
-build can use the coordinator to present the same explicit consent inside
-Recall without changing cache ownership. The bridge runs `node` from your PATH
-(any Node.js 18+). Both Claude (`.mcp.json`) and Codex
+opens the browser. Plugin `0.13.0` adds Project-aware journal destinations
+while retaining the OAuth coordinator from `0.12.0`, read + write consent-scope
+alignment from `0.12.1`, and Codex hook trust preflight from `0.12.2`. A
+compatible Direct Recall build can use the coordinator to present the same
+explicit consent inside Recall without changing cache ownership. The bridge
+runs `node` from your PATH (any Node.js 18+). Both Claude (`.mcp.json`) and Codex
 (`.codex-plugin/mcp.json`) register the same bridge implementation, but pass
 their own OAuth client names and keep separate credential caches under
 `~/.mcp-auth/recall/`. When Recall's
@@ -96,8 +96,9 @@ Recall uses new marketplace, plugin, MCP server, skill, journal-config, and
 OAuth-cache identifiers. Existing installations do not update across those
 identity changes automatically. Add the Recall marketplace, install
 **Recall**, start a new thread, and approve the browser sign-in once for
-each host. Journal users should invoke `$recall:recall-journal` once to
-create `recall-journal.json` and select a workspace.
+each host. Journal users should invoke `$recall:recall-journal` once to create
+`recall-journal.json`, choose current-filesystem-project or global scope, and
+select a workspace plus optional Recall Project.
 
 After the new Recall plugin works and its browser sign-in succeeds, retire the
 legacy plugin so its hooks and MCP connection do not run alongside Recall:
@@ -171,7 +172,9 @@ connects) replaces this setup.
 ## Tools
 
 Recall advertises `list_notes`, `read_note`, `keyword_search`,
-`semantic_search`, `get_index_status`, and `list_workspaces`. The
+`semantic_search`, `get_index_status`, `list_workspaces`, and `list_projects`.
+Named-note list/search tools accept an explicit workspace + Project filter, and
+`create_note` can file a new named note in that exact Project. The
 `create_note` and `update_note_content` write tools appear when at least one
 workspace is set to **Read & write** in Recall's MCP Server settings. Reads and
 writes are filtered independently by each workspace's Block / Read only / Read
@@ -183,9 +186,11 @@ This plugin can ship multiple skills; both agents discover every subdirectory
 under `skills/` that contains a `SKILL.md`. It currently includes:
 
 - `recall` for direct note, search, and MCP workflows.
-- `recall-journal` for a global journal: it asks you to choose a confirmed,
-  write-ready Recall workspace on first use, saves that choice in a per-agent
-  global config (`$CODEX_HOME/recall-journal.json` for Codex,
+- `recall-journal` for a Project-aware journal: on first use it shows the
+  current filesystem project's absolute path and asks whether to configure that
+  project or a global default. It then asks for a confirmed, write-ready Recall
+  workspace and, when that workspace has Projects, an optional Recall Project.
+  It saves the choice in a per-agent config (`$CODEX_HOME/recall-journal.json` for Codex,
   `$CLAUDE_CONFIG_DIR/recall-journal.json` — default `~/.claude` — for
   Claude Code), and then journals live: it opens a marker-identified entry
   when substantive work begins, appends short progress updates at
@@ -198,12 +203,12 @@ under `skills/` that contains a `SKILL.md`. It currently includes:
   directions: it tells the agent to search existing journal notes when a
   task may relate to prior work — so the journal is read back as memory, not
   just written — and to open, update, and finalize the task's entry as the
-  work happens. A project can also get its own journal:
-  ask the agent to select a Recall workspace for the current project and it
-  saves the project's root path under `projects` in the same config. Sessions
+  work happens. A filesystem project can have its own destination even without
+  a global default: the skill saves its canonical root path under `projects` in
+  the same config. Sessions
   working anywhere inside that path — subfolders and worktrees checked out
   under the repo included — then journal to and recall from the project's
-  workspace instead of the global one.
+  workspace and optional Recall Project instead of the global destination.
 
 In Codex, invoke skills as `$recall:recall` and
 `$recall:recall-journal`; in Claude Code, use
@@ -223,11 +228,11 @@ can detect and explain the state but never changes Codex's trust configuration
 or bypasses the review. Claude Code has no separate per-hook trust switch, so
 this preflight is Codex-only. The hook itself only checks the current agent's
 `recall-journal.json` shape and injects agent context, including the workspace
-name and id that apply to the session — the project's workspace when the
-session runs inside a saved project path, the global workspace otherwise — so
-the agent can search the journal right away. It does not read note bodies,
-validate workspace access, or write notes; the journal skill and MCP server
-keep those responsibilities.
+and optional Recall Project that apply to the session — the filesystem
+project's destination when its saved path matches, the global destination
+otherwise — so the agent can search the journal right away.
+It does not read note bodies, validate workspace access, or write notes; the
+journal skill and MCP server keep those responsibilities.
 
 If the agent reports a connection error, confirm the Mac app is open and the
 server is enabled. If it reports an authorization error, start a new

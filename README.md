@@ -10,14 +10,14 @@ plugin, enable the local MCP listener, and prepare the pinned ACP runtime with
 one click. The sandboxed App Store build links to the verified manual steps
 below.
 
-Installation does not silently authorize note access. Plugin `0.12.0` added a
-versioned OAuth coordinator, and `0.12.1` keeps both the coordinator and normal
-browser-first-use registration aligned with Recall's read + write consent
-scopes. Compatible Direct Recall builds can use it to present the existing
-explicit consent page inside Recall while writing the exact Claude or Codex
-credential cache. Older Recall builds and normal plugin first use retain the
-browser flow. Workspace block/read/write access remains a separate setting in
-every path.
+Installation does not silently authorize note access. Plugin `0.13.0` adds
+Project-aware journal destinations while retaining the OAuth coordinator from
+`0.12.0`, read + write consent-scope alignment from `0.12.1`, and Codex hook
+trust preflight from `0.12.2`.
+Compatible Direct Recall builds can present the existing explicit consent page
+inside Recall while writing the exact Claude or Codex credential cache. Older
+Recall builds and normal plugin first use retain the browser flow. Workspace
+block/read/write access remains a separate setting in every path.
 
 ## Codex Plugins
 
@@ -85,8 +85,9 @@ The marketplace, plugin, MCP server, skills, journal config, and OAuth cache
 now use Recall identifiers. Existing installations are not upgraded across
 those identity changes automatically: add the Recall marketplace, install
 **Recall**, start a new thread, and approve the browser sign-in once for
-each host. Invoke `$recall:recall-journal` once if you use journaling so
-the agent can create and select a workspace in `recall-journal.json`.
+each host. Invoke `$recall:recall-journal` once if you use journaling so the
+agent can configure this filesystem project or a global default, then select a
+Recall workspace and optional Recall Project in `recall-journal.json`.
 
 After the new Recall plugin works and its browser sign-in succeeds, retire the
 legacy plugin so its hooks and MCP connection do not run alongside Recall:
@@ -196,19 +197,21 @@ policy remains blocked.
 The plugin supports multiple skills in its `skills/` directory. In addition to
 the direct note workflow, the journal skill
 (`$recall:recall-journal` in Codex,
-`/recall:recall-journal` in Claude Code) configures a per-agent global
-`recall-journal.json` workspace selection. A bundled per-prompt hook detects
-that valid opt-in config, reminds the agent to search prior journal notes for
+`/recall:recall-journal` in Claude Code) configures a per-agent
+`recall-journal.json` with a global destination and/or absolute-path filesystem
+project destinations. Each selects a Recall workspace and optional Recall
+Project. A bundled per-prompt hook detects that valid opt-in config, reminds
+the agent to search prior journal notes for
 relevant context when a task relates to earlier work, and reminds it to
 journal meaningful work live in that write-ready workspace: open a
 marker-identified entry when substantive work begins, append short progress
 updates at checkpoints, and close with a final block plus a concise
 DailyNote summary — so an interrupted session leaves a partial record
-instead of nothing. Asking the agent to select a workspace for the current
-project adds a per-project override to the same config, so sessions working
+instead of nothing. Asking the agent to reconfigure the current filesystem
+project updates only its destination in the same config, so sessions working
 anywhere inside that project's folder — including Codex- or Claude-managed
 linked worktrees stored elsewhere on disk — journal to the project's own
-workspace instead of the global one.
+workspace and optional Recall Project instead of the global destination.
 
 After installing or updating the plugin, start a new thread so its skills,
 tools, and hook are loaded. Codex requires a one-time review and trust decision
