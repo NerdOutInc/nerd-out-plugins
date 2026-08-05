@@ -46,8 +46,52 @@ function sanitizeWorkspace(workspace) {
   return { id: workspace.id, name };
 }
 
+function sanitizeRecallProject(project) {
+  if (typeof project?.id !== "string" || typeof project?.name !== "string") {
+    return null;
+  }
+  const name = sanitizeWorkspaceField(project.name).slice(0, 80);
+  if (!name || !/^[\w.:-]{1,128}$/.test(project.id)) return null;
+  return { id: project.id, name };
+}
+
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function sanitizeDestination(value) {
+  if (!isPlainObject(value)) return null;
+  const workspace = sanitizeWorkspace(value.workspace);
+  if (!workspace) return null;
+
+  const hasRecallProject = Object.prototype.hasOwnProperty.call(
+    value,
+    "recallProject",
+  );
+  const recallProject = hasRecallProject
+    ? sanitizeRecallProject(value.recallProject)
+    : undefined;
+  if (hasRecallProject && !recallProject) return null;
+
+  return recallProject ? { recallProject, workspace } : { workspace };
+}
+
+function sanitizeProjectDestinations(projectsValue, sanitizeEntry = sanitizeDestination) {
+  if (projectsValue === undefined) return [];
+  if (!isPlainObject(projectsValue)) return null;
+
+  const projects = [];
+  for (const [root, entry] of Object.entries(projectsValue)) {
+    if (!path.isAbsolute(root)) return null;
+    // A key that resolves to the filesystem root would prefix-match every
+    // session, silently turning a per-project override into a global one.
+    const resolvedRoot = path.resolve(root);
+    if (resolvedRoot === path.parse(resolvedRoot).root) return null;
+    const destination = sanitizeEntry(entry);
+    if (!destination) return null;
+    projects.push({ destination, root });
+  }
+  return projects;
 }
 
 function readValidJournalConfig(configPath) {
@@ -60,37 +104,39 @@ function readValidJournalConfig(configPath) {
         (journal.dailyNote === undefined ||
           typeof journal.dailyNote === "boolean"));
 
-    // Keep this strict. Before any writer emits a newer config version, ship
-    // compatible readers first so older plugin installs do not go silent.
-    // `projects` stays optional and additive for the same reason: configs
-    // that carry it still validate under readers that predate it.
-    if (
-      config?.version !== 1 ||
-      config?.scope !== "global" ||
-      !hasValidJournalSettings
-    ) {
-      return null;
+    if (!hasValidJournalSettings) return null;
+
+    if (config?.version === 1) {
+      if (config.scope !== "global") return null;
+      const globalDestination = sanitizeDestination({
+        workspace: config.workspace,
+      });
+      // v1 project entries only define a workspace. Ignore newer destination
+      // fields so a manually augmented legacy config keeps its old behavior.
+      const projects = sanitizeProjectDestinations(config.projects, (entry) =>
+        sanitizeDestination({ workspace: entry?.workspace }),
+      );
+      if (!globalDestination || !projects) return null;
+      return { globalDestination, projects };
     }
 
-    const workspace = sanitizeWorkspace(config.workspace);
-    if (!workspace) return null;
-
-    const projects = [];
-    if (config.projects !== undefined) {
-      if (!isPlainObject(config.projects)) return null;
-      for (const [root, entry] of Object.entries(config.projects)) {
-        if (!path.isAbsolute(root) || !isPlainObject(entry)) return null;
-        // A key that resolves to the filesystem root would prefix-match every
-        // session, silently turning a per-project override into a global one.
-        const resolvedRoot = path.resolve(root);
-        if (resolvedRoot === path.parse(resolvedRoot).root) return null;
-        const projectWorkspace = sanitizeWorkspace(entry.workspace);
-        if (!projectWorkspace) return null;
-        projects.push({ root, workspace: projectWorkspace });
+    if (config?.version === 2) {
+      const globalDestination =
+        config.global === undefined
+          ? undefined
+          : sanitizeDestination(config.global);
+      const projects = sanitizeProjectDestinations(config.projects);
+      if (
+        (config.global !== undefined && !globalDestination) ||
+        !projects ||
+        (!globalDestination && projects.length === 0)
+      ) {
+        return null;
       }
+      return { globalDestination, projects };
     }
 
-    return { workspace, projects };
+    return null;
   } catch {
     return null;
   }
@@ -177,15 +223,15 @@ function resolveCanonicalWorkingDirectory(workingDirectory, env) {
 // first mapped to the equivalent path under the main checkout, whether they
 // live inside the repo or in an agent-managed external worktree directory. The
 // longest matching root wins when saved projects nest.
-function resolveProjectWorkspace(projects, workingDirectory, env) {
+function resolveProjectDestination(projects, workingDirectory, env) {
   if (projects.length === 0) return null;
   const currentDirectory = resolveCanonicalWorkingDirectory(
     workingDirectory,
     env,
   );
   let bestRoot = null;
-  let bestWorkspace = null;
-  for (const { root, workspace } of projects) {
+  let bestDestination = null;
+  for (const { destination, root } of projects) {
     const projectRoot = normalizeDirectory(root);
     const rootPrefix = projectRoot.endsWith(path.sep)
       ? projectRoot
@@ -198,10 +244,17 @@ function resolveProjectWorkspace(projects, workingDirectory, env) {
     }
     if (bestRoot === null || projectRoot.length > bestRoot.length) {
       bestRoot = projectRoot;
-      bestWorkspace = workspace;
+      bestDestination = destination;
     }
   }
-  return bestWorkspace;
+  return bestDestination;
+}
+
+function destinationLabel(destination) {
+  const workspace = `Recall workspace ${JSON.stringify(destination.workspace.name)} (workspaceId ${destination.workspace.id})`;
+  return destination.recallProject
+    ? `${workspace} and Recall Project ${JSON.stringify(destination.recallProject.name)} (projectId ${destination.recallProject.id})`
+    : workspace;
 }
 
 function buildHookOutput(input, env = process.env) {
@@ -219,26 +272,35 @@ function buildHookOutput(input, env = process.env) {
     typeof input.cwd === "string" && input.cwd.length > 0
       ? input.cwd
       : process.cwd();
-  const projectWorkspace = resolveProjectWorkspace(
+  const projectDestination = resolveProjectDestination(
     config.projects,
     workingDirectory,
     env,
   );
 
-  // Name the workspace and its id here so the agent can search the journal
+  const destination = projectDestination ?? config.globalDestination;
+  // A v2 config may intentionally cover only one filesystem project. Outside
+  // its saved roots there is no implicit global journal, so stay silent.
+  if (!destination) return null;
+
+  // Name the workspace and optional Project id here so the agent can search the journal
   // immediately, without loading the skill or re-reading the config first.
   // JSON.stringify keeps the quoted names unambiguous even when they contain
   // quotes or backslashes.
-  const binding = projectWorkspace
-    ? `Automatic Recall journaling is enabled for ${context.agentName} by a valid per-agent config. This session's project is bound to the Recall workspace ${JSON.stringify(projectWorkspace.name)} (workspaceId ${projectWorkspace.id}), a per-project override of the global workspace ${JSON.stringify(config.workspace.name)}; use the project workspace for all journal recall and writes this session. `
-    : `Automatic Recall journaling is enabled for ${context.agentName} by a valid per-agent config bound to the Recall workspace ${JSON.stringify(config.workspace.name)} (workspaceId ${config.workspace.id}). `;
+  const binding = projectDestination
+    ? `Automatic Recall journaling is enabled for ${context.agentName} by a valid per-agent config. This session's filesystem project is bound to ${destinationLabel(projectDestination)}${config.globalDestination ? `, a per-project override of the global workspace ${JSON.stringify(config.globalDestination.workspace.name)}` : ""}; use that destination for all journal recall and named-note writes this session. `
+    : `Automatic Recall journaling is enabled for ${context.agentName} by a valid per-agent config bound globally to ${destinationLabel(destination)}. `;
+  const projectTargeting = destination.recallProject
+    ? `For named-note create, list, keyword, and semantic operations, pass both workspaceId ${destination.workspace.id} and projectId ${destination.recallProject.id}; keep the DailyNote workspace-level and never assign it to a Project. `
+    : `Target named-note create, list, keyword, and semantic operations with workspaceId ${destination.workspace.id}; this destination does not select a Recall Project. `;
 
   return {
     hookSpecificOutput: {
       hookEventName: "UserPromptSubmit",
       additionalContext:
         binding +
-        `That journal is also ${context.agentName}'s memory: when this task may relate to previously journaled work — ongoing projects, earlier decisions or fixes, or context the user assumes is known — search that workspace with the Recall keyword_search tool (plus semantic_search when available), read the relevant notes before deciding, and cite any note that informs the response. ` +
+        projectTargeting +
+        `That journal is also ${context.agentName}'s memory: when this task may relate to previously journaled work — ongoing projects, earlier decisions or fixes, or context the user assumes is known — search that configured destination with the Recall keyword_search tool (plus semantic_search when available), read the relevant notes before deciding, and cite any note that informs the response. ` +
         `For this turn, if the task will produce durable decisions, implementation work, test results, blockers, or follow-ups, load and follow ${context.skillName} when substantive work begins: open the task's journal entry under a fresh task marker after recall, append short progress updates at checkpoints while working, and finalize the entry before the final response. ` +
         "Skip trivial acknowledgements and do not prompt for journal setup merely because this implicit reminder fired.",
     },

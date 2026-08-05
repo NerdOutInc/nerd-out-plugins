@@ -1,6 +1,6 @@
 ---
 name: recall-journal
-description: Keep a concise, searchable journal of agent work in Recall and read it back as the agent's long-term memory. Use when the user invokes the recall-journal skill ($recall:recall-journal in Codex, /recall:recall-journal in Claude Code) or when plugin lifecycle context reports a valid global recall-journal.json configuration for the current agent; once configured, search the journal at the start of tasks that may relate to prior work and journal every task with useful decisions, implementation work, tests, or follow-ups — live, as the work happens, not only at the end. Configure a workspace on first use, bind a project to its own workspace when the user asks, recall and cite relevant prior notes before deciding, open the task's entry under a unique task marker when substantive work begins, append progress at checkpoints, write a daily summary, and choose an appropriate set of detailed named notes.
+description: Keep a concise, searchable journal of agent work in Recall and read it back as the agent's long-term memory. Use when the user invokes the recall-journal skill ($recall:recall-journal in Codex, /recall:recall-journal in Claude Code), asks to configure or reconfigure where journaling goes, or when plugin lifecycle context reports a valid recall-journal.json destination for the current agent. Configure either the current filesystem project or a global default, select a write-ready Recall workspace and optional Recall Project, recall and cite relevant prior notes before deciding, journal meaningful work live under a unique task marker, and write a workspace-level DailyNote summary.
 ---
 
 # Recall Journal
@@ -55,85 +55,40 @@ approve the hook. The supported action is the user's explicit review in
 
 ### Journal configuration
 
-Resolve the agent's global configuration directory. Each agent keeps its own
-configuration; use only the directory for the agent you are running in:
+For any explicit setup, reconfiguration, disabling, or stale-config repair,
+read and follow [references/configuration.md](references/configuration.md).
+It defines the v1-compatible/v2 schemas, canonical absolute filesystem-project
+path, workspace and Recall Project selection, compatibility errors,
+confirmation, and atomic write protocol.
 
-- **Codex:** `$CODEX_HOME`, falling back to `~/.codex`.
-- **Claude Code:** `$CLAUDE_CONFIG_DIR`, falling back to `~/.claude`.
+Each effective destination contains one write-ready Recall workspace and
+optionally one live Recall Project inside it. A filesystem-project destination
+overrides the global destination; a v2 config may intentionally contain only
+filesystem-project destinations. Outside every saved path with no global
+destination, journaling is disabled and the hook stays silent.
 
-Then look for:
-
-```text
-<config-dir>/recall-journal.json
-```
-
-The expected shape is:
-
-```json
-{
-  "version": 1,
-  "scope": "global",
-  "workspace": {
-    "id": "workspace-id",
-    "name": "Workspace name"
-  },
-  "journal": {
-    "dailyNote": true
-  },
-  "projects": {
-    "/absolute/path/to/project": {
-      "workspace": {
-        "id": "project-workspace-id",
-        "name": "Project workspace name"
-      }
-    }
-  }
-}
-```
-
-`journal.dailyNote` may be omitted; omission defaults to `true`. `projects`
-may also be omitted; when present it maps absolute project-root paths — never
-the filesystem root itself — to per-project workspace overrides (see
-"Per-project workspaces" below).
-
-When the file is missing, malformed, or the saved workspace is no longer
-available, call `list_workspaces` and show the user only confirmed,
-write-ready choices. Include each workspace's name, id, role, and write status.
-Ask the user to choose by name or id; do not silently choose a workspace or
-overwrite a stale selection. After an explicit choice, create the resolved
-configuration directory when needed and save the file above. When the agent's
-config-directory environment variable is unset, that resolved directory is the
-agent's home-directory fallback listed above. Keep the file local to the
-machine and do not put tokens, note bodies, or credentials in it. Do not read
-or migrate another agent's configuration file; each agent is configured
-independently.
-
-Only offer workspaces that are confirmed and not blocked, with both
-`roleWritable` and `writeReady` set to true. This skill is write-ready-only: do
-not bind to, search as a journal in, or write to a read-only, blocked,
-non-confirmed, or not-ready workspace.
-
-When the skill is invoked explicitly, configure the workspace if necessary and
+When the skill is invoked explicitly, configure the destination if necessary and
 then journal the current task. When the valid global configuration already
-exists, invoke this skill implicitly for every task going forward, including
+applies, invoke this skill implicitly for every task going forward, including
 tasks where the user did not mention journaling. Implicit activation covers
 the whole task: recall relevant journal context before substantive work
 (see "Recall before working" below), open the task's entry and append
 progress while working (see "Journal as you go" below), and finalize the
 entry at the end.
-Validate the saved workspace with `list_workspaces` before writing; if it is
-no longer write-ready, pause the journal write and ask the user to select a
-replacement rather than silently switching.
+Validate the saved workspace with `list_workspaces` before writing. If the
+destination includes a Recall Project, page `list_projects` and require the
+exact id in that workspace. If either target is unavailable, pause journal
+writes and ask the user to reconfigure instead of switching, clearing the
+Project, or writing unfiled.
 
-The plugin's `UserPromptSubmit` hook checks only whether this agent's config
-exists and has the expected shape, then adds lifecycle context that names the
-effective workspace (see "Per-project workspaces" below), tells the agent to
+The plugin's `UserPromptSubmit` hook checks only whether this agent's v1 or v2
+config has a valid effective destination, then adds lifecycle context that names
+the effective workspace and optional Recall Project, tells the agent to
 search the journal when the task may relate to prior work, and tells it to
 load this skill when meaningful work begins so the entry can be opened and
-updated live. The hook does not validate the workspace
-or write notes itself. Recall searches may target the effective workspace
-directly, but always perform the live workspace validation above before
-implicit writes.
+updated live. The hook never reveals filesystem paths, validates targets, or
+writes notes itself. Recall searches may target the effective destination
+directly, but always perform the live validation above before implicit writes.
 
 If `journal.dailyNote` is `true` or omitted, perform the DailyNote update in
 addition to the named-note work. If it is `false`, still journal the task in the
@@ -141,60 +96,11 @@ selected named notes but skip the DailyNote update.
 
 Distinguish explicit from implicit activation. An explicit skill invocation
 (`$recall:recall-journal` in Codex,
-`/recall:recall-journal` in Claude Code) may prompt for a workspace
-when the config is missing or invalid. An implicit invocation with no valid
-config must skip journaling for that task without prompting or interrupting
-unrelated work; wait for the user to invoke the skill explicitly before
-starting setup.
-
-## Per-project workspaces
-
-The global workspace is the default journal for every session. A project can
-also get its own journal: when the user explicitly asks to select a workspace
-for the current project ("select a Recall workspace for this project",
-"journal this repo to its own workspace"), add a project binding to the same
-per-agent config instead of changing the global selection.
-
-To bind a project:
-
-1. Resolve the project root. Agents identify a project by its folder path, so
-   use the main checkout's top-level directory: in a git repository, the
-   parent directory of `git rev-parse --path-format=absolute --git-common-dir`,
-   which maps linked worktrees back to the main checkout; outside git, the
-   session's working directory.
-2. Offer workspaces under the same rules as the global selection: confirmed,
-   write-ready choices only, chosen explicitly by name or id.
-3. Show the user the resolved absolute path and the chosen workspace, and only
-   after they confirm save the entry under `projects`, keyed by that path.
-   Leave the global `workspace` unchanged; if the config file does not exist
-   yet, run the global selection first so the file stays valid.
-
-A saved project covers its root and everything inside it, including subfolders
-and worktrees checked out under the repo (for example
-`<repo>/.claude/worktrees/<name>`) or elsewhere (for example an agent-managed
-worktree directory). For a linked Git worktree, the plugin hook maps the
-session's current relative subdirectory onto the main checkout resolved from
-Git's common directory before matching project roots. The effective journal
-workspace is the entry with the longest saved root that equals or contains
-that canonical directory, falling back to the global workspace when no entry
-matches. Outside Git, or when Git metadata cannot be read, the hook retains
-filesystem-path matching and names the effective workspace in its lifecycle
-context.
-
-Use the effective workspace for everything this skill does in the session:
-recall searches, named notes, and the DailyNote all target the project
-workspace when an override matches. Validation rules apply unchanged: if a
-project's saved workspace is no longer write-ready, pause and ask the user to
-update that project entry rather than silently falling back to the global
-workspace. One exception helps recall: when a
-project search finds nothing and the task clearly references older work, a
-follow-up search of the global workspace may recover notes journaled before
-the project was bound — but writes still go only to the effective workspace.
-
-When the user asks to stop journaling a project separately, confirm which
-entry and delete it so sessions fall back to the global workspace. Never add,
-change, or remove a project binding implicitly; only explicit user requests
-change the config file.
+`/recall:recall-journal` in Claude Code) may prompt for scope, workspace, and
+Recall Project when the config or current destination is missing or invalid. An
+implicit invocation with no valid effective destination must skip journaling
+for that task without prompting or interrupting unrelated work; wait for the
+user to invoke the skill explicitly before starting setup.
 
 ## Recall before working
 
@@ -226,14 +132,15 @@ Recall also applies just before writing: when about to record a decision that
 may already be journaled, search first and extend the existing note instead of
 creating a duplicate.
 
-Always pass the effective workspace's `workspaceId` (the project override
-when one matches, the global workspace otherwise) to `list_notes`,
-`keyword_search`, `semantic_search`, and `create_note`. `update_note_content`
-targets the note's own workspace and must never be used to move a note
-between workspaces. If recall searches fail because the effective workspace
-is no longer available, continue the task without journal context and run the
-workspace re-validation flow before any write; never silently search a
-different workspace instead.
+Always pass the effective workspace's `workspaceId` to named-note
+`list_notes`, `keyword_search`, `semantic_search`, and `create_note`. When the
+destination includes a Recall Project, also pass its `projectId` to all four;
+never omit it as a fallback. Because DailyNotes are workspace-level and Project
+filters exclude them, perform time-based DailyNote lookup separately with only
+the `workspaceId`. `update_note_content` targets the resolved note and must
+never move it between workspaces or Projects. If destination validation or
+search fails, continue the task without journal context and run explicit
+reconfiguration before any write; never silently broaden the search.
 
 ## Journal as you go
 
@@ -279,7 +186,8 @@ Appends always land at the end of a note; nothing can be inserted beneath an
 earlier heading. Two layouts respect that:
 
 - **Task-exclusive note (default).** Create a named note for this run when
-  the entry opens and keep its uuid for the whole session; every progress
+  the entry opens, passing the destination's workspace id and optional Project
+  id, and keep its uuid for the whole session; every progress
   and final append targets that uuid, so the entry reads as one contiguous
   timeline.
 - **Shared topic note.** When the task clearly continues an existing
@@ -342,7 +250,8 @@ have landed. Recover by reading, never by blind retry, and never let
 recovery stall the task itself:
 
 - **Opening `create_note`:** the note may exist even though its uuid never
-  arrived. Query the full marker with `keyword_search`, read each candidate,
+  arrived. Query the full marker with destination-scoped `keyword_search`
+  (including `projectId` when configured), read each candidate,
   and keep only literal `Task marker: <marker>` matches. Exactly one →
   adopt that note's uuid and continue. Zero or several → the journal state
   is unknown: stop journal writes, continue the task, report the state at
@@ -374,7 +283,7 @@ At the end of meaningful work, close the live entry:
    next steps when they improve future search and reasoning. Keep secrets,
    access tokens, private user data, and raw tool output out of the note
    unless the user explicitly requests them.
-3. Update the current day's DailyNote with a short dated summary. Include
+3. Update the current day's workspace-level DailyNote with a short dated summary. Include
    the task title, outcome, decisions, tests, follow-ups, and the task
    marker. Add a backlink to the detailed named note so the daily page is an
    index into the archive.
@@ -399,7 +308,8 @@ Task marker: <marker>
 
 When updating a DailyNote, send the detailed named note as a backlink in the
 `backlinks` field rather than pasting a fake Markdown URL. Preserve existing
-daily content by using `mode: "append"`. For the effective workspace, use the
+daily content by using `mode: "append"`. Never assign the DailyNote to a Recall
+Project. For the effective workspace, use the
 current date as the DailyNote identifier
 `date=YYYY-MM-DD&workspaceId=<effective-workspace-id>`; the journal MCP lazily
 materializes a missing DailyNote from that identifier. If that
@@ -425,6 +335,8 @@ note but report that the daily summary did not succeed.
   request and confirmation of the exact project path.
 - Never bind, search, or write through the journal in a workspace that is
   blocked, non-confirmed, non-writable, or not write-ready.
+- Never use a Recall Project that is missing, blank, archived, deleted, or in a
+  different workspace. Stop named-note writes and ask for reconfiguration.
 - Never treat a failed MCP response as a successful journal write.
 - If the MCP server is unreachable (unable to connect to `127.0.0.1:38473`),
   the Recall Mac app is not running or its MCP server is disabled —
@@ -443,5 +355,6 @@ note but report that the daily summary did not succeed.
   only when the user explicitly asked about prior work.
 - Never put credentials or entire conversation transcripts in the journal by
   default.
-- If the user asks to stop journaling, stop writing for the task and leave the
-  configuration file unchanged.
+- If the user asks to stop journaling only this task, stop writing and leave the
+  config unchanged. If they ask to disable or remove a saved destination,
+  follow the explicit confirmation flow in the configuration reference.
