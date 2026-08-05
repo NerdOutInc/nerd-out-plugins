@@ -1,6 +1,6 @@
 {
   "name": "recall",
-  "version": "0.12.1",
+  "version": "0.12.2",
   "description": "Use Recall's local MCP server from Codex.",
   "author": {
     "name": "Nerd Out Inc.",
