@@ -10,10 +10,11 @@ plugin, enable the local MCP listener, and prepare the pinned ACP runtime with
 one click. The sandboxed App Store build links to the verified manual steps
 below.
 
-Installation does not silently authorize note access. Plugin `0.13.0` adds
-Project-aware journal destinations while retaining the OAuth coordinator from
-`0.12.0`, read + write consent-scope alignment from `0.12.1`, and Codex hook
-trust preflight from `0.12.2`.
+Installation does not silently authorize note access. Plugin `0.14.0` adds
+tiny, retry-safe Today timeline journal summaries while retaining Project-aware
+destinations from `0.13.0`, the OAuth coordinator from `0.12.0`, read + write
+consent-scope alignment from `0.12.1`, and Codex hook trust preflight from
+`0.12.2`.
 Compatible Direct Recall builds can present the existing explicit consent page
 inside Recall while writing the exact Claude or Codex credential cache. Older
 Recall builds and normal plugin first use retain the browser flow. Workspace
@@ -205,9 +206,10 @@ the agent to search prior journal notes for
 relevant context when a task relates to earlier work, and reminds it to
 journal meaningful work live in that write-ready workspace: open a
 marker-identified entry when substantive work begins, append short progress
-updates at checkpoints, and close with a final block plus a concise
-DailyNote summary — so an interrupted session leaves a partial record
-instead of nothing. Asking the agent to reconfigure the current filesystem
+updates at checkpoints, and close with a final block plus one tiny ELI5 Today
+card linked to the detail (or an explicitly configured legacy DailyNote/none)
+— so an interrupted session leaves a partial record instead of nothing.
+Asking the agent to reconfigure the current filesystem
 project updates only its destination in the same config, so sessions working
 anywhere inside that project's folder — including Codex- or Claude-managed
 linked worktrees stored elsewhere on disk — journal to the project's own

@@ -16,9 +16,7 @@ function resolveJournalContext(env = process.env) {
   return {
     agentName: isCodex ? "Codex" : "Claude Code",
     configPath: path.join(configDirectory, "recall-journal.json"),
-    skillName: isCodex
-      ? "$recall:recall-journal"
-      : "/recall:recall-journal",
+    skillName: isCodex ? "$recall:recall-journal" : "/recall:recall-journal",
   };
 }
 
@@ -59,6 +57,35 @@ function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function resolveSummaryTarget(journal, supportsSummaryTarget) {
+  if (journal === undefined) return "dailyNote";
+  if (!isPlainObject(journal)) return null;
+  if (
+    journal.dailyNote !== undefined &&
+    typeof journal.dailyNote !== "boolean"
+  ) {
+    return null;
+  }
+
+  // Version 1 remains exactly backward compatible. Newer fields on a legacy
+  // file never silently change its DailyNote behavior.
+  if (!supportsSummaryTarget || journal.summaryTarget === undefined) {
+    return journal.dailyNote === false ? "none" : "dailyNote";
+  }
+
+  if (!["today", "dailyNote", "none"].includes(journal.summaryTarget)) {
+    return null;
+  }
+  const canonicalDailyNote = journal.summaryTarget === "dailyNote";
+  if (
+    journal.dailyNote !== undefined &&
+    journal.dailyNote !== canonicalDailyNote
+  ) {
+    return null;
+  }
+  return journal.summaryTarget;
+}
+
 function sanitizeDestination(value) {
   if (!isPlainObject(value)) return null;
   const workspace = sanitizeWorkspace(value.workspace);
@@ -76,7 +103,10 @@ function sanitizeDestination(value) {
   return recallProject ? { recallProject, workspace } : { workspace };
 }
 
-function sanitizeProjectDestinations(projectsValue, sanitizeEntry = sanitizeDestination) {
+function sanitizeProjectDestinations(
+  projectsValue,
+  sanitizeEntry = sanitizeDestination,
+) {
   if (projectsValue === undefined) return [];
   if (!isPlainObject(projectsValue)) return null;
 
@@ -97,16 +127,10 @@ function sanitizeProjectDestinations(projectsValue, sanitizeEntry = sanitizeDest
 function readValidJournalConfig(configPath) {
   try {
     const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    const journal = config?.journal;
-    const hasValidJournalSettings =
-      journal === undefined ||
-      (isPlainObject(journal) &&
-        (journal.dailyNote === undefined ||
-          typeof journal.dailyNote === "boolean"));
-
-    if (!hasValidJournalSettings) return null;
 
     if (config?.version === 1) {
+      const summaryTarget = resolveSummaryTarget(config.journal, false);
+      if (!summaryTarget) return null;
       if (config.scope !== "global") return null;
       const globalDestination = sanitizeDestination({
         workspace: config.workspace,
@@ -117,10 +141,12 @@ function readValidJournalConfig(configPath) {
         sanitizeDestination({ workspace: entry?.workspace }),
       );
       if (!globalDestination || !projects) return null;
-      return { globalDestination, projects };
+      return { globalDestination, projects, summaryTarget };
     }
 
     if (config?.version === 2) {
+      const summaryTarget = resolveSummaryTarget(config.journal, true);
+      if (!summaryTarget) return null;
       const globalDestination =
         config.global === undefined
           ? undefined
@@ -133,7 +159,7 @@ function readValidJournalConfig(configPath) {
       ) {
         return null;
       }
-      return { globalDestination, projects };
+      return { globalDestination, projects, summaryTarget };
     }
 
     return null;
@@ -194,7 +220,11 @@ function resolveCanonicalWorkingDirectory(workingDirectory, env) {
       windowsHide: true,
     },
   );
-  if (result.error || result.status !== 0 || typeof result.stdout !== "string") {
+  if (
+    result.error ||
+    result.status !== 0 ||
+    typeof result.stdout !== "string"
+  ) {
     return currentDirectory;
   }
 
@@ -291,8 +321,14 @@ function buildHookOutput(input, env = process.env) {
     ? `Automatic Recall journaling is enabled for ${context.agentName} by a valid per-agent config. This session's filesystem project is bound to ${destinationLabel(projectDestination)}${config.globalDestination ? `, a per-project override of the global workspace ${JSON.stringify(config.globalDestination.workspace.name)}` : ""}; use that destination for all journal recall and named-note writes this session. `
     : `Automatic Recall journaling is enabled for ${context.agentName} by a valid per-agent config bound globally to ${destinationLabel(destination)}. `;
   const projectTargeting = destination.recallProject
-    ? `For named-note create, list, keyword, and semantic operations, pass both workspaceId ${destination.workspace.id} and projectId ${destination.recallProject.id}; keep the DailyNote workspace-level and never assign it to a Project. `
+    ? `For named-note create, list, keyword, and semantic operations, pass both workspaceId ${destination.workspace.id} and projectId ${destination.recallProject.id}. `
     : `Target named-note create, list, keyword, and semantic operations with workspaceId ${destination.workspace.id}; this destination does not select a Recall Project. `;
+  const summaryTarget =
+    config.summaryTarget === "today"
+      ? `The journal summary target is the Today timeline: after finalizing the detailed note, create exactly one tiny ELI5 Today note with create_today_note, workspaceId ${destination.workspace.id}${destination.recallProject ? `, projectId ${destination.recallProject.id}` : ""}, the task marker as idempotencyKey, and a backlink to the detailed note; never update DailyNote for this mode. `
+      : config.summaryTarget === "dailyNote"
+        ? `The journal summary target is the legacy DailyNote; keep the DailyNote workspace-level and never assign it to a Recall Project. `
+        : "This journal disables day-summary notes; finalize only the detailed named-note entry. ";
 
   return {
     hookSpecificOutput: {
@@ -300,6 +336,7 @@ function buildHookOutput(input, env = process.env) {
       additionalContext:
         binding +
         projectTargeting +
+        summaryTarget +
         `That journal is also ${context.agentName}'s memory: when this task may relate to previously journaled work — ongoing projects, earlier decisions or fixes, or context the user assumes is known — search that configured destination with the Recall keyword_search tool (plus semantic_search when available), read the relevant notes before deciding, and cite any note that informs the response. ` +
         `For this turn, if the task will produce durable decisions, implementation work, test results, blockers, or follow-ups, load and follow ${context.skillName} when substantive work begins: open the task's journal entry under a fresh task marker after recall, append short progress updates at checkpoints while working, and finalize the entry before the final response. ` +
         "Skip trivial acknowledgements and do not prompt for journal setup merely because this implicit reminder fired.",

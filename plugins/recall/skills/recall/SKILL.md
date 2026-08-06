@@ -63,6 +63,12 @@ the app's Settings -> MCP Server per-workspace access policy.
 - Use `create_note` for new named notes. To file one in a Recall Project, pass
   both the selected `workspaceId` and a `projectId` returned by `list_projects`;
   never guess an id or silently retry without it after a Project-target error.
+- Use `create_today_note` for one short Today timeline summary when the caller
+  has an explicit writable `workspaceId` and a stable retry key. Keep the title
+  and body plain and tiny, pass the same-workspace `projectId` when needed, and
+  use real `backlinks` to connect the card to a detailed note. Repeating the
+  identical `idempotencyKey` request returns the original card; a changed
+  request fails closed.
 - Use `update_note_content` with `mode: "append"` when adding a journal entry,
   update, or note section.
 - Use `update_note_content` with `mode: "replace"` only when the user explicitly
