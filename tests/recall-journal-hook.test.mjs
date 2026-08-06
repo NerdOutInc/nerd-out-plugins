@@ -205,6 +205,87 @@ test("accepts a v2 global destination without a Recall Project", () => {
   assert.equal(context.includes("projectId"), false);
 });
 
+test("injects the Today summary target without exposing a config path", () => {
+  const config = validV2Config();
+  config.journal = { dailyNote: false, summaryTarget: "today" };
+  const configDirectory = makeConfigDirectory(config);
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: configDirectory,
+      PLUGIN_ROOT: pluginRoot,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(context, /summary target is the Today timeline/);
+  assert.match(context, /create_today_note/);
+  assert.match(context, /idempotencyKey/);
+  assert.match(context, /workspaceId workspace-id/);
+  assert.equal(context.includes(configDirectory), false);
+});
+
+test("passes the configured Recall Project to Today summaries", () => {
+  const config = validV2Config();
+  config.journal = { dailyNote: false, summaryTarget: "today" };
+  config.global.recallProject = recallProject();
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(config),
+      PLUGIN_ROOT: pluginRoot,
+    },
+  });
+
+  assert.match(result.stdout, /create_today_note/);
+  assert.match(result.stdout, /projectId recall-project-id/);
+});
+
+test("injects none for legacy dailyNote false and explicit summaryTarget none", () => {
+  for (const journal of [
+    { dailyNote: false },
+    { dailyNote: false, summaryTarget: "none" },
+  ]) {
+    const config = validV2Config();
+    config.journal = journal;
+    const result = runHook({
+      environment: {
+        ...cleanEnvironment(),
+        CODEX_HOME: makeConfigDirectory(config),
+        PLUGIN_ROOT: pluginRoot,
+      },
+    });
+
+    assert.match(result.stdout, /disables day-summary notes/);
+  }
+});
+
+test("rejects missing, contradictory, or unknown v2 summary target compatibility values", () => {
+  for (const journal of [
+    { summaryTarget: "today" },
+    { summaryTarget: "dailyNote" },
+    { summaryTarget: "none" },
+    { dailyNote: true, summaryTarget: "today" },
+    { dailyNote: false, summaryTarget: "dailyNote" },
+    { dailyNote: true, summaryTarget: "none" },
+    { dailyNote: false, summaryTarget: "tomorrow" },
+  ]) {
+    const config = validV2Config();
+    config.journal = journal;
+    const result = runHook({
+      environment: {
+        ...cleanEnvironment(),
+        CODEX_HOME: makeConfigDirectory(config),
+        PLUGIN_ROOT: pluginRoot,
+      },
+    });
+
+    assert.equal(result.stdout, "");
+  }
+});
+
 test("keeps v1 project entries workspace-only when newer fields are malformed", () => {
   const projectRoot = makeTemporaryDirectory();
   const config = configWithProject(projectRoot);
@@ -244,7 +325,10 @@ test("injects the configured Recall Project and exact named-note targeting", () 
     .additionalContext;
   assert.match(context, /Recall Project "Roadmap"/);
   assert.match(context, /projectId recall-project-id/);
-  assert.match(context, /pass both workspaceId workspace-id and projectId recall-project-id/);
+  assert.match(
+    context,
+    /pass both workspaceId workspace-id and projectId recall-project-id/,
+  );
   assert.match(context, /DailyNote workspace-level/);
 });
 
@@ -292,7 +376,10 @@ test("activates a project-only v2 config only inside the configured filesystem p
 test("prefers a v2 filesystem-project destination and its Recall Project over global", () => {
   const projectRoot = makeTemporaryDirectory();
   const config = validV2Config();
-  config.global.recallProject = recallProject("global-project", "Global Project");
+  config.global.recallProject = recallProject(
+    "global-project",
+    "Global Project",
+  );
   config.projects = {
     [projectRoot]: {
       recallProject: recallProject("repo-project", "Repository"),
@@ -320,7 +407,10 @@ test("prefers a v2 filesystem-project destination and its Recall Project over gl
 test("rejects invalid v2 destinations and explicit null Recall Projects", () => {
   const projectRoot = makeTemporaryDirectory();
   const malformed = [
-    { version: 2, global: { workspace: validProjectWorkspace(), recallProject: null } },
+    {
+      version: 2,
+      global: { workspace: validProjectWorkspace(), recallProject: null },
+    },
     { version: 2, global: null },
     { version: 2, projects: {} },
     {
@@ -429,7 +519,12 @@ test("escapes quotes and backslashes in the workspace name", () => {
 });
 
 test("stays silent when the workspace id is not a plain token", () => {
-  for (const id of ["workspace\nid", "workspace id", 'ws"quote', "w".repeat(129)]) {
+  for (const id of [
+    "workspace\nid",
+    "workspace id",
+    'ws"quote',
+    "w".repeat(129),
+  ]) {
     const config = validConfig();
     config.workspace.id = id;
 
@@ -442,7 +537,11 @@ test("stays silent when the workspace id is not a plain token", () => {
     });
 
     assert.equal(result.status, 0);
-    assert.equal(result.stdout, "", `expected silence for id ${JSON.stringify(id)}`);
+    assert.equal(
+      result.stdout,
+      "",
+      `expected silence for id ${JSON.stringify(id)}`,
+    );
     assert.equal(result.stderr, "");
   }
 });
@@ -648,7 +747,10 @@ test("binds the session to a project workspace when cwd is inside the project", 
     .additionalContext;
   assert.match(context, /"Project Journal"/);
   assert.match(context, /workspaceId project-workspace-id/);
-  assert.match(context, /per-project override of the global workspace "Journal"/);
+  assert.match(
+    context,
+    /per-project override of the global workspace "Journal"/,
+  );
   assert.equal(context.includes("workspaceId workspace-id"), false);
   assert.equal(context.includes(projectRoot), false);
 });

@@ -13,9 +13,10 @@ HTTPS and can never reach a loopback listener), so this plugin ships a
 runs a bundled copy of [`mcp-remote`](https://github.com/geelen/mcp-remote)
 (MIT — `bridge/LICENSE-mcp-remote.txt`) that proxies stdio to the loopback
 server and handles MCP OAuth, caching tokens in `~/.mcp-auth`. Normal first use
-opens the browser. Plugin `0.13.0` adds Project-aware journal destinations
-while retaining the OAuth coordinator from `0.12.0`, read + write consent-scope
-alignment from `0.12.1`, and Codex hook trust preflight from `0.12.2`. A
+opens the browser. Plugin `0.14.0` adds tiny, retry-safe Today timeline journal
+summaries while retaining Project-aware destinations from `0.13.0`, the OAuth
+coordinator from `0.12.0`, read + write consent-scope alignment from `0.12.1`,
+and Codex hook trust preflight from `0.12.2`. A
 compatible Direct Recall build can use the coordinator to present the same
 explicit consent inside Recall without changing cache ownership. The bridge
 runs `node` from your PATH (any Node.js 18+). Both Claude (`.mcp.json`) and Codex
@@ -174,9 +175,11 @@ connects) replaces this setup.
 Recall advertises `list_notes`, `read_note`, `keyword_search`,
 `semantic_search`, `get_index_status`, `list_workspaces`, and `list_projects`.
 Named-note list/search tools accept an explicit workspace + Project filter, and
-`create_note` can file a new named note in that exact Project. The
-`create_note` and `update_note_content` write tools appear when at least one
-workspace is set to **Read & write** in Recall's MCP Server settings. Reads and
+`create_note` can file a new named note in that exact Project.
+`create_today_note` makes one short, retry-safe Today card in an explicit
+workspace and optional Project, with real backlinks to detailed notes. The
+`create_note`, `create_today_note`, and `update_note_content` write tools appear
+when at least one workspace is set to **Read & write** in Recall's MCP Server settings. Reads and
 writes are filtered independently by each workspace's Block / Read only / Read
 & write policy; an unconfigured workspace stays blocked.
 
@@ -194,8 +197,9 @@ under `skills/` that contains a `SKILL.md`. It currently includes:
   `$CLAUDE_CONFIG_DIR/recall-journal.json` — default `~/.claude` — for
   Claude Code), and then journals live: it opens a marker-identified entry
   when substantive work begins, appends short progress updates at
-  checkpoints, and closes with a final block plus a daily summary with
-  backlinks for future tasks — so an interrupted session leaves a partial,
+  checkpoints, and closes with a final block plus one tiny ELI5 Today card with
+  a detailed-note backlink (or an explicitly configured legacy DailyNote/none)
+  — so an interrupted session leaves a partial,
   resumable record instead of nothing. A bundled `UserPromptSubmit` hook
   notices the valid opt-in config and adds the journal reminder to each
   later prompt, so the skill no longer has to discover a file before it has

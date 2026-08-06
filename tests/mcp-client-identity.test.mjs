@@ -173,10 +173,28 @@ test("host manifests share the coordinator-capable plugin version", async () => 
     readJson("plugins/recall/.claude-plugin/plugin.json"),
   ]);
 
-  assert.equal(codexPlugin.version, "0.13.0");
+  assert.equal(codexPlugin.version, "0.14.0");
   assert.equal(claudePlugin.version, codexPlugin.version);
   const desktop = await readJson("desktop-extensions/recall/manifest.json");
   assert.equal(desktop.version, "0.7.1");
+});
+
+test("Recall skills require full production note URLs in chat", async () => {
+  const skillPaths = [
+    "plugins/recall/skills/recall/SKILL.md",
+    "plugins/recall/skills/recall-journal/SKILL.md"
+  ];
+  const skills = await Promise.all(
+    skillPaths.map((relativePath) =>
+      readFile(new URL(relativePath, repoRoot), "utf8")
+    )
+  );
+
+  for (const skill of skills) {
+    assert.match(skill, /chat/i);
+    assert.match(skill, /https:\/\/recall\.nerdout\.com/);
+    assert.match(skill, /relative \`\/notes\/\.\.\.\` path/);
+  }
 });
 
 test("the versioned in-app OAuth coordinator is generated and inspect stays read-only", async (t) => {

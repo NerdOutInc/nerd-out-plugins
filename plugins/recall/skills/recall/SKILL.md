@@ -55,6 +55,14 @@ Recall settings and update `NERD_OUT_MCP_TOKEN`.
   requires that `workspaceId`; Project-filtered note results exclude DailyNotes.
 - Use `list_note_collaborators` only for shared named notes.
 
+## Links in chat
+
+When linking to a Recall note in a user-facing chat response, use a Markdown
+link whose complete URL starts with `https://recall.nerdout.com`. Never expose
+a relative `/notes/...` path as the chat destination. Prefer the MCP result's
+absolute `href`; if a result is relative, resolve it against
+`https://recall.nerdout.com` before presenting it.
+
 ## Writes
 
 Write tools are advertised only when at least one workspace is set to Write in
@@ -63,6 +71,12 @@ the app's Settings -> MCP Server per-workspace access policy.
 - Use `create_note` for new named notes. To file one in a Recall Project, pass
   both the selected `workspaceId` and a `projectId` returned by `list_projects`;
   never guess an id or silently retry without it after a Project-target error.
+- Use `create_today_note` for one short Today timeline summary when the caller
+  has an explicit writable `workspaceId` and a stable retry key. Keep the title
+  and body plain and tiny, pass the same-workspace `projectId` when needed, and
+  use real `backlinks` to connect the card to a detailed note. Repeating the
+  identical `idempotencyKey` request returns the original card; a changed
+  request fails closed.
 - Use `update_note_content` with `mode: "append"` when adding a journal entry,
   update, or note section.
 - Use `update_note_content` with `mode: "replace"` only when the user explicitly
