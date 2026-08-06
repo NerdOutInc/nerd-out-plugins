@@ -55,6 +55,14 @@ Recall settings and update `NERD_OUT_MCP_TOKEN`.
   requires that `workspaceId`; Project-filtered note results exclude DailyNotes.
 - Use `list_note_collaborators` only for shared named notes.
 
+## Links in chat
+
+When linking to a Recall note in a user-facing chat response, use a Markdown
+link whose complete URL starts with `https://recall.nerdout.com`. Never expose
+a relative `/notes/...` path as the chat destination. Prefer the MCP result's
+absolute `href`; if a result is relative, resolve it against
+`https://recall.nerdout.com` before presenting it.
+
 ## Writes
 
 Write tools are advertised only when at least one workspace is set to Write in

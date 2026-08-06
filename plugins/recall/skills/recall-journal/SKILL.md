@@ -313,6 +313,11 @@ At the end of meaningful work, close the live entry:
    let it update or restart, then retry later. Never claim a summary landed
    when it did not.
 
+Whenever the final chat response links to the detailed journal entry or any
+other Recall note, use a Markdown link whose complete URL starts with
+`https://recall.nerdout.com`. Never present a relative `/notes/...` path as a
+chat link; resolve a relative MCP `href` against that origin first.
+
 The Today card should read like an explanation to a five-year-old. Good:
 `Made journal updates easy to scan` / `Recall can now show one tiny update for
 each finished job.` Bad: `Implemented idempotent MCP Yjs timeline dispatch.`

@@ -262,8 +262,11 @@ test("injects none for legacy dailyNote false and explicit summaryTarget none", 
   }
 });
 
-test("rejects contradictory or unknown v2 summary targets", () => {
+test("rejects missing, contradictory, or unknown v2 summary target compatibility values", () => {
   for (const journal of [
+    { summaryTarget: "today" },
+    { summaryTarget: "dailyNote" },
+    { summaryTarget: "none" },
     { dailyNote: true, summaryTarget: "today" },
     { dailyNote: false, summaryTarget: "dailyNote" },
     { dailyNote: true, summaryTarget: "none" },

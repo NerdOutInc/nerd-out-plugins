@@ -77,10 +77,7 @@ function resolveSummaryTarget(journal, supportsSummaryTarget) {
     return null;
   }
   const canonicalDailyNote = journal.summaryTarget === "dailyNote";
-  if (
-    journal.dailyNote !== undefined &&
-    journal.dailyNote !== canonicalDailyNote
-  ) {
+  if (journal.dailyNote !== canonicalDailyNote) {
     return null;
   }
   return journal.summaryTarget;
