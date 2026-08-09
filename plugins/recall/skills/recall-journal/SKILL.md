@@ -1,6 +1,6 @@
 ---
 name: recall-journal
-description: Keep a concise, searchable journal of agent work in Recall and read it back as the agent's long-term memory. Use when the user invokes the recall-journal skill ($recall:recall-journal in Codex, /recall:recall-journal in Claude Code), asks to configure or reconfigure where journaling goes, or when plugin lifecycle context reports a valid recall-journal.json destination for the current agent. Configure either the current filesystem project or a global default, select a write-ready Recall workspace and optional Recall Project, recall and cite relevant prior notes before deciding, journal meaningful work live under a unique task marker, and add a tiny ELI5 summary to the configured Today timeline, legacy DailyNote, or neither.
+description: Keep a concise, searchable journal of agent work in Recall and read it back as the agent's long-term memory. Use when the user invokes the recall-journal skill ($recall:recall-journal in Codex, /recall:recall-journal in Claude Code), asks to configure or reconfigure where journaling goes, or when plugin lifecycle context reports a valid recall-journal.json destination for the current agent. Configure either the current filesystem project or a global default, select a write-ready Recall workspace and optional Recall Project, recall and cite relevant prior notes before deciding, journal meaningful work live under a unique task marker, add a tiny ELI5 summary to the configured Today timeline or no day summary, and migrate retired legacy DailyNote summary targets the first time they appear.
 ---
 
 # Recall Journal
@@ -93,8 +93,11 @@ directly, but always perform the live validation above before implicit writes.
 Use the summary target supplied by the hook context. In v2 it comes from
 `journal.summaryTarget`: `today`, `dailyNote`, or `none`. A legacy config with
 no `summaryTarget` maps `dailyNote: false` to `none` and `true` or an omitted
-value to `dailyNote`. The detailed named-note journal always remains the source
-of truth; the summary target controls only the short day-level index.
+value to `dailyNote`. A target that resolves to `dailyNote` is stale — the
+Recall server has retired DailyNote creation — so handle it through
+"Migrating a retired DailyNote target" below and never write a DailyNote
+summary. The detailed named-note journal always remains the source of truth;
+the summary target controls only the short day-level index.
 
 Distinguish explicit from implicit activation. An explicit skill invocation
 (`$recall:recall-journal` in Codex,
@@ -118,8 +121,9 @@ the user assumes is known ("like last time", "continue where we left off",
   project names, error strings, and identifiers from the task.
 - Use `semantic_search`, when available, for concepts and paraphrases that
   exact terms would miss.
-- Use `list_notes` or recent Today/DailyNote entries when the user points at
-  time rather than topic ("what did we do yesterday?", "where did we leave off?").
+- Use `list_notes`, recent Today entries, or historical DailyNotes when the
+  user points at time rather than topic ("what did we do yesterday?", "where
+  did we leave off?").
 - Read promising results with `read_note` and treat them as context, not
   authority: verify important claims against the current checkout before
   relying on them.
@@ -272,8 +276,6 @@ recovery stall the task itself:
   an error or lost response, repeat the exact same request once; a matching
   note returns unchanged and a different request fails closed. Verify the
   returned workspace, optional Project, uuid, href, and positive `timelineAt`.
-- **Legacy DailyNote append:** the summary embeds the marker, so read the
-  DailyNote and append only when the marker is absent.
 - If a recovery readback itself fails, report the journal state as unknown
   rather than claiming or guessing that any write landed.
 
@@ -303,12 +305,13 @@ At the end of meaningful work, close the live entry:
      Add exactly one real backlink titled `Read the full journal entry` to the
      detailed named note. This is a scan-friendly status card, not a second
      technical journal.
-   - **dailyNote:** use the legacy DailyNote protocol below.
+   - **dailyNote:** retired. Never write the DailyNote; keep the detailed
+     entry, skip the day summary, and run the one-time migration below.
    - **none:** write no day-summary note.
 4. Verify every summary write. If `create_today_note` is not in the tool catalog,
    keep the finalized detailed note, skip the Today summary, and tell the user
    to update/restart Recall; never fall back to `create_note.placement` or
-   DailyNote. If dispatch reports an unknown tool/web method, Recall's native
+   the retired DailyNote. If dispatch reports an unknown tool/web method, Recall's native
    catalog is ahead of its hosted/cached web app—bring the main window forward,
    let it update or restart, then retry later. Never claim a summary landed
    when it did not.
@@ -322,42 +325,47 @@ The Today card should read like an explanation to a five-year-old. Good:
 `Made journal updates easy to scan` / `Recall can now show one tiny update for
 each finished job.` Bad: `Implemented idempotent MCP Yjs timeline dispatch.`
 
-### Legacy DailyNote mode
+### Migrating a retired DailyNote target
 
-Use this daily-note template, where `<agent>` is the agent's name ("Codex" or
-"Claude Code"):
+The Recall server no longer creates DailyNotes: a missing DailyNote is no
+longer lazily materialized, and `update_note_content` against one fails with
+"Note not found. Daily Notes can no longer be created; use placement=today
+when creating a note." Plugin versions up to 0.14.0 offered DailyNote day
+summaries, so an older config may still resolve its summary target to
+`dailyNote`. That target now means "needs migration", never "write a
+DailyNote":
 
-```text
-## <agent> — <task title>
+1. Journal the detailed named-note entry exactly as usual; the destination is
+   unaffected.
+2. When finalizing the session's first meaningful task, ask the user once
+   whether to switch this journal's summary target to the **Today timeline**
+   (recommended when `create_today_note` is advertised) or to **no day
+   summary**. On an explicit skill invocation, ask right away instead.
+3. Apply the choice through the summary-target migration in
+   [references/configuration.md](references/configuration.md): write the
+   canonical pair atomically and preserve every saved destination, translating
+   a v1 file to v2.
+4. If the user defers, leave the config unchanged, skip day summaries, do not
+   ask again this session, and mention the skipped summary briefly in the
+   final response — it is not a journaling failure.
 
-<one or two sentence summary>
-Decisions: <short list or none>
-Tests: <short result or none>
-Follow-ups: <short list or none>
-Task marker: <marker>
-```
-
-When the configured target is `dailyNote`, send the detailed named note as a
-backlink in the `backlinks` field rather than pasting a fake Markdown URL. Preserve existing
-daily content by using `mode: "append"`. Never assign the DailyNote to a Recall
-Project. For the effective workspace, use the
-current date as the DailyNote identifier
-`date=YYYY-MM-DD&workspaceId=<effective-workspace-id>`; the journal MCP lazily
-materializes a missing DailyNote from that identifier. If that
-write is rejected by workspace readiness or encryption state, save the named
-note but report that the daily summary did not succeed.
+For historical context: these summaries formerly lived in one workspace-level
+DailyNote per day, as appended `## <agent> — <task title>` blocks carrying a
+`Task marker: <marker>` line and a backlink to the detailed note. Existing
+DailyNotes remain readable — the time-based lookups in "Recall before
+working" still apply — but they are archive, not a write target.
 
 ## Read and maintenance operations
 
-- Use `list_notes` for a lightweight archive index and to locate today's
-  DailyNote or prior named notes.
+- Use `list_notes` for a lightweight archive index and to locate prior named
+  notes or historical DailyNotes.
 - Use `read_note` for full text or HTML when a note's details matter.
 - Use `keyword_search` for exact terms, paths, and identifiers; use
   `semantic_search` for concepts and paraphrases.
 - Use `update_note_content` with `mode: "append"` for new dated entries and
   `mode: "replace"` only when the user explicitly asks to rewrite a note.
 - Keep summaries short enough to scan. The named note is the durable detail;
-  Today or the legacy DailyNote is only the day's navigation page.
+  the Today card is only the day's navigation page.
 
 ## Failure and safety rules
 
@@ -369,6 +377,9 @@ note but report that the daily summary did not succeed.
 - Never use a Recall Project that is missing, blank, archived, deleted, or in a
   different workspace. Stop named-note writes and ask for reconfiguration.
 - Never treat a failed MCP response as a successful journal write.
+- Never write or append a DailyNote summary: the server has retired DailyNote
+  creation, and a config that still selects it gets the one-time migration
+  prompt instead.
 - If the MCP server is unreachable (unable to connect to `127.0.0.1:38473`),
   the Recall Mac app is not running or its MCP server is disabled —
   report that plainly (a locked screen or closed windows never cause this)

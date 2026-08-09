@@ -13,8 +13,10 @@ HTTPS and can never reach a loopback listener), so this plugin ships a
 runs a bundled copy of [`mcp-remote`](https://github.com/geelen/mcp-remote)
 (MIT — `bridge/LICENSE-mcp-remote.txt`) that proxies stdio to the loopback
 server and handles MCP OAuth, caching tokens in `~/.mcp-auth`. Normal first use
-opens the browser. Plugin `0.14.0` adds tiny, retry-safe Today timeline journal
-summaries while retaining Project-aware destinations from `0.13.0`, the OAuth
+opens the browser. Plugin `0.15.0` retires the legacy DailyNote journal summary
+target — the Recall server no longer creates DailyNotes — and migrates stale
+configs to Today timeline or no-summary with a one-time prompt, retaining Today
+summaries from `0.14.0`, Project-aware destinations from `0.13.0`, the OAuth
 coordinator from `0.12.0`, read + write consent-scope alignment from `0.12.1`,
 and Codex hook trust preflight from `0.12.2`. A
 compatible Direct Recall build can use the coordinator to present the same
@@ -198,12 +200,14 @@ under `skills/` that contains a `SKILL.md`. It currently includes:
   Claude Code), and then journals live: it opens a marker-identified entry
   when substantive work begins, appends short progress updates at
   checkpoints, and closes with a final block plus one tiny ELI5 Today card with
-  a detailed-note backlink (or an explicitly configured legacy DailyNote/none)
-  — so an interrupted session leaves a partial,
-  resumable record instead of nothing. A bundled `UserPromptSubmit` hook
-  notices the valid opt-in config and adds the journal reminder to each
-  later prompt, so the skill no longer has to discover a file before it has
-  been loaded. The reminder names the configured workspace and works in both
+  a detailed-note backlink (or none when day summaries are disabled) — so an
+  interrupted session leaves a partial, resumable record instead of nothing.
+  A config that still selects the retired legacy DailyNote summary target gets
+  a one-time prompt to switch to Today or none; the Recall server no longer
+  creates DailyNotes, so the skill never writes them. A bundled
+  `UserPromptSubmit` hook notices the valid opt-in config and adds the journal
+  reminder to each later prompt, so the skill no longer has to discover a file
+  before it has been loaded. The reminder names the configured workspace and works in both
   directions: it tells the agent to search existing journal notes when a
   task may relate to prior work — so the journal is read back as memory, not
   just written — and to open, update, and finalize the task's entry as the
