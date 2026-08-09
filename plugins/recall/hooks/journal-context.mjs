@@ -324,7 +324,7 @@ function buildHookOutput(input, env = process.env) {
     config.summaryTarget === "today"
       ? `The journal summary target is the Today timeline: after finalizing the detailed note, create exactly one tiny ELI5 Today note with create_today_note, workspaceId ${destination.workspace.id}${destination.recallProject ? `, projectId ${destination.recallProject.id}` : ""}, the task marker as idempotencyKey, and a backlink to the detailed note; never update DailyNote for this mode. `
       : config.summaryTarget === "dailyNote"
-        ? `The configured day-summary target is the legacy DailyNote, which the Recall server has retired: a missing DailyNote can no longer be created, so never write or append a DailyNote summary. Journal and finalize the detailed named-note entry normally with no day summary; when finalizing meaningful work, ask the user once whether to switch this journal's summary target to the Today timeline or to no day summary, and apply the choice through the migration flow in ${context.skillName}. `
+        ? `The configured day-summary target is the legacy DailyNote, which the Recall server has retired: a missing DailyNote can no longer be created, so never write or append a DailyNote summary. Journal and finalize the detailed named-note entry normally with no day summary; when finalizing meaningful work, ask the user once whether to switch this journal's summary target to the Today timeline (offered only when create_today_note is advertised) or to no day summary, and apply the choice through the migration flow in ${context.skillName}. `
         : "This journal disables day-summary notes; finalize only the detailed named-note entry. ";
 
   return {

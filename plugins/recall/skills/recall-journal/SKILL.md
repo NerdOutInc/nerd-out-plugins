@@ -338,9 +338,11 @@ DailyNote":
 1. Journal the detailed named-note entry exactly as usual; the destination is
    unaffected.
 2. When finalizing the session's first meaningful task, ask the user once
-   whether to switch this journal's summary target to the **Today timeline**
-   (recommended when `create_today_note` is advertised) or to **no day
-   summary**. On an explicit skill invocation, ask right away instead.
+   where the summary target should go, mirroring first setup: offer the
+   **Today timeline** (recommended) only when `create_today_note` is in the
+   current tool catalog, and always offer **no day summary**. When Today is
+   unavailable, say that updating/restarting Recall enables it; the user may
+   also defer. On an explicit skill invocation, ask right away instead.
 3. Apply the choice through the summary-target migration in
    [references/configuration.md](references/configuration.md): write the
    canonical pair atomically and preserve every saved destination, translating

@@ -171,11 +171,12 @@ whose `journal.dailyNote` is `true` or omitted — is stale. Its destinations
 stay fully valid and detailed named-note journaling continues unchanged; only
 the day-summary setting needs a one-time migration:
 
-1. Ask the user once whether to switch the summary target to **Today
-   timeline** (recommended when `create_today_note` is advertised) or **no day
-   summary**. On an explicit invocation ask immediately; during implicit
-   journaling ask when finalizing the task's entry instead of interrupting the
-   work.
+1. Ask the user once where the summary target should go. As in first setup,
+   offer **Today timeline** (recommended) only when `create_today_note` is
+   advertised, and always offer **no day summary**; when Today is unavailable,
+   explain that updating/restarting Recall enables it and that deferring is
+   fine. On an explicit invocation ask immediately; during implicit journaling
+   ask when finalizing the task's entry instead of interrupting the work.
 2. On a choice, write the canonical pair atomically as in first setup,
    preserving every saved destination unchanged and translating a v1 file to
    v2. Selecting Today still requires `create_today_note` in the current tool

@@ -288,7 +288,11 @@ test("marks every dailyNote-mapped summary target for one-time migration", () =>
     const label = JSON.stringify(config.journal);
     assert.match(context, /Recall server has retired/, label);
     assert.match(context, /never write or append a DailyNote summary/, label);
-    assert.match(context, /Today timeline or to no day summary/, label);
+    assert.match(
+      context,
+      /Today timeline \(offered only when create_today_note is advertised\) or to no day summary/,
+      label,
+    );
     assert.match(context, /migration flow in \$recall:recall-journal/, label);
     assert.equal(
       context.includes("keep the DailyNote workspace-level"),
