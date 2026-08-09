@@ -262,6 +262,46 @@ test("injects none for legacy dailyNote false and explicit summaryTarget none", 
   }
 });
 
+test("marks every dailyNote-mapped summary target for one-time migration", () => {
+  const v2Canonical = validV2Config();
+  v2Canonical.journal = { dailyNote: true, summaryTarget: "dailyNote" };
+  const v2OmittedJournal = validV2Config();
+  delete v2OmittedJournal.journal;
+
+  for (const config of [
+    validConfig(),
+    validV2Config(),
+    v2Canonical,
+    v2OmittedJournal,
+  ]) {
+    const result = runHook({
+      environment: {
+        ...cleanEnvironment(),
+        CODEX_HOME: makeConfigDirectory(config),
+        PLUGIN_ROOT: pluginRoot,
+      },
+    });
+
+    assert.equal(result.status, 0);
+    const context = JSON.parse(result.stdout).hookSpecificOutput
+      .additionalContext;
+    const label = JSON.stringify(config.journal);
+    assert.match(context, /Recall server has retired/, label);
+    assert.match(context, /never write or append a DailyNote summary/, label);
+    assert.match(
+      context,
+      /Today timeline \(offered only when create_today_note is advertised\) or to no day summary/,
+      label,
+    );
+    assert.match(context, /migration flow in \$recall:recall-journal/, label);
+    assert.equal(
+      context.includes("keep the DailyNote workspace-level"),
+      false,
+      label,
+    );
+  }
+});
+
 test("rejects missing, contradictory, or unknown v2 summary target compatibility values", () => {
   for (const journal of [
     { summaryTarget: "today" },
@@ -329,7 +369,7 @@ test("injects the configured Recall Project and exact named-note targeting", () 
     context,
     /pass both workspaceId workspace-id and projectId recall-project-id/,
   );
-  assert.match(context, /DailyNote workspace-level/);
+  assert.match(context, /never write or append a DailyNote summary/);
 });
 
 test("activates a project-only v2 config only inside the configured filesystem project", () => {
@@ -614,7 +654,7 @@ test("stays silent when hook input is invalid JSON", () => {
   assert.equal(result.stderr, "");
 });
 
-test("defaults an omitted daily note setting to enabled", () => {
+test("maps an omitted daily note setting to the retired-target migration", () => {
   const config = validConfig();
   delete config.journal;
 
@@ -627,8 +667,11 @@ test("defaults an omitted daily note setting to enabled", () => {
   });
 
   assert.equal(result.status, 0);
-  assert.notEqual(result.stdout, "");
   assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(context, /Recall server has retired/);
+  assert.match(context, /never write or append a DailyNote summary/);
 });
 
 test("uses the Codex home-directory fallback", () => {

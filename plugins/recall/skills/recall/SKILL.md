@@ -81,6 +81,10 @@ the app's Settings -> MCP Server per-workspace access policy.
   update, or note section.
 - Use `update_note_content` with `mode: "replace"` only when the user explicitly
   wants to replace the whole note body.
+- The server has retired DailyNote creation: `update_note_content` against a
+  missing DailyNote fails with "Note not found. Daily Notes can no longer be
+  created; use placement=today when creating a note." Use `create_today_note`
+  for new day-level notes; existing DailyNotes remain readable.
 
 Never invent note content that should come from the user's notes. Read or search
 first, then make the smallest write that satisfies the request.

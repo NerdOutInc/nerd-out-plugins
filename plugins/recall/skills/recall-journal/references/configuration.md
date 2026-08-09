@@ -43,14 +43,17 @@ New writes use version 2:
 ```
 
 `global` and `projects` are independently optional, but at least one valid
-destination must exist. `journal.summaryTarget` is `"today"`, `"dailyNote"`,
-or `"none"`. Keep `journal.dailyNote` for older plugin versions and always
-write the canonical pair: Today is `{ "summaryTarget": "today", "dailyNote":
-false }`, legacy DailyNote is `{ "summaryTarget": "dailyNote", "dailyNote":
-true }`, and no day summary is `{ "summaryTarget": "none", "dailyNote": false
-}`. When `summaryTarget` is absent, legacy `dailyNote: false` means `none` and
-`true` or an omitted value means `dailyNote`. Reject an explicit pair that
-contradicts these mappings. Omit `recallProject` to journal named notes at the
+destination must exist. `journal.summaryTarget` reads as `"today"`,
+`"dailyNote"`, or `"none"`, but new writes may only select Today or none. Keep
+`journal.dailyNote` for older plugin versions and always write the canonical
+pair: Today is `{ "summaryTarget": "today", "dailyNote": false }` and no day
+summary is `{ "summaryTarget": "none", "dailyNote": false }`. The legacy pair
+`{ "summaryTarget": "dailyNote", "dailyNote": true }` remains readable from
+older configs but is never written anymore: the Recall server has retired
+DailyNote creation, so that target requires the migration below. When
+`summaryTarget` is absent, legacy `dailyNote: false` means `none` and `true`
+or an omitted value means the retired `dailyNote` target. Reject an explicit
+pair that contradicts these mappings. Omit `recallProject` to journal named notes at the
 workspace root; explicit `null` is invalid. Every filesystem-project key must
 be an absolute, non-root path.
 
@@ -70,9 +73,10 @@ The hook continues to read version 1:
 }
 ```
 
-Treat a valid v1 file exactly as it works today until the user explicitly asks
-to reconfigure a destination. During that explicit reconfiguration, translate
-all preserved v1 destinations to v2 and update only the requested destination.
+Treat a valid v1 file's destinations exactly as they work today until the user
+explicitly asks to reconfigure one. During that explicit reconfiguration — or
+a confirmed summary-target migration — translate all preserved v1 destinations
+to v2 and update only the requested setting.
 
 ## Resolve the current filesystem project
 
@@ -111,9 +115,10 @@ valid effective destination stays silent.
    Recall Project or one exact Project from the returned catalog, shown by name
    and id.
 5. Ask where the short day summary should go. If `create_today_note` is in the
-   MCP tool catalog, offer **Today timeline** (recommended), **legacy DailyNote**,
-   and **no day summary**. If it is absent, offer only DailyNote or none and
-   explain that Today summaries require an updated/restarted Recall app. Never
+   MCP tool catalog, offer **Today timeline** (recommended) and **no day
+   summary**. If it is absent, offer only no day summary and explain that Today
+   summaries require an updated/restarted Recall app; the user can reconfigure
+   after updating. Never offer the retired legacy DailyNote, and never
    configure Today by assuming `create_note.placement` will work.
 6. Confirm the scope, absolute filesystem path when applicable, workspace,
    optional Recall Project, and summary target. Immediately re-run
@@ -142,9 +147,11 @@ When the user explicitly asks to reconfigure where journaling goes:
    plus explicit choices to keep it, change it, or clear it to the workspace
    root. If there are no Projects, clearing a prior stale Project still requires
    confirmation.
-4. Ask whether to keep or change the summary target. Offer Today only when
-   `create_today_note` is currently advertised, and always write the canonical
-   `summaryTarget` + `dailyNote` compatibility pair.
+4. Ask whether to keep or change the summary target. Offer only Today — and
+   only when `create_today_note` is currently advertised — and no day summary;
+   never offer the retired legacy DailyNote. When the saved target resolves to
+   `dailyNote`, keeping it is not an option: run the migration below instead.
+   Always write the canonical `summaryTarget` + `dailyNote` compatibility pair.
 5. Revalidate and atomically save only the selected destination and summary
    setting. Preserve every other destination.
 
@@ -154,6 +161,30 @@ the global destination if one exists. A project-only config becomes disabled
 outside that saved path automatically. When removing the final remaining
 destination, explicitly confirm disabling journaling and remove the config file
 instead of writing an invalid empty v2 object.
+
+## Migrating a retired DailyNote summary target
+
+The Recall server no longer creates DailyNotes, so a config whose effective
+summary target resolves to `dailyNote` — an explicit
+`summaryTarget: "dailyNote"` pair, or a v1 or v2 file with no `summaryTarget`
+whose `journal.dailyNote` is `true` or omitted — is stale. Its destinations
+stay fully valid and detailed named-note journaling continues unchanged; only
+the day-summary setting needs a one-time migration:
+
+1. Ask the user once where the summary target should go. As in first setup,
+   offer **Today timeline** (recommended) only when `create_today_note` is
+   advertised, and always offer **no day summary**; when Today is unavailable,
+   explain that updating/restarting Recall enables it and that deferring is
+   fine. On an explicit invocation ask immediately; during implicit journaling
+   ask when finalizing the task's entry instead of interrupting the work.
+2. On a choice, write the canonical pair atomically as in first setup,
+   preserving every saved destination unchanged and translating a v1 file to
+   v2. Selecting Today still requires `create_today_note` in the current tool
+   catalog.
+3. If the user defers, leave the config unchanged, write no day summary, and
+   do not ask again in the same session. Never write or append a DailyNote
+   while the stale target remains, and never report the skipped summary as a
+   journaling failure.
 
 ## Compatibility failures
 
@@ -173,5 +204,5 @@ Today-summary configuration has the same fail-closed rule. If
 `create_today_note` is absent, do not save `summaryTarget: "today"`. If it is
 advertised but dispatch reports an unknown tool/web method, keep the existing
 configuration unchanged and ask the user to bring Recall forward, let the web
-build update, or restart the app. Never fall back to DailyNote or
-`create_note.placement` behind the user's back.
+build update, or restart the app. Never fall back to `create_note.placement`
+or the retired DailyNote behind the user's back.
