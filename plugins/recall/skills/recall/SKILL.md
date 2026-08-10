@@ -85,9 +85,10 @@ the app's Settings -> MCP Server per-workspace access policy.
 - Use `update_note_content` with `mode: "append"` when adding a journal entry,
   update, or note section.
 - Use `update_note_content` with `mode: "replace"` only when the user explicitly
-  wants to replace the whole note body. It never changes a note's title; when
-  the tool catalog advertises a rename capability, use that to retitle a note
-  instead of rewriting content.
+  wants to replace the whole note body. It never changes a note's title; use
+  `rename_note` (`noteType: "NamedNote"`, uuid, and the new title — advertised
+  on newer Recall builds) to retitle a named note instead of rewriting content.
+  Daily Notes and menu bar Quick Notes cannot be renamed.
 - The server has retired DailyNote creation: `update_note_content` against a
   missing DailyNote fails with "Note not found. Daily Notes can no longer be
   created; use placement=today when creating a note." Use `create_today_note`

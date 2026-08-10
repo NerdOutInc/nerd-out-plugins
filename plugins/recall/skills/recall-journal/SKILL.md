@@ -353,8 +353,10 @@ At the end of meaningful work, close out the entry:
    their place, and make sure the summary lines alone tell the story.
 2. Retitle when the thread moved. If the work drifted from what the current
    topic-phrase title says, rename the note (dateless topic phrase, as
-   always) using the MCP rename capability when the tool catalog advertises
-   one. When no rename tool is advertised, keep the existing title and
+   always) with `rename_note`, passing `noteType: "NamedNote"`, the note's
+   uuid, and the new title; the tool is advertised alongside the other write
+   tools on newer Recall builds and never touches body content. When
+   `rename_note` is not advertised, keep the existing title and
    mention in the final response that the note deserves a new name so the
    user can rename it in Recall; never fake a rename by rewriting body
    content, and never treat the missing tool as a journaling failure.
