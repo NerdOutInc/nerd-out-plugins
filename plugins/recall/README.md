@@ -13,12 +13,12 @@ HTTPS and can never reach a loopback listener), so this plugin ships a
 runs a bundled copy of [`mcp-remote`](https://github.com/geelen/mcp-remote)
 (MIT — `bridge/LICENSE-mcp-remote.txt`) that proxies stdio to the loopback
 server and handles MCP OAuth, caching tokens in `~/.mcp-auth`. Normal first use
-opens the browser. Plugin `0.15.0` retires the legacy DailyNote journal summary
-target — the Recall server no longer creates DailyNotes — and migrates stale
-configs to Today timeline or no-summary with a one-time prompt, retaining Today
-summaries from `0.14.0`, Project-aware destinations from `0.13.0`, the OAuth
-coordinator from `0.12.0`, read + write consent-scope alignment from `0.12.1`,
-and Codex hook trust preflight from `0.12.2`. A
+opens the browser. Plugin `0.16.0` makes the journal human-first — one journal
+note per chat thread with collapsible toggle entries and at most one tiny ELI5
+Today card per day — retaining the DailyNote retirement and migration from
+`0.15.0`, Today summaries from `0.14.0`, Project-aware destinations from
+`0.13.0`, the OAuth coordinator from `0.12.0`, read + write consent-scope
+alignment from `0.12.1`, and Codex hook trust preflight from `0.12.2`. A
 compatible Direct Recall build can use the coordinator to present the same
 explicit consent inside Recall without changing cache ownership. The bridge
 runs `node` from your PATH (any Node.js 18+). Both Claude (`.mcp.json`) and Codex
@@ -179,8 +179,12 @@ Recall advertises `list_notes`, `read_note`, `keyword_search`,
 Named-note list/search tools accept an explicit workspace + Project filter, and
 `create_note` can file a new named note in that exact Project.
 `create_today_note` makes one short, retry-safe Today card in an explicit
-workspace and optional Project, with real backlinks to detailed notes. The
-`create_note`, `create_today_note`, and `update_note_content` write tools appear
+workspace and optional Project, with real backlinks to detailed notes. Note
+Markdown supports `<details><summary>` blocks, which render as native
+collapsible toggles in the editor. The
+`create_note`, `create_today_note`, and `update_note_content` write tools — plus
+`rename_note` on newer app builds, for title-only renames of named notes —
+appear
 when at least one workspace is set to **Read & write** in Recall's MCP Server settings. Reads and
 writes are filtered independently by each workspace's Block / Read only / Read
 & write policy; an unconfigured workspace stays blocked.
@@ -197,20 +201,27 @@ under `skills/` that contains a `SKILL.md`. It currently includes:
   workspace and, when that workspace has Projects, an optional Recall Project.
   It saves the choice in a per-agent config (`$CODEX_HOME/recall-journal.json` for Codex,
   `$CLAUDE_CONFIG_DIR/recall-journal.json` — default `~/.claude` — for
-  Claude Code), and then journals live: it opens a marker-identified entry
-  when substantive work begins, appends short progress updates at
-  checkpoints, and closes with a final block plus one tiny ELI5 Today card with
-  a detailed-note backlink (or none when day summaries are disabled) — so an
-  interrupted session leaves a partial, resumable record instead of nothing.
+  Claude Code), and then journals live into one note per chat thread: a
+  dateless topic-phrase title, a short always-visible intro, and one
+  collapsible toggle entry per checkpoint whose summary line reads like plain
+  English while agent detail and hidden bookkeeping (journal marker, thread
+  id, timestamps) stay inside the collapsed details. The thread's agent
+  curates its own note as the work evolves — refreshing the intro, merging
+  entries, and retitling when the thread changes direction — and on days the
+  thread wraps up meaningful work it adds at most one tiny ELI5 Today card
+  with a `Full journal entry` backlink (or none when day summaries are
+  disabled) — so an interrupted session leaves a partial, resumable record
+  instead of nothing.
   A config that still selects the retired legacy DailyNote summary target gets
   a one-time prompt to switch to Today or none; the Recall server no longer
   creates DailyNotes, so the skill never writes them. A bundled
   `UserPromptSubmit` hook notices the valid opt-in config and adds the journal
   reminder to each later prompt, so the skill no longer has to discover a file
-  before it has been loaded. The reminder names the configured workspace and works in both
+  before it has been loaded. The reminder names the configured workspace — and
+  the chat thread's stable id when the host provides one — and works in both
   directions: it tells the agent to search existing journal notes when a
   task may relate to prior work — so the journal is read back as memory, not
-  just written — and to open, update, and finalize the task's entry as the
+  just written — and to open, update, and wrap up the thread's note as the
   work happens. A filesystem project can have its own destination even without
   a global default: the skill saves its canonical root path under `projects` in
   the same config. Sessions

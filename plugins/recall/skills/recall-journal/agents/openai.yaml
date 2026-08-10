@@ -1,6 +1,6 @@
 interface:
   display_name: "Recall Journal"
   short_description: "Configure and use a Project-aware Recall journal"
-  default_prompt: "Use $recall:recall-journal to configure this filesystem project or a global journal destination, optionally choose a Recall Project, and journal this task."
+  default_prompt: "Use $recall:recall-journal to configure this filesystem project or a global journal destination, optionally choose a Recall Project, and journal this thread's work."
 policy:
   allow_implicit_invocation: true
