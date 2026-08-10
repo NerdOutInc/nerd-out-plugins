@@ -182,8 +182,11 @@ note's opening entry and materialize a backlink to the predecessor with
 
 One escape hatch: when the thread pivots to work truly unrelated to the
 note's topic — not a new phase, follow-up, or tangent of the same work — open
-a second thread note for the new stream so each note stays coherent, and say
-so in both notes' entries. Splitting related work is never allowed.
+a second thread note for the new stream so each note stays coherent. Keep the
+two distinguishable during recovery: the second note's opening entry records
+that it split from the thread's first note, with a backlink, and the first
+note gets a short entry pointing at the split. Splitting related work is
+never allowed.
 
 ### Thread identity and journal markers
 
@@ -207,9 +210,15 @@ depends on locating this thread's note — continuing after compaction,
 recovering a lost uuid, deduplicating — read each candidate with `read_note`
 and keep only notes whose body literally contains `Journal marker: <marker>`
 (or, when searching by thread, `thread <thread-id>`). Count matches after
-that literal filter, never from raw search hits: act on exactly one literal
-marker match, and treat zero or several as "not found" or "ambiguous", never
-as license to guess. Titles and dates never establish identity.
+that literal filter, never from raw search hits. A journal marker identifies
+exactly one note: act on exactly one literal match, and treat zero or
+several as "not found" or "ambiguous", never as license to guess. A thread
+id legitimately matches two notes only after a permitted split; the notes
+cover unrelated topics by construction and cross-link each other, so
+continue the one whose topic matches the current work, and when neither
+clearly matches, continue the thread's first note and record the uncertainty
+in the new entry instead of guessing. Titles and dates never establish
+identity.
 
 ### What the note looks like
 

@@ -228,6 +228,32 @@ test("injects the Today summary target without exposing a config path", () => {
   assert.equal(context.includes(configDirectory), false);
 });
 
+test("keys the Today card by thread id only when the host provides one", () => {
+  const config = validV2Config();
+  config.journal = { dailyNote: false, summaryTarget: "today" };
+  const configDirectory = makeConfigDirectory(config);
+  const environment = {
+    ...cleanEnvironment(),
+    CODEX_HOME: configDirectory,
+    PLUGIN_ROOT: pluginRoot,
+  };
+
+  const withThread = runHook({
+    environment,
+    input: { hook_event_name: "UserPromptSubmit", session_id: "thread-123" },
+  });
+  assert.match(
+    JSON.parse(withThread.stdout).hookSpecificOutput.additionalContext,
+    /the thread id plus the date as idempotencyKey/,
+  );
+
+  const withoutThread = runHook({ environment });
+  assert.match(
+    JSON.parse(withoutThread.stdout).hookSpecificOutput.additionalContext,
+    /the thread's first journal marker plus the date as idempotencyKey/,
+  );
+});
+
 test("passes the configured Recall Project to Today summaries", () => {
   const config = validV2Config();
   config.journal = { dailyNote: false, summaryTarget: "today" };
@@ -558,7 +584,13 @@ test("accepts a thread_id when no session_id is provided", () => {
 });
 
 test("omits the thread identity when the session id is not a plain token", () => {
-  for (const sessionId of ["bad id", "line\nbreak", "w".repeat(129), 42]) {
+  for (const sessionId of [
+    "bad id",
+    "line\nbreak",
+    "thread-123\n",
+    "w".repeat(129),
+    42,
+  ]) {
     const result = runHook({
       environment: {
         ...cleanEnvironment(),
