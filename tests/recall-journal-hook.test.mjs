@@ -223,6 +223,7 @@ test("injects the Today summary target without exposing a config path", () => {
   assert.match(context, /summary target is the Today timeline/);
   assert.match(context, /create_today_note/);
   assert.match(context, /idempotencyKey/);
+  assert.match(context, /### Full journal entry/);
   assert.match(context, /workspaceId workspace-id/);
   assert.equal(context.includes(configDirectory), false);
 });
@@ -512,10 +513,71 @@ test("tells the agent to open, update, and finalize the entry live", () => {
   const context = JSON.parse(result.stdout).hookSpecificOutput
     .additionalContext;
   assert.match(context, /when substantive work begins/);
-  assert.match(context, /fresh task marker after recall/);
-  assert.match(context, /progress updates at checkpoints/);
-  assert.match(context, /finalize the entry before the final response/);
+  assert.match(context, /exactly one journal note/);
+  assert.match(context, /toggle entries at checkpoints/);
+  assert.match(context, /wrap up the entry before the final response/);
   assert.match(context, /Skip trivial acknowledgements/);
+});
+
+test("injects the host session id as the thread's journal identity", () => {
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: {
+      hook_event_name: "UserPromptSubmit",
+      session_id: "b425db1a-153d-45d2-850c-93ac0271f495",
+    },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(context, /stable id is b425db1a-153d-45d2-850c-93ac0271f495/);
+  assert.match(context, /anchors the thread's single journal note/);
+});
+
+test("accepts a thread_id when no session_id is provided", () => {
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", thread_id: "thread-123" },
+  });
+
+  assert.equal(result.status, 0);
+  assert.match(
+    JSON.parse(result.stdout).hookSpecificOutput.additionalContext,
+    /stable id is thread-123/,
+  );
+});
+
+test("omits the thread identity when the session id is not a plain token", () => {
+  for (const sessionId of ["bad id", "line\nbreak", "w".repeat(129), 42]) {
+    const result = runHook({
+      environment: {
+        ...cleanEnvironment(),
+        CODEX_HOME: makeConfigDirectory(),
+        PLUGIN_ROOT: pluginRoot,
+      },
+      input: { hook_event_name: "UserPromptSubmit", session_id: sessionId },
+    });
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, "");
+    const context = JSON.parse(result.stdout).hookSpecificOutput
+      .additionalContext;
+    const label = JSON.stringify(sessionId);
+    assert.equal(context.includes("stable id"), false, label);
+    if (typeof sessionId === "string") {
+      assert.equal(context.includes(sessionId), false, label);
+    }
+  }
 });
 
 test("flattens and truncates workspace names in the injected context", () => {
@@ -607,7 +669,7 @@ test("injects the namespaced Claude Code skill when its config is valid", () => 
   assert.match(output.hookSpecificOutput.additionalContext, /semantic_search/);
   assert.match(
     output.hookSpecificOutput.additionalContext,
-    /progress updates at checkpoints/,
+    /toggle entries at checkpoints/,
   );
 });
 

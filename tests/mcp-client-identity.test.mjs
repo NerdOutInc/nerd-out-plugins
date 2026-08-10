@@ -173,7 +173,7 @@ test("host manifests share the coordinator-capable plugin version", async () => 
     readJson("plugins/recall/.claude-plugin/plugin.json"),
   ]);
 
-  assert.equal(codexPlugin.version, "0.15.0");
+  assert.equal(codexPlugin.version, "0.16.0");
   assert.equal(claudePlugin.version, codexPlugin.version);
   const desktop = await readJson("desktop-extensions/recall/manifest.json");
   assert.equal(desktop.version, "0.7.1");
