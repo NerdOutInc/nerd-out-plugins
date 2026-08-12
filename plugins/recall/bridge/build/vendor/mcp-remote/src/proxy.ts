@@ -11,13 +11,14 @@
 
 import { EventEmitter } from 'events'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import {
   connectToRemoteServer,
   log,
   debugLog,
   mcpProxy,
   parseCommandLineArgs,
-  setupSignalHandlers,
+  setupShutdownHandler,
   TransportStrategy,
   discoverOAuthServerInfo,
 } from './lib/utils'
@@ -91,6 +92,30 @@ async function runProxy(
 
   // Keep track of the server instance for cleanup
   let server: any = null
+  let remoteTransport: Transport | undefined
+
+  const cleanup = async () => {
+    // A refresh rotation may be mid-flight (response received server-side,
+    // tokens not yet persisted); let it settle before anything is torn down
+    // or the lease is force-released.
+    await authProvider.waitForCredentialMutationQuiescence()
+    await remoteTransport?.close()
+    await localTransport.close()
+    await authProvider.invalidateCredentials('verifier')
+    await authProvider.releaseCredentialLease()
+    // Only close the server if it was initialized
+    if (server) {
+      server.close()
+    }
+  }
+  // Register shutdown handlers BEFORE connecting: connecting is exactly when
+  // an expired access token forces a refresh (the server rotates the refresh
+  // token), and an unhandled signal there drops the rotation the server has
+  // already committed — the stranded old token later trips reuse detection
+  // and revokes the grant. The stdin keep-alive is attached only after the
+  // local transport starts, because resuming stdin with no data listener
+  // would discard the MCP client's first messages.
+  const shutdown = setupShutdownHandler(cleanup)
 
   // Define an auth initializer function
   const authInitializer = async () => {
@@ -115,7 +140,7 @@ async function runProxy(
 
   try {
     // Connect to remote server with lazy authentication
-    const remoteTransport = await connectToRemoteServer(null, serverUrl, authProvider, headers, authInitializer, transportStrategy)
+    remoteTransport = await connectToRemoteServer(null, serverUrl, authProvider, headers, authInitializer, transportStrategy)
 
     // Set up bidirectional proxy between local and remote transports
     mcpProxy({
@@ -130,18 +155,9 @@ async function runProxy(
     log(`Proxy established successfully between local STDIO and remote ${remoteTransport.constructor.name}`)
     log('Press Ctrl+C to exit')
 
-    // Setup cleanup handler
-    const cleanup = async () => {
-      await remoteTransport.close()
-      await localTransport.close()
-      await authProvider.invalidateCredentials('verifier')
-      await authProvider.releaseCredentialLease()
-      // Only close the server if it was initialized
-      if (server) {
-        server.close()
-      }
-    }
-    setupSignalHandlers(cleanup)
+    // Keep the process alive and shut down when the MCP client closes stdin
+    process.stdin.resume()
+    process.stdin.on('end', shutdown)
   } catch (error) {
     log('Fatal error:', error)
     await authProvider.invalidateCredentials('verifier')

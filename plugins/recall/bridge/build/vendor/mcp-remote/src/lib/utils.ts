@@ -1027,19 +1027,36 @@ export async function parseCommandLineArgs(args: string[], usage: string) {
  * @param cleanup Cleanup function to run on shutdown
  */
 export function setupSignalHandlers(cleanup: () => Promise<void>) {
-  process.on('SIGINT', async () => {
-    log('\nShutting down...')
-    await cleanup()
-    process.exit(0)
-  })
+  const shutdown = setupShutdownHandler(cleanup)
 
   // Keep the process alive
   process.stdin.resume()
-  process.stdin.on('end', async () => {
+  process.stdin.on('end', shutdown)
+}
+
+/**
+ * Registers single-flight signal handlers for graceful shutdown and returns
+ * the shared shutdown function so callers can attach additional triggers
+ * (e.g. stdin end) later. SIGTERM and SIGHUP are what MCP hosts (and the
+ * Recall bridge launcher) actually send at session end. Without handlers
+ * Node dies mid-instruction, and a shutdown that lands between a
+ * token-endpoint response and the credential write strands a rotated-out
+ * refresh token on disk — presenting it later trips the server's OAuth
+ * reuse detection and revokes the grant.
+ */
+export function setupShutdownHandler(cleanup: () => Promise<void>): () => Promise<void> {
+  let shuttingDown = false
+  const shutdown = async () => {
+    if (shuttingDown) return
+    shuttingDown = true
     log('\nShutting down...')
     await cleanup()
     process.exit(0)
-  })
+  }
+  process.on('SIGINT', shutdown)
+  process.on('SIGTERM', shutdown)
+  process.on('SIGHUP', shutdown)
+  return shutdown
 }
 
 /**
