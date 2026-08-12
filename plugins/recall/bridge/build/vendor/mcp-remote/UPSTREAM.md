@@ -8,8 +8,12 @@ Recall carries a deliberately small source patch for:
 - structured authorization-URL handoff without opening a browser;
 - state-bound approval and denial callbacks;
 - cross-process OAuth credential mutation ownership;
-- atomic mode-0600 credential replacement; and
-- deterministic cleanup of PKCE verifier and lock state.
+- atomic, fsync-durable mode-0600 credential replacement;
+- deterministic cleanup of PKCE verifier and lock state; and
+- shutdown that waits out an in-flight refresh rotation (graceful
+  SIGINT/SIGTERM/SIGHUP plus a bounded quiescence wait before teardown), so a
+  server-side rotation is never left unpersisted for reuse detection to
+  revoke later.
 
 The build uses patched compatible releases of the MCP SDK and transitive HTTP
 tooling rather than freezing the upstream 2025 dependency graph with known

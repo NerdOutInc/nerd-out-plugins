@@ -3,6 +3,12 @@ import path from "node:path";
 
 export const DEFAULT_CLIENT_NAME = "Recall MCP Client";
 export const RECALL_OAUTH_SCOPE = "notes:read notes:write";
+// The single loopback host form every Recall OAuth surface registers AND
+// presents. mcp-remote's own default is `localhost` while its callback
+// listener binds 127.0.0.1, so a registration written by one flow can
+// mismatch the authorize request built by another; one shared constant keeps
+// the proxy and the in-app coordinator byte-identical here.
+export const RECALL_LOOPBACK_HOST = "127.0.0.1";
 const CLIENT_NAME_FLAG = "--client-name";
 const MAX_CLIENT_NAME_LENGTH = 100;
 
@@ -49,6 +55,8 @@ export function proxyArgs(bundlePath, serverUrl, clientName) {
     serverUrl,
     "--transport",
     "http-only",
+    "--host",
+    RECALL_LOOPBACK_HOST,
     "--static-oauth-client-metadata",
     JSON.stringify({ client_name: clientName, scope: RECALL_OAUTH_SCOPE }),
   ];
