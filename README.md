@@ -10,7 +10,7 @@ plugin, enable the local MCP listener, and prepare the pinned ACP runtime with
 one click. The sandboxed App Store build links to the verified manual steps
 below.
 
-Installation does not silently authorize note access. Plugin `0.16.0` connects
+Installation does not silently authorize note access. Plugin `0.17.0` connects
 through Recall's **local bridge**: the plugin runs a Recall-signed helper
 shipped inside Recall.app, the app verifies that helper's code signature, and
 you approve access once in a native Recall prompt the first time an agent
@@ -19,17 +19,19 @@ there is nothing for the plugin to refresh, leak, or lose. Approval covers
 every MCP client on that Mac and is revocable at any time under **Settings →
 MCP Server → Local bridge access**.
 
-`0.16.0` keeps the DailyNote retirement from `0.15.0` — the Recall server no
-longer creates DailyNotes, so stale configs migrate to Today timeline or
-no-summary with a one-time prompt — plus Today summaries from `0.14.0`,
+Against a Recall build older than the local bridge, the plugin automatically
+falls back to the browser OAuth flow; third-party MCP clients keep using OAuth
+indefinitely. Workspace block/read/write access remains a separate setting in
+every path.
+
+`0.17.0` retains the pinned OAuth loopback host and durable refresh rotation
+from `0.16.1`, the human-first journal from `0.16.0` — each chat thread keeps
+exactly one journal note with collapsible toggle entries, and days with
+finished work get at most one tiny ELI5 Today card — the DailyNote retirement
+and one-time migration from `0.15.0`, Today summaries from `0.14.0`,
 Project-aware destinations from `0.13.0`, the OAuth coordinator from `0.12.0`,
 read + write consent-scope alignment from `0.12.1`, and Codex hook trust
 preflight from `0.12.2`.
-
-Against a Recall build older than the local bridge, the plugin automatically
-falls back to the previous browser OAuth flow; third-party MCP clients keep
-using OAuth indefinitely. Workspace block/read/write access remains a separate
-setting in every path.
 
 ## Codex Plugins
 
@@ -225,11 +227,15 @@ project destinations. Each selects a Recall workspace and optional Recall
 Project. A bundled per-prompt hook detects that valid opt-in config, reminds
 the agent to search prior journal notes for
 relevant context when a task relates to earlier work, and reminds it to
-journal meaningful work live in that write-ready workspace: open a
-marker-identified entry when substantive work begins, append short progress
-updates at checkpoints, and close with a final block plus one tiny ELI5 Today
-card linked to the detail (or none when day summaries are disabled)
-— so an interrupted session leaves a partial record instead of nothing.
+journal meaningful work live in that write-ready workspace. Each chat thread
+keeps exactly one journal note — a dateless topic-phrase title, a short
+always-visible intro, and one collapsible toggle entry per checkpoint whose
+summary line stays human-readable while agent detail and hidden bookkeeping
+live inside the collapsed details — so an interrupted session leaves a
+partial record instead of nothing, and a busy thread never scatters notes.
+On days the thread wraps up meaningful work, the journal adds at most one
+tiny ELI5 Today card linking to the thread's note (or none when day summaries
+are disabled).
 A config that still selects the retired legacy DailyNote summary target gets
 a one-time prompt to switch to Today or none; the Recall server no longer
 creates DailyNotes, so the journal never writes them.

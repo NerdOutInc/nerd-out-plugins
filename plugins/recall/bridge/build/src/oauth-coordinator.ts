@@ -11,7 +11,11 @@ import fs from "node:fs/promises";
 import type { Server } from "node:http";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { clientCacheDirectory, RECALL_OAUTH_SCOPE } from "../../client-identity.mjs";
+import {
+  clientCacheDirectory,
+  RECALL_LOOPBACK_HOST,
+  RECALL_OAUTH_SCOPE,
+} from "../../client-identity.mjs";
 import { createLazyAuthCoordinator } from "../vendor/mcp-remote/src/lib/coordination";
 import {
   acquireCredentialMutationLock,
@@ -176,7 +180,9 @@ async function readConfiguredCallbackPort(serverUrlHash: string): Promise<number
       const parsed = new URL(redirectUri);
       if (
         parsed.protocol === "http:" &&
-        parsed.hostname === "127.0.0.1" &&
+        // `localhost` covers registrations written before the proxy pinned
+        // RECALL_LOOPBACK_HOST; reusing their port keeps the cache coherent.
+        (parsed.hostname === RECALL_LOOPBACK_HOST || parsed.hostname === "localhost") &&
         parsed.pathname === "/oauth/callback" &&
         parsed.port
       ) {
@@ -285,6 +291,9 @@ async function runNetworkedMode(args: CoordinatorArguments): Promise<void> {
   const terminate = async (reason: "cancelled" | "timeout") => {
     if (finishing) return;
     finishing = true;
+    // A refresh rotation may be mid-flight; let it persist before the cache
+    // is inspected for the result record and the lease is force-released.
+    await provider?.waitForCredentialMutationQuiescence();
     if (!resultWritten) {
       writeRecord({
         clientId: (await inspectCache(serverUrlHash)).clientId,
@@ -313,7 +322,7 @@ async function runNetworkedMode(args: CoordinatorArguments): Promise<void> {
       }
       callbackPort = availablePort;
     }
-    const callbackUrl = `http://127.0.0.1:${callbackPort}/oauth/callback`;
+    const callbackUrl = `http://${RECALL_LOOPBACK_HOST}:${callbackPort}/oauth/callback`;
     const discovery = await discoverOAuthServerInfo(args.serverUrl, {});
     provider = new CoordinatedNodeOAuthClientProvider(
       {
@@ -321,7 +330,7 @@ async function runNetworkedMode(args: CoordinatorArguments): Promise<void> {
         authorizationServerMetadata: discovery.authorizationServerMetadata,
         callbackPort,
         clientName: args.clientName,
-        host: "127.0.0.1",
+        host: RECALL_LOOPBACK_HOST,
         protectedResourceMetadata: discovery.protectedResourceMetadata,
         requiredClientScope: args.mode === "authorize" ? RECALL_OAUTH_SCOPE : undefined,
         serverUrl: discovery.authorizationServerUrl,

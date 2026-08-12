@@ -1,14 +1,16 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CoordinatedNodeOAuthClientProvider } from './coordinated-node-oauth-client-provider'
-import { getConfigFilePath } from './mcp-auth-config'
+import { NodeOAuthClientProvider } from './node-oauth-client-provider'
+import { acquireCredentialMutationLock, getConfigFilePath } from './mcp-auth-config'
 
 const originalConfigDirectory = process.env.MCP_REMOTE_CONFIG_DIR
 const temporaryDirectories: string[] = []
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   if (originalConfigDirectory === undefined) delete process.env.MCP_REMOTE_CONFIG_DIR
   else process.env.MCP_REMOTE_CONFIG_DIR = originalConfigDirectory
   await Promise.all(
@@ -86,4 +88,75 @@ describe('coordinated client scope upgrades', () => {
       await provider.releaseCredentialLease()
     },
   )
+})
+
+describe('refresh rotation persistence', () => {
+  const rotatedTokens = {
+    access_token: 'rotated-access',
+    refresh_token: 'rotated-refresh',
+    token_type: 'bearer',
+  }
+
+  it('reports quiescence immediately when no credential mutation is under way', async () => {
+    const { provider } = await fixture('notes:write notes:read')
+    const start = Date.now()
+    await provider.waitForCredentialMutationQuiescence()
+    expect(Date.now() - start).toBeLessThan(1_000)
+  })
+
+  it('holds shutdown until an in-flight token replacement persists', async () => {
+    const { provider, tokenPath } = await fixture('notes:write notes:read')
+    await provider.clientInformation()
+    let quiesced = false
+    const wait = provider.waitForCredentialMutationQuiescence().then(() => {
+      quiesced = true
+    })
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(quiesced).toBe(false)
+    await provider.saveTokens(rotatedTokens)
+    await wait
+    expect(JSON.parse(await fs.readFile(tokenPath, 'utf8'))).toMatchObject({
+      access_token: 'rotated-access',
+      refresh_token: 'rotated-refresh',
+    })
+    // saveTokens released the cross-process lease; another owner can acquire.
+    const lease = await acquireCredentialMutationLock('scope-upgrade', 1_000)
+    await lease.release()
+  })
+
+  it('does not hold shutdown while parked awaiting user consent', async () => {
+    const { provider } = await fixture('notes:write notes:read')
+    provider.options.authorizationUrlHandler = async () => undefined
+    await provider.clientInformation()
+    await provider.redirectToAuthorization(new URL('https://recall.example/oauth/authorize'))
+    const start = Date.now()
+    await provider.waitForCredentialMutationQuiescence()
+    expect(Date.now() - start).toBeLessThan(1_000)
+    await provider.releaseCredentialLease()
+  })
+
+  it('gives up after the bounded timeout instead of hanging shutdown', async () => {
+    const { provider } = await fixture('notes:write notes:read')
+    await provider.clientInformation()
+    const start = Date.now()
+    await provider.waitForCredentialMutationQuiescence(150)
+    const waited = Date.now() - start
+    expect(waited).toBeGreaterThanOrEqual(100)
+    expect(waited).toBeLessThan(5_000)
+    await provider.releaseCredentialLease()
+  })
+
+  it('retries transient token-write failures before surrendering a rotation', async () => {
+    const { provider, tokenPath } = await fixture('notes:write notes:read')
+    await provider.clientInformation()
+    const saveTokensSpy = vi
+      .spyOn(NodeOAuthClientProvider.prototype, 'saveTokens')
+      .mockRejectedValueOnce(new Error('transient write failure'))
+      .mockRejectedValueOnce(new Error('transient write failure'))
+    await provider.saveTokens(rotatedTokens)
+    expect(saveTokensSpy).toHaveBeenCalledTimes(3)
+    expect(JSON.parse(await fs.readFile(tokenPath, 'utf8'))).toMatchObject({
+      access_token: 'rotated-access',
+    })
+  })
 })

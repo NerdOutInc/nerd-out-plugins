@@ -53,6 +53,14 @@ function sanitizeRecallProject(project) {
   return { id: project.id, name };
 }
 
+// The host's session id is rendered unquoted and echoed into journal metadata
+// lines, so require a plain single-line token rather than repairing it.
+function sanitizeThreadId(value) {
+  return typeof value === "string" && /^[\w.:-]{1,128}$/.test(value)
+    ? value
+    : null;
+}
+
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -320,9 +328,16 @@ function buildHookOutput(input, env = process.env) {
   const projectTargeting = destination.recallProject
     ? `For named-note create, list, keyword, and semantic operations, pass both workspaceId ${destination.workspace.id} and projectId ${destination.recallProject.id}. `
     : `Target named-note create, list, keyword, and semantic operations with workspaceId ${destination.workspace.id}; this destination does not select a Recall Project. `;
+  // The host's session id anchors the thread's single journal note, so the
+  // agent can find it again after context compaction without guessing.
+  const threadId =
+    sanitizeThreadId(input.session_id) ?? sanitizeThreadId(input.thread_id);
+  const threadIdentity = threadId
+    ? `This chat thread's stable id is ${threadId}; it anchors the thread's single journal note across context compaction. `
+    : "";
   const summaryTarget =
     config.summaryTarget === "today"
-      ? `The journal summary target is the Today timeline: after finalizing the detailed note, create exactly one tiny ELI5 Today note with create_today_note, workspaceId ${destination.workspace.id}${destination.recallProject ? `, projectId ${destination.recallProject.id}` : ""}, the task marker as idempotencyKey, and a backlink to the detailed note; never update DailyNote for this mode. `
+      ? `The journal summary target is the Today timeline: on each day this thread wraps up meaningful work, create exactly one tiny ELI5 Today card with create_today_note, workspaceId ${destination.workspace.id}${destination.recallProject ? `, projectId ${destination.recallProject.id}` : ""}, ${threadId ? "the thread id" : "the thread's first journal marker"} plus the date as idempotencyKey, one or two plain sentences followed by a '### Full journal entry' heading, and one backlink titled with the journal note's current title; never update DailyNote for this mode. `
       : config.summaryTarget === "dailyNote"
         ? `The configured day-summary target is the legacy DailyNote, which the Recall server has retired: a missing DailyNote can no longer be created, so never write or append a DailyNote summary. Journal and finalize the detailed named-note entry normally with no day summary; when finalizing meaningful work, ask the user once whether to switch this journal's summary target to the Today timeline (offered only when create_today_note is advertised) or to no day summary, and apply the choice through the migration flow in ${context.skillName}. `
         : "This journal disables day-summary notes; finalize only the detailed named-note entry. ";
@@ -333,9 +348,10 @@ function buildHookOutput(input, env = process.env) {
       additionalContext:
         binding +
         projectTargeting +
+        threadIdentity +
         summaryTarget +
         `That journal is also ${context.agentName}'s memory: when this task may relate to previously journaled work — ongoing projects, earlier decisions or fixes, or context the user assumes is known — search that configured destination with the Recall keyword_search tool (plus semantic_search when available), read the relevant notes before deciding, and cite any note that informs the response. ` +
-        `For this turn, if the task will produce durable decisions, implementation work, test results, blockers, or follow-ups, load and follow ${context.skillName} when substantive work begins: open the task's journal entry under a fresh task marker after recall, append short progress updates at checkpoints while working, and finalize the entry before the final response. ` +
+        `For this turn, if the task will produce durable decisions, implementation work, test results, blockers, or follow-ups, load and follow ${context.skillName} when substantive work begins: this chat thread keeps exactly one journal note, so open it (or continue it) after recall, append human-readable toggle entries at checkpoints while working, and wrap up the entry before the final response. ` +
         "Skip trivial acknowledgements and do not prompt for journal setup merely because this implicit reminder fired.",
     },
   };

@@ -260,6 +260,35 @@ export async function readJsonFile<T>(serverUrlHash: string, filename: string, s
 }
 
 /**
+ * Atomically and durably replaces a credential file. The temp file is fsynced
+ * before the rename and the parent directory after it, so a rotated-out
+ * refresh token can never survive a crash while its replacement does not
+ * (the server's OAuth reuse detection revokes the whole grant if the stale
+ * token is ever presented again). Directory fsync is best-effort: some
+ * platforms (Windows) refuse to open directories.
+ */
+async function persistFileDurably(filePath: string, contents: string): Promise<void> {
+  const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`
+  try {
+    const fileHandle = await fs.open(temporaryPath, 'wx', 0o600)
+    try {
+      await fileHandle.writeFile(contents, 'utf-8')
+      await fileHandle.sync()
+    } finally {
+      await fileHandle.close()
+    }
+    await fs.rename(temporaryPath, filePath)
+    const directoryHandle = await fs.open(path.dirname(filePath), 'r').catch(() => undefined)
+    if (directoryHandle) {
+      await directoryHandle.sync().catch(() => undefined)
+      await directoryHandle.close()
+    }
+  } finally {
+    await fs.unlink(temporaryPath).catch(() => undefined)
+  }
+}
+
+/**
  * Writes a JSON object to a file
  * @param serverUrlHash The hash of the server URL
  * @param filename The name of the file to write
@@ -268,14 +297,7 @@ export async function readJsonFile<T>(serverUrlHash: string, filename: string, s
 export async function writeJsonFile(serverUrlHash: string, filename: string, data: any): Promise<void> {
   try {
     await ensureConfigDir()
-    const filePath = getConfigFilePath(serverUrlHash, filename)
-    const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`
-    try {
-      await fs.writeFile(temporaryPath, JSON.stringify(data, null, 2), { encoding: 'utf-8', mode: 0o600 })
-      await fs.rename(temporaryPath, filePath)
-    } finally {
-      await fs.unlink(temporaryPath).catch(() => undefined)
-    }
+    await persistFileDurably(getConfigFilePath(serverUrlHash, filename), JSON.stringify(data, null, 2))
   } catch (error) {
     log(`Error writing ${filename}:`, error)
     throw error
@@ -308,14 +330,7 @@ export async function readTextFile(serverUrlHash: string, filename: string, erro
 export async function writeTextFile(serverUrlHash: string, filename: string, text: string): Promise<void> {
   try {
     await ensureConfigDir()
-    const filePath = getConfigFilePath(serverUrlHash, filename)
-    const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`
-    try {
-      await fs.writeFile(temporaryPath, text, { encoding: 'utf-8', mode: 0o600 })
-      await fs.rename(temporaryPath, filePath)
-    } finally {
-      await fs.unlink(temporaryPath).catch(() => undefined)
-    }
+    await persistFileDurably(getConfigFilePath(serverUrlHash, filename), text)
   } catch (error) {
     log(`Error writing ${filename}:`, error)
     throw error

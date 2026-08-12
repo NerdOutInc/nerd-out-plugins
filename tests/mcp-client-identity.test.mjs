@@ -16,6 +16,7 @@ import { promisify } from "node:util";
 
 import {
   DEFAULT_CLIENT_NAME,
+  RECALL_LOOPBACK_HOST,
   clientCacheDirectory,
   parseClientName,
   proxyArgs,
@@ -85,6 +86,33 @@ test("the bridge passes the supported dynamic-registration override", () => {
     client_name: "Codex",
     scope: "notes:read notes:write",
   });
+});
+
+test("the proxy and the coordinator present the same loopback host form", async () => {
+  const args = proxyArgs(
+    "/tmp/proxy.mjs",
+    "http://127.0.0.1:38473/mcp",
+    "Claude"
+  );
+  const hostFlagIndex = args.indexOf("--host");
+
+  // Without an explicit --host, mcp-remote registers `localhost` redirect
+  // URIs while the coordinator registers 127.0.0.1 ones; whichever flow runs
+  // second then presents a redirect_uri the authorization server never saw
+  // (the 2026-08-12 re-authorization failure against recall.nerdout.com).
+  assert.notEqual(hostFlagIndex, -1);
+  assert.equal(args[hostFlagIndex + 1], RECALL_LOOPBACK_HOST);
+  assert.equal(RECALL_LOOPBACK_HOST, "127.0.0.1");
+
+  const coordinatorSource = await readFile(
+    new URL(
+      "plugins/recall/bridge/build/src/oauth-coordinator.ts",
+      repoRoot
+    ),
+    "utf8"
+  );
+  assert.match(coordinatorSource, /host: RECALL_LOOPBACK_HOST/);
+  assert.doesNotMatch(coordinatorSource, /host: "127\.0\.0\.1"/);
 });
 
 test("the committed mcp-remote bundle supports the required overrides", async () => {
@@ -173,12 +201,13 @@ test("host manifests share the coordinator-capable plugin version", async () => 
     readJson("plugins/recall/.claude-plugin/plugin.json"),
   ]);
 
-  // 0.16.0 is the socket-bridge floor the Recall app gates first-use
+  // 0.17.0 is the socket-bridge floor the Recall app gates first-use
   // authorization on (AgentIntegrationLocalBridge.minimumLocalBridgePluginVersion
-  // and the bridge contract's minimumLocalBridgePluginVersion). Bumping this
-  // without bumping those would let Settings promise first-use approval to a
-  // plugin whose bridge still runs the OAuth path.
-  assert.equal(codexPlugin.version, "0.16.0");
+  // and the bridge contract's minimumLocalBridgePluginVersion). It has to sit
+  // ABOVE the 0.16.x line, which ships the OAuth-only bridge: gating on a
+  // version those releases satisfy would let Settings promise first-use
+  // approval to a plugin that still runs the browser flow.
+  assert.equal(codexPlugin.version, "0.17.0");
   assert.equal(claudePlugin.version, codexPlugin.version);
   const desktop = await readJson("desktop-extensions/recall/manifest.json");
   assert.equal(desktop.version, "0.8.0");
