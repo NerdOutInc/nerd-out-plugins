@@ -201,10 +201,16 @@ test("host manifests share the coordinator-capable plugin version", async () => 
     readJson("plugins/recall/.claude-plugin/plugin.json"),
   ]);
 
-  assert.equal(codexPlugin.version, "0.16.1");
+  // 0.17.0 is the socket-bridge floor the Recall app gates first-use
+  // authorization on (AgentIntegrationLocalBridge.minimumLocalBridgePluginVersion
+  // and the bridge contract's minimumLocalBridgePluginVersion). It has to sit
+  // ABOVE the 0.16.x line, which ships the OAuth-only bridge: gating on a
+  // version those releases satisfy would let Settings promise first-use
+  // approval to a plugin that still runs the browser flow.
+  assert.equal(codexPlugin.version, "0.17.0");
   assert.equal(claudePlugin.version, codexPlugin.version);
   const desktop = await readJson("desktop-extensions/recall/manifest.json");
-  assert.equal(desktop.version, "0.7.2");
+  assert.equal(desktop.version, "0.8.0");
 });
 
 test("Recall skills require full production note URLs in chat", async () => {

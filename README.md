@@ -10,18 +10,28 @@ plugin, enable the local MCP listener, and prepare the pinned ACP runtime with
 one click. The sandboxed App Store build links to the verified manual steps
 below.
 
-Installation does not silently authorize note access. Plugin `0.16.0` makes
-the journal human-first — each chat thread keeps exactly one journal note
-with collapsible toggle entries, and days with finished work get at most one
-tiny ELI5 Today card — while retaining the DailyNote retirement and one-time
-migration from `0.15.0`, Today summaries from `0.14.0`, Project-aware
-destinations from `0.13.0`, the OAuth coordinator from `0.12.0`, read + write
-consent-scope alignment from `0.12.1`, and Codex hook trust preflight from
-`0.12.2`.
-Compatible Direct Recall builds can present the existing explicit consent page
-inside Recall while writing the exact Claude or Codex credential cache. Older
-Recall builds and normal plugin first use retain the browser flow. Workspace
-block/read/write access remains a separate setting in every path.
+Installation does not silently authorize note access. Plugin `0.17.0` connects
+through Recall's **local bridge**: the plugin runs a Recall-signed helper
+shipped inside Recall.app, the app verifies that helper's code signature, and
+you approve access once in a native Recall prompt the first time an agent
+connects. No browser, no redirect, and no credentials cached on disk — so
+there is nothing for the plugin to refresh, leak, or lose. Approval covers
+every MCP client on that Mac and is revocable at any time under **Settings →
+MCP Server → Local bridge access**.
+
+Against a Recall build older than the local bridge, the plugin automatically
+falls back to the browser OAuth flow; third-party MCP clients keep using OAuth
+indefinitely. Workspace block/read/write access remains a separate setting in
+every path.
+
+`0.17.0` retains the pinned OAuth loopback host and durable refresh rotation
+from `0.16.1`, the human-first journal from `0.16.0` — each chat thread keeps
+exactly one journal note with collapsible toggle entries, and days with
+finished work get at most one tiny ELI5 Today card — the DailyNote retirement
+and one-time migration from `0.15.0`, Today summaries from `0.14.0`,
+Project-aware destinations from `0.13.0`, the OAuth coordinator from `0.12.0`,
+read + write consent-scope alignment from `0.12.1`, and Codex hook trust
+preflight from `0.12.2`.
 
 ## Codex Plugins
 
@@ -171,21 +181,31 @@ To use it:
 1. Open Recall for Mac.
 2. Go to Settings -> MCP Server.
 3. Enable the local MCP server.
-4. Start a new thread. The bridge opens a browser for Recall sign-in and
-   consent the first time that host connects, unless a compatible Direct Recall
-   build already connected this exact host through its in-app consent flow.
+4. Start a new thread. The first time an agent connects, Recall shows a native
+   prompt asking you to approve MCP access on this Mac. Approve it once and
+   every agent using Recall's bridge is covered; nothing is cached on disk.
 
-No explicit login command is needed. If the server does not appear, run
-`codex mcp list` or `claude mcp list` to inspect the registered name. Claude
-Code plugin servers are namespaced, so it normally appears as
+No explicit login command and no browser step are needed. If the server does
+not appear, run `codex mcp list` or `claude mcp list` to inspect the registered
+name. Claude Code plugin servers are namespaced, so it normally appears as
 `plugin:recall:recall`.
 
-Current plugin versions register useful OAuth client names: **Codex** for the
-Codex plugin, **Claude** for the shared Claude plugin, and **Claude Desktop**
-for the standalone desktop extension. Their credentials are cached separately,
-so each can be revoked independently. Rows named **MCP CLI Proxy** came from
-older plugin versions and cannot be assigned back to a host reliably; after
-the named registrations work, revoke those legacy rows in Recall.
+If the prompt does not appear, bring Recall to the front — the prompt waits
+without stealing focus, and a connection that waits too long is refused with a
+message telling the agent to open Recall. A denied or revoked grant is
+remembered so a restarting agent cannot re-prompt in a loop; clear it with
+**Allow again** under Settings → MCP Server → Local bridge access.
+
+Each session names the transport it used in the host's MCP log
+(`[recall] transport: local-socket` or `transport: oauth-http`) — the fastest
+way to tell which path a connection took.
+
+On the OAuth fallback path, plugins register useful client names: **Codex** for
+the Codex plugin, **Claude** for the shared Claude plugin, and **Claude
+Desktop** for the standalone desktop extension. Their credentials are cached
+separately, so each can be revoked independently. Rows named **MCP CLI Proxy**
+came from older plugin versions and cannot be assigned back to a host reliably;
+after the named registrations work, revoke those legacy rows in Recall.
 
 Older app builds without OAuth support can still use the shared bearer token —
 see the legacy setup section in the
