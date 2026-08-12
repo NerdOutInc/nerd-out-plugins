@@ -10,13 +10,14 @@ plugin, enable the local MCP listener, and prepare the pinned ACP runtime with
 one click. The sandboxed App Store build links to the verified manual steps
 below.
 
-Installation does not silently authorize note access. Plugin `0.15.0` retires
-the legacy DailyNote journal summary target — the Recall server no longer
-creates DailyNotes — and migrates stale configs to Today timeline or
-no-summary with a one-time prompt, while retaining Today summaries from
-`0.14.0`, Project-aware destinations from `0.13.0`, the OAuth coordinator from
-`0.12.0`, read + write consent-scope alignment from `0.12.1`, and Codex hook
-trust preflight from `0.12.2`.
+Installation does not silently authorize note access. Plugin `0.16.0` makes
+the journal human-first — each chat thread keeps exactly one journal note
+with collapsible toggle entries, and days with finished work get at most one
+tiny ELI5 Today card — while retaining the DailyNote retirement and one-time
+migration from `0.15.0`, Today summaries from `0.14.0`, Project-aware
+destinations from `0.13.0`, the OAuth coordinator from `0.12.0`, read + write
+consent-scope alignment from `0.12.1`, and Codex hook trust preflight from
+`0.12.2`.
 Compatible Direct Recall builds can present the existing explicit consent page
 inside Recall while writing the exact Claude or Codex credential cache. Older
 Recall builds and normal plugin first use retain the browser flow. Workspace
@@ -206,11 +207,15 @@ project destinations. Each selects a Recall workspace and optional Recall
 Project. A bundled per-prompt hook detects that valid opt-in config, reminds
 the agent to search prior journal notes for
 relevant context when a task relates to earlier work, and reminds it to
-journal meaningful work live in that write-ready workspace: open a
-marker-identified entry when substantive work begins, append short progress
-updates at checkpoints, and close with a final block plus one tiny ELI5 Today
-card linked to the detail (or none when day summaries are disabled)
-— so an interrupted session leaves a partial record instead of nothing.
+journal meaningful work live in that write-ready workspace. Each chat thread
+keeps exactly one journal note — a dateless topic-phrase title, a short
+always-visible intro, and one collapsible toggle entry per checkpoint whose
+summary line stays human-readable while agent detail and hidden bookkeeping
+live inside the collapsed details — so an interrupted session leaves a
+partial record instead of nothing, and a busy thread never scatters notes.
+On days the thread wraps up meaningful work, the journal adds at most one
+tiny ELI5 Today card linking to the thread's note (or none when day summaries
+are disabled).
 A config that still selects the retired legacy DailyNote summary target gets
 a one-time prompt to switch to Today or none; the Recall server no longer
 creates DailyNotes, so the journal never writes them.

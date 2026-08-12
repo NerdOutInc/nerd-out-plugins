@@ -43,9 +43,10 @@ Recall settings and update `NERD_OUT_MCP_TOKEN`.
 
 - Use `list_notes` before reading when the user gives a title, date, tag, or
   broad description instead of a note UUID.
-- Use `read_note` for exact note content. Request `format: "html"` or
-  `format: "both"` only when the user needs editor-fragment HTML; plain text is
-  the default.
+- Use `read_note` for exact note content. Plain text is the default, but it
+  flattens structure — toggle blocks, lists, and line breaks collapse into one
+  line — so request `format: "html"` or `format: "both"` whenever structure
+  matters, and always before rewriting a note body from what was read.
 - Use `keyword_search` for exact terms, names, tags, or phrases.
 - Use `semantic_search` for meaning-based discovery, and fall back to keyword
   search if semantic search is unavailable.
@@ -77,10 +78,17 @@ the app's Settings -> MCP Server per-workspace access policy.
   use real `backlinks` to connect the card to a detailed note. Repeating the
   identical `idempotencyKey` request returns the original card; a changed
   request fails closed.
+- Note Markdown supports `<details><summary>Summary line</summary>` blocks,
+  rendered as native collapsible toggles: keep the summary line human-readable,
+  put the detail inside, and leave a blank line after `</summary>` and before
+  `</details>` so Markdown inside the toggle renders.
 - Use `update_note_content` with `mode: "append"` when adding a journal entry,
   update, or note section.
 - Use `update_note_content` with `mode: "replace"` only when the user explicitly
-  wants to replace the whole note body.
+  wants to replace the whole note body. It never changes a note's title; use
+  `rename_note` (`noteType: "NamedNote"`, uuid, and the new title — advertised
+  on newer Recall builds) to retitle a named note instead of rewriting content.
+  Daily Notes and menu bar Quick Notes cannot be renamed.
 - The server has retired DailyNote creation: `update_note_content` against a
   missing DailyNote fails with "Note not found. Daily Notes can no longer be
   created; use placement=today when creating a note." Use `create_today_note`
