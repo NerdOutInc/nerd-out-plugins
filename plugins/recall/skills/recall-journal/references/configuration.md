@@ -105,7 +105,7 @@ valid effective destination stays silent.
    scope.
 2. Call `list_workspaces`. Offer only confirmed workspaces with both
    `roleWritable: true` and `writeReady: true`. Show name, id, role, and write
-   status. If none qualify, stop and explain how to grant Read & write access or
+   status. If none qualify, stop and explain how to grant **Write** access or
    finish device readiness in Recall.
 3. After the user selects a workspace, page through
    `list_projects({ workspaceId, limit: 100, offset })` until `hasMore` is false,
