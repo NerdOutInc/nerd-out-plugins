@@ -77,6 +77,19 @@ function validV3Config() {
   };
 }
 
+function validV4Config() {
+  return {
+    version: 4,
+    projectMemory: {
+      enabled: true,
+      defaultProject: {
+        workspace: { id: "default-workspace-id", name: "General Memory" },
+        recallProject: { id: "default-project-id", name: "General" },
+      },
+    },
+  };
+}
+
 function readFixture(version, filename) {
   return fs
     .readFileSync(path.join(fixtureRoot, version, filename), "utf8")
@@ -302,7 +315,187 @@ test("rejects malformed or mixed v3 configs instead of choosing a journal protoc
   }
 });
 
-test("documents v3 as reader-only and keeps v1/v2 as the sole writer", () => {
+test("uses repository-first v4 routing without exposing the default Project", () => {
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: path.join(fixtureRoot, "v4"),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: repositoryRoot },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.equal(context, readFixture("v4", "repository-context.txt"));
+  assert.match(context, /repository-first routing/);
+  assert.match(context, /resolve_project/);
+  assert.match(context, /get_project_context/);
+  assert.match(context, /none, ambiguous, or not_ready/);
+  assert.equal(context.includes("default-workspace-id"), false);
+  assert.equal(context.includes("default-project-id"), false);
+  assert.equal(context.includes("General Memory"), false);
+});
+
+test("uses the explicit v4 default only when no repository identity exists", () => {
+  const noRepository = makeTemporaryDirectory();
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: path.join(fixtureRoot, "v4"),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: noRepository },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.equal(context, readFixture("v4", "no-repository-context.txt"));
+  assert.match(context, /projectUuid default-project-id/);
+  assert.match(context, /Do not call resolve_project/);
+  assert.match(context, /proved no-repository route/);
+  assert.match(context, /none, ambiguous, or not_ready/);
+});
+
+test("keeps a v4 repository with no remote on the repository-first route", () => {
+  const repository = makeProjectDirectory("repository-without-origin");
+  runGit(repository, "init", "--quiet");
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: path.join(fixtureRoot, "v4"),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: repository },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.equal(context, readFixture("v4", "repository-context.txt"));
+  assert.match(context, /If there is no supported remote/);
+  assert.equal(context.includes("default-project-id"), false);
+});
+
+test("withholds the v4 default when repository identity cannot be proved", () => {
+  const missingDirectory = path.join(
+    makeTemporaryDirectory(),
+    "missing-working-directory",
+  );
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: path.join(fixtureRoot, "v4"),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: missingDirectory },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(
+    context,
+    /could not prove whether filesystem repository identity exists/,
+  );
+  assert.match(context, /Continue without project memory/);
+  assert.equal(context.includes("default-workspace-id"), false);
+  assert.equal(context.includes("default-project-id"), false);
+});
+
+test("uses the host-specific name in v4 without changing its routing", () => {
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CLAUDE_CONFIG_DIR: path.join(fixtureRoot, "v4"),
+      CLAUDE_PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: repositoryRoot },
+  });
+
+  assert.equal(result.status, 0);
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.equal(
+    context,
+    readFixture("v4", "repository-context.txt").replace("Codex", "Claude Code"),
+  );
+});
+
+test("rejects malformed or mixed v4 configs instead of choosing a memory protocol", () => {
+  const malformed = [
+    { version: 4 },
+    { version: 4, projectMemory: null },
+    { version: 4, projectMemory: { enabled: true } },
+    {
+      version: 4,
+      projectMemory: { enabled: false, defaultProject: {} },
+    },
+    {
+      version: 4,
+      projectMemory: {
+        enabled: true,
+        defaultProject: {
+          workspace: validV2Config().global.workspace,
+        },
+      },
+    },
+    {
+      version: 4,
+      projectMemory: {
+        enabled: true,
+        defaultProject: {
+          workspace: validV2Config().global.workspace,
+          recallProject: null,
+        },
+      },
+    },
+    {
+      version: 4,
+      projectMemory: {
+        enabled: true,
+        defaultProject: {
+          workspace: { id: "bad id", name: "Workspace" },
+          recallProject: recallProject(),
+        },
+      },
+    },
+    {
+      version: 4,
+      projectMemory: {
+        enabled: true,
+        defaultProject: validV4Config().projectMemory.defaultProject,
+        fallback: "legacy",
+      },
+    },
+    { ...validV4Config(), journal: { dailyNote: false } },
+    { ...validV4Config(), global: validV2Config().global },
+    { ...validV4Config(), projects: {} },
+  ];
+
+  for (const config of malformed) {
+    const result = runHook({
+      environment: {
+        ...cleanEnvironment(),
+        CODEX_HOME: makeConfigDirectory(config),
+        PLUGIN_ROOT: pluginRoot,
+      },
+      input: { hook_event_name: "UserPromptSubmit", cwd: repositoryRoot },
+    });
+
+    assert.equal(result.status, 0, JSON.stringify(config));
+    assert.equal(result.stderr, "", JSON.stringify(config));
+    assert.equal(result.stdout, "", JSON.stringify(config));
+  }
+});
+
+test("documents v3 and v4 as reader-only while keeping v1/v2 as the sole writer", () => {
   const [skill, configuration] = [
     "plugins/recall/skills/recall-journal/SKILL.md",
     "plugins/recall/skills/recall-journal/references/configuration.md",
@@ -312,17 +505,19 @@ test("documents v3 as reader-only and keeps v1/v2 as the sole writer", () => {
 
   assert.match(
     skill,
-    /reader-only \*\*version 3 structured project\s+memory\*\*/,
+    /reader-only \*\*version 3 and version 4 structured\s+project\s+memory\*\*/,
   );
   assert.match(
     skill,
     /never create or update a legacy journal note or Today summary/,
   );
   assert.match(configuration, /"projectMemory": \{ "enabled": true \}/);
+  assert.match(configuration, /"version": 4/);
   assert.match(
     configuration,
     /Current setup and\s+reconfiguration flows below continue to write version 2 only/,
   );
+  assert.match(configuration, /Never auto-migrate a version 1 or 2 config/);
 });
 
 test("accepts a v2 global destination without a Recall Project", () => {

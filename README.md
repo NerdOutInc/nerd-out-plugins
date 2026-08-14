@@ -1,7 +1,10 @@
 # Recall plugins
 
-AI plugins for the Recall notes app. They connect Claude Code and Codex to the
-notes and journal tools in Recall for Mac.
+AI plugins for the Recall notes app. They connect Codex, Claude Code, and
+supported local Claude Desktop surfaces to the notes tools in Recall for Mac.
+Automatic memory support is narrower than skill installation or direct tool
+use; see the [host and memory support matrix](plugins/recall/README.md#host-and-memory-support)
+for the current Claude chat, Cowork, ChatGPT, Codex, Git, and non-Git boundary.
 
 ## Install from Recall for Mac
 
@@ -95,8 +98,13 @@ The skills inspect the current MCP catalog before using newer note capabilities.
 When available, they can read one named note's accepted activity and pair
 canonical Markdown reads with opaque revision-checked content updates. Older
 Recall builds keep the existing HTML/readback workflow; the skills never send
-only half of the revision-safe field pair. Structured version 3 project memory
-remains exclusive and never falls through to these legacy named-note tools.
+only half of the revision-safe field pair. Structured version 3 and version 4
+project memory remain reader-only and exclusive, and never fall through to
+these legacy named-note tools. Version 3 is repository-only. Version 4 remains
+repository-first but can read one explicitly configured default Recall Project
+only when the hook proves the session has no repository identity; it is never
+an error fallback. Existing version 1/2 global users are not auto-migrated, so
+their non-Git memory keeps working.
 
 The plugin supports multiple skills in its `skills/` directory. In addition to
 the direct note workflow, the journal skill

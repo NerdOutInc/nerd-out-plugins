@@ -62,20 +62,33 @@ For any explicit setup, reconfiguration, disabling, or stale-config repair,
 read and follow [references/configuration.md](references/configuration.md).
 It defines the v1-compatible/v2 schemas, canonical absolute filesystem-project
 path, workspace and Recall Project selection, compatibility errors,
-confirmation, and atomic write protocol.
+confirmation, atomic write protocol, and strict structured-reader schemas.
 
-One compatibility exception is reader-only **version 3 structured project
-memory**. When lifecycle context explicitly identifies a valid v3 config,
-follow that context instead of the legacy named-note workflow below: resolve
-the current project and read its compact project context when those tools are
-available, but never create or update a legacy journal note or Today summary.
-This plugin release does not write v3 configs or structured sessions. If the
-project cannot be resolved or either structured read tool is unavailable,
-continue the user's task without project memory and without prompting for a
-legacy destination. Never rewrite or downgrade a v3 config through the v1/v2
-configuration flow. Select this protocol before inspecting named-note
-capabilities: in v3, do not run the legacy capability probe or call
-`list_note_activity`, `read_note`, or `update_note_content` for project memory.
+One compatibility exception is reader-only **version 3 and version 4 structured
+project memory**. When lifecycle context explicitly identifies either valid
+version, follow that context instead of the legacy named-note workflow below
+and read compact project context when the required tools are available, but
+never create or update a legacy journal note or Today summary. Never create a
+structured session. This plugin release does not write structured config or
+session data.
+
+Version 3 is repository-only. Use a supported non-local Git remote with
+`resolve_project`, and pass only an exact result to `get_project_context`.
+Version 4 is repository-first: the same exact-resolution rule applies whenever
+filesystem repository identity exists, including repositories with no usable
+remote. Its explicit default Recall Project may be read directly with
+`get_project_context` only when lifecycle context proves no repository identity
+exists. Never use that default after no usable remote, an unavailable tool, a
+`none`, `ambiguous`, or `not_ready` result, or context that is not ready. If
+routing or reading fails, continue the user's task without project memory and
+without prompting for a legacy destination.
+
+Never rewrite, migrate, reconfigure, or downgrade a v3 or v4 config through the
+v1/v2 configuration flow. In particular, do not auto-migrate v1/v2 global
+users: their global destination intentionally supplies memory outside Git.
+Select this protocol before inspecting named-note capabilities: in v3 or v4,
+do not run the legacy capability probe or call `list_note_activity`,
+`read_note`, or `update_note_content` for project memory.
 
 ### Legacy named-note capabilities
 
@@ -93,7 +106,7 @@ Cache the decision only for this thread. If the native catalog advertises an
 enhanced input but dispatch reports an unknown tool or argument, stop that
 enhanced operation, ask the user to bring Recall forward and let it update or
 restart, and do not retry with mixed enhanced/legacy arguments. These
-named-note capabilities never change v3's structured-memory-only routing.
+named-note capabilities never change v3/v4 structured-memory-only routing.
 
 Each effective destination contains one write-ready Recall workspace and
 optionally one live Recall Project inside it. A filesystem-project destination
