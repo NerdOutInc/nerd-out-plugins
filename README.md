@@ -1,7 +1,8 @@
 # Recall plugins
 
-AI plugins for the Recall notes app. They connect Codex, Claude Code, and
-supported local Claude Desktop surfaces to the notes tools in Recall for Mac.
+AI plugins for the Recall notes app. They connect Codex and Claude Code to the
+notes tools in Recall for Mac and statically register the Claude Desktop Chat
+and Cowork routes documented below.
 Automatic memory support is narrower than skill installation or direct tool
 use; see the [host and memory support matrix](plugins/recall/README.md#host-and-memory-support)
 for the current Claude chat, Cowork, ChatGPT, Codex, Git, and non-Git boundary.
@@ -50,10 +51,10 @@ builds fall back to browser OAuth.
 
 ## Plugin behavior
 
-`plugins/recall` connects Codex or Claude Code to the local MCP server
-hosted by the Recall Mac app. The plugin does not run a notes server
-itself; it points the agent at the loopback endpoint already managed by the
-signed-in Mac app.
+`plugins/recall` connects Codex, Claude Code, and supported Claude Desktop
+surfaces to the local MCP server hosted by the Recall Mac app. The plugin does
+not run a notes server itself; it points the agent at the loopback endpoint
+already managed by the signed-in Mac app.
 
 The app installer enables the local MCP server. For a manual install, enable
 it under **Settings → MCP Server**. Then start a new thread. The first time an
@@ -77,11 +78,18 @@ Each session names the transport it used in the host's MCP log
 way to tell which path a connection took.
 
 On the OAuth fallback path, plugins register useful client names: **Codex** for
-the Codex plugin, **Claude** for the shared Claude plugin, and **Claude
-Desktop** for the standalone desktop extension. Their credentials are cached
-separately, so each can be revoked independently. Rows named **MCP CLI Proxy**
-came from older plugin versions and cannot be assigned back to a host reliably;
-after the named registrations work, revoke those legacy rows in Recall.
+the Codex plugin, **Claude** for every surface using the shared Claude plugin,
+and **Claude Desktop** for the standalone desktop extension. The names are
+self-reported, advisory session labels rather than authenticated host
+principals. Their credentials are cached separately, so each registration can be
+revoked independently. Rows named **MCP CLI Proxy** came from older plugin
+versions and cannot be assigned back to a host reliably; after the named
+registrations work, revoke those legacy rows in Recall.
+
+Do not keep the shared Claude plugin and the legacy standalone Recall desktop
+extension installed together. They register two local MCP entries for the same
+Recall app, which can duplicate tools and connection prompts. Keep the shared
+plugin as the single Claude installation path described here.
 
 That fallback reads the installed app's protected-resource metadata before
 authorizing. Older Recall builds continue to request only `notes:read` and

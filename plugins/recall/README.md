@@ -49,6 +49,11 @@ supported Node version. Otherwise they fall back to Node.js 18+ from `PATH`,
 which keeps manual and non-Recall installs working if the private runtime is
 missing or damaged.
 
+Every surface using the shared Claude plugin passes the same advisory client
+name, `Claude`. That self-reported label is useful session context in Recall but
+is not host attestation or an authorization boundary, so the plugin does not
+fabricate separate `Claude Desktop Chat` or `Claude Cowork` principals.
+
 The proxy and coordinator bundles are regenerated from tracked source with
 `cd bridge/build && npm ci && npm run build` (see `bridge/build/build.mjs`) — do
 not edit either generated bundle by hand. `npm run verify` type-checks and tests
@@ -98,6 +103,11 @@ Open **Customize → Plugins**, choose **Add marketplace**, and enter
 `NerdOutInc/recall-plugins`. Then install **Recall** from the
 marketplace list. No terminal needed.
 
+Use this shared plugin instead of the legacy standalone Recall desktop
+extension. Installing both registers two MCP entries for the same local Recall
+server and can duplicate tools or connection prompts. Remove or disable the
+standalone extension, then start a new conversation.
+
 ### Claude Code
 
 Add the marketplace and install the plugin:
@@ -119,22 +129,35 @@ Start a new thread after installing so the plugin tools are loaded.
 ## Host and memory support
 
 Plugin installation, a local MCP connection, skills, and lifecycle hooks are
-separate capabilities. The current support boundary is:
+separate capabilities. Static manifest wiring and host documentation are not a
+substitute for a live Recall account test; the matrix marks routes that are not
+yet live-certified instead of claiming them as verified. The current support
+boundary is:
 
 | Surface | Recall tools and skills | Automatic journal or project memory |
 | --- | --- | --- |
 | Codex app and Codex CLI | Supported through the local bridge after plugin trust and native approval. | Supported. The bundled Codex `UserPromptSubmit` hook reads this agent's config. |
 | Claude Code | Supported through the local bridge after plugin installation and native approval. | Supported. The bundled Claude Code `UserPromptSubmit` hook reads this agent's config. |
-| Claude Desktop ordinary chat | Local desktop plugin tools and skills are available. | Not automatic. Claude's plugin hooks do not run in ordinary chat, so invoke a skill or Recall tool explicitly. |
-| Claude Cowork on the local desktop | Claude supports plugin skills, hooks, and local MCP servers in local Cowork sessions. | Not yet verified end to end by Recall. The current hook treats every non-Codex host as Claude Code and reads the Claude Code config location, so do not rely on automatic memory until Recall adds a Cowork-specific fixture. |
-| Claude remote Cowork, web, or mobile | Recall's loopback MCP server is not reachable from the remote environment. | Unsupported while the only Recall transport is local to the Mac. |
+| Claude Desktop Chat | The shared plugin statically registers Recall's local stdio tools and skills. This route has not been re-certified live by Recall in the current Claude Desktop release. | Not automatic. Hooks do not run in ordinary Chat; invoke a skill or Recall tool explicitly. |
+| Claude web Chat | Plugin skills can be available, but the web surface cannot directly launch this local stdio server or dial Recall's loopback listener. | Not automatic. Hooks do not run in ordinary Chat, and a skill alone cannot supply Recall tools. |
+| Cowork local execution on Claude Desktop | Anthropic documents local plugin MCP servers on the device, but this Recall route is not yet live-certified. Recall and Claude Desktop must both remain running for tool use. | Not yet Recall-certified. Cowork runs plugin hooks, but the current Recall hook treats every non-Codex host as Claude Code and reads the Claude Code config location. |
+| Cowork cloud session with Claude Desktop open and online | Anthropic documents a Desktop-brokered route to local connectors and plugin MCP servers. The stdio bridge and Recall listener stay on the Mac; the cloud sandbox never connects to `127.0.0.1` directly. Recall has not yet live-certified this route. | Not yet Recall-certified. Cowork can run plugin hooks, but Recall has not verified the hook payload, config location, or working-directory mapping for this route. |
+| Cowork cloud session with Claude Desktop closed or offline | Recall tools are unavailable. Plugin instructions may still load in Cowork, but no desktop broker can reach the Mac-local server. | Tool-backed Recall memory is unavailable; never treat loaded instructions as a successful Recall connection. |
 | ChatGPT chat and work surfaces | This package does not currently register a ChatGPT app or connection. | Unsupported. A Codex plugin install and Codex lifecycle hooks do not establish automatic memory in ChatGPT chat. |
 
-These boundaries follow the host documentation: Claude plugins can expose
-skills in Claude and Cowork, but hooks run in Cowork rather than ordinary
-Claude chat, and remote Cowork cannot reach a local MCP server
+These boundaries follow the host documentation: Claude plugin skills work in
+Chat and Cowork, while hooks run in Cowork rather than ordinary Chat. A Cowork
+cloud sandbox has no direct cloud loopback path to Recall, but Claude Desktop
+can keep the plugin MCP process on the device and broker its tools into a cloud
+session while the app is open and online. The loopback listener never becomes a
+public connector
 ([Claude plugins](https://support.claude.com/en/articles/13837440-use-plugins-in-claude),
+[Cowork surfaces](https://support.claude.com/en/articles/15520349-use-claude-cowork-on-web-desktop-and-mobile),
 [Cowork architecture](https://support.claude.com/en/articles/14479288-claude-cowork-architecture-overview)).
+Adding `http://127.0.0.1:38473/mcp` as a cloud custom connector is therefore not
+a workaround: remote connector traffic originates in Anthropic's cloud, while
+this plugin deliberately registers a local stdio server
+([remote MCP connectors](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp)).
 OpenAI's plugin format can package capabilities for ChatGPT and Codex, but each
 capability still needs a supported surface and configuration; this Recall
 package currently ships a Codex MCP registration and Codex hook, not a ChatGPT
@@ -156,6 +179,19 @@ their global, non-Git memory. The v4 default is not an error fallback, and
 structured modes never mix with legacy named-note writes. Direct, explicit
 Recall tool use remains available wherever the local MCP connection and skills
 are actually loaded.
+
+### Troubleshooting Claude surfaces
+
+| Situation | Meaning | What to do |
+| --- | --- | --- |
+| Recall skills appear in Claude web Chat but Recall tools do not | Skills can load without a Mac-local MCP process. Web Chat has no direct loopback route. | Use Claude Desktop Chat, or a Cowork session with the same account and an open, online Claude Desktop broker. Do not register the loopback URL as a cloud connector. |
+| Recall tools are missing in Claude Desktop Chat | The plugin has not loaded, Recall is not running, its MCP server is disabled, or native approval is pending. | Confirm the plugin is enabled, launch Recall, enable **Settings → MCP Server**, start a new Chat, bring Recall forward, and approve the native prompt. Hooks are unrelated to this check. |
+| Recall tools are missing in cloud Cowork while Claude Desktop is open | The documented desktop-broker route is not connected, or the local Recall prerequisites are incomplete. This path is not yet live-certified by Recall. | Keep Claude Desktop online on the same account, confirm the plugin is enabled there, then check Recall's app, MCP setting, native approval, and workspace policy. Do not claim success from a loaded skill alone. |
+| Recall tools disappear after Claude Desktop closes or goes offline | Expected for a cloud Cowork session using a local plugin MCP server. The server remains on the Mac. | Reopen Claude Desktop and Recall before retrying the tool call. Do not retry journal writes blindly after an interrupted call; read back first. |
+| Automatic Recall memory is absent in ordinary Chat | Expected. Claude's plugin hooks do not run in ordinary Chat. | Invoke the Recall skill or tools explicitly when the local connection is available. |
+| Cowork labels the hook as Claude Code or cannot find its journal config | The current hook has no verified Cowork host/config contract. | Use explicit Recall tools only. Do not rely on automatic memory or create a guessed config path until a Cowork-specific release is live-certified. |
+| Recall tools or approval prompts appear twice | The shared Claude plugin and legacy standalone Recall desktop extension are both installed. | Keep the shared plugin, remove or disable the standalone extension, and start a new conversation. |
+| Recall shows the client as `Claude` | Expected. All shared-plugin surfaces use that advisory, self-reported label. | Use the surface and session itself to distinguish Chat, Cowork, or Claude Code; never treat the label as authorization or host proof. |
 
 ### Moving an existing install to Recall
 
