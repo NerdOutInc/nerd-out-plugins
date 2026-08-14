@@ -37,6 +37,7 @@ const readBody = async (request) => {
 function createOAuthFixture({
   challengeHeader = 'Bearer scope=notes:read, resource_metadata="http://127.0.0.1:38474/.well-known/oauth-protected-resource/mcp"',
   challengeStatus = 401,
+  metadataDelayMs = 0,
   refreshDelayMs = 0,
   registrationScopeResponse = "echo",
   scopesSupported = ["notes:read", "notes:write"],
@@ -53,7 +54,11 @@ function createOAuthFixture({
   };
   let activeRefreshes = 0;
   let maximumConcurrentRefreshes = 0;
+  let releaseMetadataStarted;
   let releaseRefreshStarted;
+  const metadataStarted = new Promise((resolve) => {
+    releaseMetadataStarted = resolve;
+  });
   const refreshStarted = new Promise((resolve) => {
     releaseRefreshStarted = resolve;
   });
@@ -65,6 +70,9 @@ function createOAuthFixture({
       request.url === "/.well-known/oauth-protected-resource/mcp" ||
       request.url === "/.well-known/oauth-protected-resource"
     ) {
+      releaseMetadataStarted();
+      if (metadataDelayMs)
+        await new Promise((resolve) => setTimeout(resolve, metadataDelayMs));
       response.setHeader("content-type", "application/json");
       response.end(
         JSON.stringify({
@@ -198,6 +206,7 @@ function createOAuthFixture({
     listen: () =>
       new Promise((resolve) => server.listen(38474, "127.0.0.1", resolve)),
     maximumConcurrentRefreshes: () => maximumConcurrentRefreshes,
+    metadataStarted,
     refreshStarted,
     stop: () => new Promise((resolve) => server.close(resolve)),
   };
@@ -773,6 +782,44 @@ test("journal read scope is requested only when the installed resource advertise
     child.kill("SIGTERM");
     assert.deepEqual(await waitForExit(child), { code: 0, signal: null });
     assert.equal(capture.records.at(-1)?.status, "cancelled");
+  } finally {
+    await rm(harness.root, { force: true, recursive: true });
+  }
+});
+
+test("OAuth discovery finishes before the credential mutation lease is acquired", async (t) => {
+  const fixture = createOAuthFixture({ metadataDelayMs: 500 });
+  await fixture.listen();
+  t.after(() => fixture.stop());
+  const harness = await makeHarness();
+  try {
+    const child = spawnCoordinator(harness, "authorize");
+    t.after(() => stopProcess(child));
+    const capture = captureProcess(child);
+    await fixture.metadataStarted;
+
+    const credentialLock = path.join(
+      harness.cacheDirectory,
+      `${serverHash}_credentials.lock`,
+    );
+    assert.equal(
+      await stat(credentialLock)
+        .then(() => true)
+        .catch(() => false),
+      false,
+      `discovery held the credential lease: ${capture.stderr()}`,
+    );
+
+    const authorization = await waitFor(
+      () =>
+        capture.records.find(
+          (record) => record.type === "authorization_required",
+        ),
+      `coordinator emitted no authorization request: ${capture.stderr()}`,
+    );
+    assert.ok(authorization.authorizationUrl);
+    child.kill("SIGTERM");
+    assert.deepEqual(await waitForExit(child), { code: 0, signal: null });
   } finally {
     await rm(harness.root, { force: true, recursive: true });
   }

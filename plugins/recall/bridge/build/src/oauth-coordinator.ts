@@ -313,6 +313,10 @@ async function runNetworkedMode(args: CoordinatorArguments): Promise<void> {
   process.once("SIGTERM", cancel);
 
   try {
+    const discovery = await discoverOAuthServerInfo(args.serverUrl, {});
+    const requiredScope = oauthScopeForSupportedScopes(
+      discovery.protectedResourceMetadata?.scopes_supported
+    );
     credentialLease = await acquireCredentialMutationLock(serverUrlHash, COORDINATOR_TIMEOUT_MS);
     const configuredPort = await readConfiguredCallbackPort(serverUrlHash);
     let callbackPort = configuredPort ?? defaultCallbackPort(serverUrlHash);
@@ -324,10 +328,6 @@ async function runNetworkedMode(args: CoordinatorArguments): Promise<void> {
       callbackPort = availablePort;
     }
     const callbackUrl = `http://${RECALL_LOOPBACK_HOST}:${callbackPort}/oauth/callback`;
-    const discovery = await discoverOAuthServerInfo(args.serverUrl, {});
-    const requiredScope = oauthScopeForSupportedScopes(
-      discovery.protectedResourceMetadata?.scopes_supported
-    );
     if (
       args.mode === "verify-only" &&
       !(await cachedClientHasScope(serverUrlHash, requiredScope))
