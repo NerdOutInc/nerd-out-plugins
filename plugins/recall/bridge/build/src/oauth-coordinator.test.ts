@@ -130,7 +130,8 @@ describe("authorization URL validation", () => {
         "https://recall.example",
         callback,
         "expected-state",
-        resource
+        resource,
+        "notes:read notes:write"
       )
     ).not.toThrow();
   });
@@ -152,9 +153,37 @@ describe("authorization URL validation", () => {
           "https://recall.example",
           callback,
           "expected-state",
-          resource
+          resource,
+          "notes:read notes:write"
         )
       ).toThrow();
     }
+  });
+
+  it("accepts the discovered journal scope set without weakening exact validation", () => {
+    const url = makeUrl();
+    url.searchParams.set("scope", "notes:read notes:write journal:read");
+    expect(() =>
+      validateAuthorizationUrl(
+        url,
+        "https://recall.example",
+        callback,
+        "expected-state",
+        resource,
+        "notes:read notes:write journal:read"
+      )
+    ).not.toThrow();
+
+    url.searchParams.append("scope", "notes:read");
+    expect(() =>
+      validateAuthorizationUrl(
+        url,
+        "https://recall.example",
+        callback,
+        "expected-state",
+        resource,
+        "notes:read notes:write journal:read"
+      )
+    ).toThrow();
   });
 });

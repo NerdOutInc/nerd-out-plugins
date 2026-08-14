@@ -39,6 +39,7 @@ function createOAuthFixture({
   challengeStatus = 401,
   refreshDelayMs = 0,
   registrationScopeResponse = "echo",
+  scopesSupported = ["notes:read", "notes:write"],
   validAccessTokens = new Set(["access-1"]),
 } = {}) {
   const counters = {
@@ -69,7 +70,7 @@ function createOAuthFixture({
         JSON.stringify({
           authorization_servers: [issuer],
           resource: serverUrl,
-          scopes_supported: ["notes:read", "notes:write"],
+          scopes_supported: scopesSupported,
         }),
       );
       return;
@@ -86,7 +87,7 @@ function createOAuthFixture({
           issuer,
           registration_endpoint: `${issuer}/oauth/register`,
           response_types_supported: ["code"],
-          scopes_supported: ["notes:read", "notes:write"],
+          scopes_supported: scopesSupported,
           token_endpoint: `${issuer}/oauth/token`,
           token_endpoint_auth_methods_supported: ["none"],
         }),
@@ -537,7 +538,9 @@ test("approve, reuse, inspect, denial, state mismatch, and cancel stay browserle
           fixture.counters.dynamicRegistrations,
           registrationsBefore,
         );
-        assert.equal(fixture.counters.requests, requestsBefore);
+        // verify-only discovers the current resource scope before deciding
+        // whether the cached registration is compatible, but never mutates it.
+        assert.ok(fixture.counters.requests > requestsBefore);
         assert.equal(
           JSON.parse(await readFile(clientPath, "utf8")).client_id,
           "working-read-only-client",
@@ -735,6 +738,44 @@ test("approve, reuse, inspect, denial, state mismatch, and cancel stay browserle
       }
     },
   );
+});
+
+test("journal read scope is requested only when the installed resource advertises it", async (t) => {
+  const fixture = createOAuthFixture({
+    scopesSupported: [
+      "notes:read",
+      "notes:write",
+      "journal:read",
+      "journal:write",
+    ],
+  });
+  await fixture.listen();
+  t.after(() => fixture.stop());
+  const harness = await makeHarness();
+  try {
+    const child = spawnCoordinator(harness, "authorize");
+    t.after(() => stopProcess(child));
+    const capture = captureProcess(child);
+    const authorization = await waitFor(
+      () =>
+        capture.records.find(
+          (record) => record.type === "authorization_required",
+        ),
+      `coordinator emitted no authorization request: ${capture.stderr()}`,
+    );
+    const expectedScope = "notes:read notes:write journal:read";
+    assert.equal(
+      new URL(authorization.authorizationUrl).searchParams.get("scope"),
+      expectedScope,
+    );
+    assert.equal(fixture.counters.registeredScopes.at(-1), expectedScope);
+
+    child.kill("SIGTERM");
+    assert.deepEqual(await waitForExit(child), { code: 0, signal: null });
+    assert.equal(capture.records.at(-1)?.status, "cancelled");
+  } finally {
+    await rm(harness.root, { force: true, recursive: true });
+  }
 });
 
 for (const registrationScopeResponse of ["omit", "narrow"]) {

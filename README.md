@@ -83,6 +83,15 @@ separately, so each can be revoked independently. Rows named **MCP CLI Proxy**
 came from older plugin versions and cannot be assigned back to a host reliably;
 after the named registrations work, revoke those legacy rows in Recall.
 
+That fallback reads the installed app's protected-resource metadata before
+authorizing. Older Recall builds continue to request only `notes:read` and
+`notes:write`; builds that advertise structured Project context also add
+`journal:read`. An existing notes-only grant is replaced
+through normal browser consent when those capabilities become available.
+Native local-bridge sessions need no OAuth scopes. `journal:write` remains out
+of this release until structured write tools ship, and workspace Block/Read/Write
+policy remains the independent data-access gate on both transports.
+
 Older app builds without OAuth support can still use the shared bearer token —
 see the legacy setup section in the
 [plugin README](plugins/recall/README.md).

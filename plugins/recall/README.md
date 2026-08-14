@@ -25,8 +25,11 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
-Plugin `0.20.0` documents the host support boundary and adds a strict,
-reader-only version 4 memory route: repositories always resolve first, while
+Plugin `0.21.0` negotiates additive `journal:read` OAuth scope from the installed
+app's protected-resource metadata while preserving notes-only authorization
+against older Recall builds. Plugin `0.20.0` documents the host support
+boundary and adds a strict, reader-only version 4 memory route: repositories
+always resolve first, while
 an explicit default Recall Project is used only when no repository identity
 exists. Plugin `0.19.0` capability-probes newer Recall builds for note activity,
 canonical Markdown, and revision-checked content updates while keeping the
@@ -58,6 +61,13 @@ The direct-download Recall Mac app can perform this setup from
 pinned private Node + ACP runtime in one action. The first plugin connection
 uses Recall's native local-bridge approval when supported; older builds use the
 browser OAuth fallback. Workspace access remains explicit either way.
+
+On that fallback, the bridge requests `notes:read notes:write` from older
+Recall builds. It adds `journal:read` only when the local resource explicitly
+advertises it, so upgrading can require one fresh browser consent while
+downgrading or using an older app keeps the established notes-only flow.
+`journal:write` waits for a release with structured write tools. These OAuth
+scopes do not replace Recall's per-workspace Block/Read/Write policy.
 
 ### Codex
 

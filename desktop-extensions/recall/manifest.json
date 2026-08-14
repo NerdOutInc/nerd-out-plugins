@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "recall",
   "display_name": "Recall",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Read, search, and update notes in Recall through the Mac app's local MCP server.",
   "long_description": "Connects Claude Desktop to the local MCP server hosted by Recall for Mac. Claude can list notes, read note content, run keyword and semantic search, and (when writes are enabled in the app) create or update notes.\n\nRequires the Recall Mac app with its MCP server enabled (Settings -> MCP Server). On first use, Recall shows a native prompt asking you to approve MCP access on this Mac — no browser sign-in and no credentials stored on disk. All note access stays on your machine.",
   "author": {

@@ -13,8 +13,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   clientCacheDirectory,
+  oauthScopeForSupportedScopes,
   RECALL_LOOPBACK_HOST,
-  RECALL_OAUTH_SCOPE,
 } from "../../client-identity.mjs";
 import { createLazyAuthCoordinator } from "../vendor/mcp-remote/src/lib/coordination";
 import {
@@ -220,7 +220,8 @@ export function validateAuthorizationUrl(
   authorizationServerUrl: string,
   callbackUrl: string,
   expectedState: string,
-  serverUrl: McpServerUrl
+  serverUrl: McpServerUrl,
+  requiredScope: string
 ): void {
   const expectedOrigin = new URL(authorizationServerUrl).origin;
   if (
@@ -260,12 +261,12 @@ export function validateAuthorizationUrl(
   }
   const scopes = authorizationUrl.searchParams.getAll("scope");
   const scopeItems = scopes[0]?.split(" ").filter(Boolean) ?? [];
+  const requiredScopeItems = requiredScope.split(" ").filter(Boolean);
   if (
     scopes.length !== 1 ||
-    scopeItems.length !== 2 ||
-    new Set(scopeItems).size !== 2 ||
-    !scopeItems.includes("notes:read") ||
-    !scopeItems.includes("notes:write")
+    scopeItems.length !== requiredScopeItems.length ||
+    new Set(scopeItems).size !== requiredScopeItems.length ||
+    !sameScopeSet(scopes[0], requiredScope)
   ) {
     throw new Error("Authorization URL failed scope validation");
   }
@@ -324,6 +325,22 @@ async function runNetworkedMode(args: CoordinatorArguments): Promise<void> {
     }
     const callbackUrl = `http://${RECALL_LOOPBACK_HOST}:${callbackPort}/oauth/callback`;
     const discovery = await discoverOAuthServerInfo(args.serverUrl, {});
+    const requiredScope = oauthScopeForSupportedScopes(
+      discovery.protectedResourceMetadata?.scopes_supported
+    );
+    if (
+      args.mode === "verify-only" &&
+      !(await cachedClientHasScope(serverUrlHash, requiredScope))
+    ) {
+      writeRecord({
+        clientId: (await inspectCache(serverUrlHash)).clientId,
+        mode: args.mode,
+        reason: "authorization-required",
+        status: "invalid",
+        type: "result",
+      });
+      return;
+    }
     provider = new CoordinatedNodeOAuthClientProvider(
       {
         authorizeResource: args.serverUrl,
@@ -332,13 +349,13 @@ async function runNetworkedMode(args: CoordinatorArguments): Promise<void> {
         clientName: args.clientName,
         host: RECALL_LOOPBACK_HOST,
         protectedResourceMetadata: discovery.protectedResourceMetadata,
-        requiredClientScope: args.mode === "authorize" ? RECALL_OAUTH_SCOPE : undefined,
+        requiredClientScope: args.mode === "authorize" ? requiredScope : undefined,
         serverUrl: discovery.authorizationServerUrl,
         serverUrlHash,
         staticOAuthClientMetadata: {
           client_name: args.clientName,
           redirect_uris: [callbackUrl],
-          scope: RECALL_OAUTH_SCOPE,
+          scope: requiredScope,
         },
         wwwAuthenticateScope: discovery.wwwAuthenticateScope,
       },
@@ -372,7 +389,8 @@ async function runNetworkedMode(args: CoordinatorArguments): Promise<void> {
         discovery.authorizationServerUrl,
         callbackUrl,
         provider!.state(),
-        args.serverUrl
+        args.serverUrl,
+        requiredScope
       );
       writeRecord({
         authorizationUrl: authorizationUrl.toString(),
@@ -486,20 +504,6 @@ export async function runCoordinator(args: CoordinatorArguments): Promise<void> 
     });
     return;
   }
-  if (
-    args.mode === "verify-only" &&
-    !(await cachedClientHasScope(serverUrlHash, RECALL_OAUTH_SCOPE))
-  ) {
-    writeRecord({
-      clientId: snapshot.clientId,
-      mode: args.mode,
-      reason: "authorization-required",
-      status: "invalid",
-      type: "result",
-    });
-    return;
-  }
-
   await runNetworkedMode(args);
 }
 
