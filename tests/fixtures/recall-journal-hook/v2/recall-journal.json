@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "journal": { "summaryTarget": "today", "dailyNote": false },
+  "global": {
+    "workspace": { "id": "workspace-id", "name": "Journal" },
+    "recallProject": { "id": "project-id", "name": "Roadmap" }
+  }
+}

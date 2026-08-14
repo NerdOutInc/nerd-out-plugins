@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "scope": "global",
+  "workspace": { "id": "workspace-id", "name": "Journal" },
+  "journal": { "dailyNote": true }
+}
