@@ -344,6 +344,9 @@ async function runNetworkedMode(args: CoordinatorArguments): Promise<void> {
       callbackPort = availablePort;
     }
     const callbackUrl = `http://${RECALL_LOOPBACK_HOST}:${callbackPort}/oauth/callback`;
+    // The pre-lease check keeps a known incompatibility purely read-only. This
+    // second check is intentional: it closes the TOCTOU window if another
+    // process changes the cached registration before this lease is acquired.
     if (
       args.mode === "verify-only" &&
       !(await cachedClientHasScope(serverUrlHash, requiredScope))
