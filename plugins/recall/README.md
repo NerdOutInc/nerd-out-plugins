@@ -9,29 +9,37 @@ The Mac app hosts a loopback-only MCP server at `http://127.0.0.1:38473/mcp`.
 Claude clients refuse plain-http URLs on some surfaces (Claude Desktop chat
 routes url-type servers through cloud custom connectors, which require public
 HTTPS and can never reach a loopback listener), so this plugin ships a
-**stdio bridge** instead of a URL: `bridge/index.mjs` waits for the app, then
-runs a bundled copy of [`mcp-remote`](https://github.com/geelen/mcp-remote)
-(MIT — `bridge/LICENSE-mcp-remote.txt`) that proxies stdio to the loopback
-server and handles MCP OAuth, caching tokens in `~/.mcp-auth`. Normal first use
-opens the browser. Plugin `0.16.0` makes the journal human-first — one journal
-note per chat thread with collapsible toggle entries and at most one tiny ELI5
-Today card per day — retaining the DailyNote retirement and migration from
-`0.15.0`, Today summaries from `0.14.0`, Project-aware destinations from
-`0.13.0`, the OAuth coordinator from `0.12.0`, read + write consent-scope
-alignment from `0.12.1`, and Codex hook trust preflight from `0.12.2`. A
-compatible Direct Recall build can use the coordinator to present the same
-explicit consent inside Recall without changing cache ownership. The bridge
-runs `node` from your PATH (any Node.js 18+). Both Claude (`.mcp.json`) and Codex
-(`.codex-plugin/mcp.json`) register the same bridge implementation, but pass
-their own OAuth client names and keep separate credential caches under
-`~/.mcp-auth/recall/`. When Recall's
-one-click installer has prepared the integration, the bridge and journal hook
-use Recall's pinned private Node runtime after verifying that it launches a
-supported Node version. Otherwise they fall back to Node.js 18+ from your
-PATH, which keeps manual and non-Recall installs working even if an old private
-runtime is damaged. Recall's
-Authorized clients list can therefore show and revoke **Claude** and
-**Codex** independently instead of listing both as **MCP CLI Proxy**.
+**stdio bridge** instead of a URL. Its preferred path finds the Recall-signed
+`recall-mcp-bridge` helper inside the installed app and pumps MCP stdio through
+the app's local Unix socket. Recall verifies that helper and applies the user's
+native local-bridge approval; this path needs no browser sign-in and stores no
+OAuth tokens on disk.
+
+When the signed helper is absent — normally because the installed Recall build
+predates the local bridge — or explicitly reports an unsupported protocol,
+`bridge/index.mjs` falls back to a bundled copy of
+[`mcp-remote`](https://github.com/geelen/mcp-remote) (MIT —
+`bridge/LICENSE-mcp-remote.txt`). That legacy path proxies stdio to the
+loopback HTTP server, opens browser OAuth when needed, and keeps host-specific
+credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
+failure, or protocol error on the local-socket path is surfaced as an error and
+never silently downgraded to OAuth.
+
+Plugin `0.18.0` adds a reader-only version 3 activation path for future
+structured project memory while leaving the current version 1/2 named-note
+journal unchanged. Plugin `0.17.0` introduced the signed local bridge;
+`0.16.0` made the journal human-first; `0.15.0` retired DailyNote creation;
+`0.14.0` added Today summaries; `0.13.0` added Project-aware destinations; and
+the `0.12.x` line added the OAuth coordinator, scope alignment, and Codex hook
+trust preflight.
+
+Both Claude (`.mcp.json`) and Codex (`.codex-plugin/mcp.json`) register the same
+bridge implementation but pass their own client names. When Recall's one-click
+installer has prepared the integration, the bridge and journal hook use
+Recall's pinned private Node runtime after verifying that it launches a
+supported Node version. Otherwise they fall back to Node.js 18+ from `PATH`,
+which keeps manual and non-Recall installs working if the private runtime is
+missing or damaged.
 
 The proxy and coordinator bundles are regenerated from tracked source with
 `cd bridge/build && npm ci && npm run build` (see `bridge/build/build.mjs`) — do
@@ -42,9 +50,9 @@ the source, then byte-compares the committed artifacts.
 
 The direct-download Recall Mac app can perform this setup from
 **Settings → Integrations**. It installs the marketplace/plugin and prepares a
-pinned private Node + ACP runtime in one action. Compatible builds can continue
-into in-app OAuth consent; older builds leave consent to first agent use.
-Workspace access remains explicit either way.
+pinned private Node + ACP runtime in one action. The first plugin connection
+uses Recall's native local-bridge approval when supported; older builds use the
+browser OAuth fallback. Workspace access remains explicit either way.
 
 ### Codex
 
@@ -95,15 +103,17 @@ Start a new thread after installing so the plugin tools are loaded.
 
 ### Moving an existing install to Recall
 
-Recall uses new marketplace, plugin, MCP server, skill, journal-config, and
-OAuth-cache identifiers. Existing installations do not update across those
-identity changes automatically. Add the Recall marketplace, install
-**Recall**, start a new thread, and approve the browser sign-in once for
-each host. Journal users should invoke `$recall:recall-journal` once to create
+Recall uses new marketplace, plugin, MCP server, skill, and journal-config
+identifiers, plus separate OAuth cache paths when the fallback is active.
+Existing installations do not update across those identity changes
+automatically. Add the Recall marketplace, install
+**Recall**, start a new thread, and approve the native prompt in Recall. An
+older Recall build opens browser OAuth instead. Journal users should invoke
+`$recall:recall-journal` once to create
 `recall-journal.json`, choose current-filesystem-project or global scope, and
 select a workspace plus optional Recall Project.
 
-After the new Recall plugin works and its browser sign-in succeeds, retire the
+After the new Recall plugin works and its connection is approved, retire the
 legacy plugin so its hooks and MCP connection do not run alongside Recall:
 
 ```bash
@@ -121,19 +131,14 @@ replacement plugin. Sandboxed builds and manual installs use the steps above.
 2. Open Settings → Integrations and install the agent, or complete the manual
    install above.
 3. Open Settings → MCP Server and choose block/read/write access per workspace.
-4. Start a new agent thread and authorize that host.
+4. Start a new agent thread and approve the local bridge in Recall.
 
 No separate login command is needed. A compatible Direct Recall build can
-present the server-owned consent page in Recall during installation; otherwise
-the first bridge connection opens a browser for the same sign-in and consent.
-Approve, then start a new conversation or thread. Each agent authorizes once
-because its dynamic OAuth registration and refreshed tokens are cached
-separately under `~/.mcp-auth/recall/`.
-
-After upgrading from a version that displayed **MCP CLI Proxy**, authorize
-Claude and Codex again to create the newly named registrations. Existing
-**MCP CLI Proxy** rows cannot be mapped back to a host reliably; revoke those
-legacy rows in Recall after the named clients are working.
+use the native local-bridge prompt on first connection. Bring Recall to the
+front, approve it, then start a new conversation or thread. The approval can be
+revoked or reset under **Settings → MCP Server → Local bridge access**. Older
+Recall builds fall back to browser OAuth and keep Claude and Codex credentials
+separate under `~/.mcp-auth/recall/`.
 
 > **Server name:** the plugin registers its server as `recall`, but the
 > installed name may be namespaced — Claude Code registers plugin servers as
@@ -230,6 +235,13 @@ under `skills/` that contains a `SKILL.md`. It currently includes:
   under the repo included — then journal to and recall from the project's
   workspace and optional Recall Project instead of the global destination.
 
+  The hook can also read the reserved version 3 project-memory activation
+  shape. In this compatibility release that mode is intentionally read-only:
+  it resolves the current project and loads compact structured context when the
+  app advertises those tools, but never writes either structured sessions or
+  the legacy note/Today journal. Current setup and reconfiguration continue to
+  write version 2 only.
+
 In Codex, invoke skills as `$recall:recall` and
 `$recall:recall-journal`; in Claude Code, use
 `/recall:recall` and
@@ -256,8 +268,9 @@ journal skill and MCP server keep those responsibilities.
 
 If the agent reports a connection error, confirm the Mac app is open and the
 server is enabled. If it reports an authorization error, start a new
-conversation so the bridge re-runs the browser sign-in (access may have been
-revoked or expired); deleting the affected agent's directory under
-`~/.mcp-auth/recall/` forces a fresh sign-in without clearing the
-other agent. If you don't see the server, use `codex mcp list` or
-`claude mcp list` to confirm its exact name.
+conversation, choose **Allow again** under Recall's **Settings → MCP Server →
+Local bridge access**, and approve the native prompt. If the MCP log says
+`transport: oauth-http`, the older OAuth fallback is active instead; deleting
+the affected agent's directory under `~/.mcp-auth/recall/` forces a fresh
+browser sign-in without clearing the other agent. If you don't see the server,
+use `codex mcp list` or `claude mcp list` to confirm its exact name.

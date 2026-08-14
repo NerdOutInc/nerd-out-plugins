@@ -195,19 +195,16 @@ test("plugin manifests prefer Recall's pinned Node runtime", async () => {
   assert.match(launcher, /command -v node/);
 });
 
-test("host manifests share the coordinator-capable plugin version", async () => {
+test("host manifests share the current plugin version", async () => {
   const [codexPlugin, claudePlugin] = await Promise.all([
     readJson("plugins/recall/.codex-plugin/plugin.json"),
     readJson("plugins/recall/.claude-plugin/plugin.json"),
   ]);
 
-  // 0.17.0 is the socket-bridge floor the Recall app gates first-use
-  // authorization on (AgentIntegrationLocalBridge.minimumLocalBridgePluginVersion
-  // and the bridge contract's minimumLocalBridgePluginVersion). It has to sit
-  // ABOVE the 0.16.x line, which ships the OAuth-only bridge: gating on a
-  // version those releases satisfy would let Settings promise first-use
-  // approval to a plugin that still runs the browser flow.
-  assert.equal(codexPlugin.version, "0.17.0");
+  // 0.17.0 remains the socket-bridge floor the Recall app gates first-use
+  // authorization on. 0.18.0 adds the reader-first v3 project-memory hook, and
+  // both hosts must receive that behavior together.
+  assert.equal(codexPlugin.version, "0.18.0");
   assert.equal(claudePlugin.version, codexPlugin.version);
   const desktop = await readJson("desktop-extensions/recall/manifest.json");
   assert.equal(desktop.version, "0.8.0");

@@ -78,6 +78,30 @@ explicitly asks to reconfigure one. During that explicit reconfiguration — or
 a confirmed summary-target migration — translate all preserved v1 destinations
 to v2 and update only the requested setting.
 
+## Reader-only structured project memory
+
+The hook also recognizes this exact version 3 activation shape:
+
+```json
+{
+  "version": 3,
+  "projectMemory": { "enabled": true }
+}
+```
+
+Version 3 is reserved for structured project memory. It is mutually exclusive
+with the legacy `scope`, `workspace`, `journal`, `global`, and `projects`
+fields; mixed or additional fields make the file invalid so the hook can never
+route one prompt into both journal protocols. In this compatibility release,
+v3 is **reader-only**: the hook tells the agent to use `resolve_project` and
+`get_project_context` when available, while the skill never creates legacy
+journal notes, Today summaries, structured sessions, or v3 config files.
+
+Do not write, migrate, reconfigure, or downgrade v3. If either structured read
+tool is unavailable or the current filesystem project does not resolve to one
+project, continue the user's task without project memory. Current setup and
+reconfiguration flows below continue to write version 2 only.
+
 ## Resolve the current filesystem project
 
 Show the user the resolved absolute path before saving a filesystem-project

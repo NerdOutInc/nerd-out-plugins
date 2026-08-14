@@ -15,6 +15,10 @@ const hookScript = path.join(
   "plugins/recall/hooks/journal-context.mjs",
 );
 const pluginRoot = path.dirname(path.dirname(hookScript));
+const fixtureRoot = path.join(
+  repositoryRoot,
+  "tests/fixtures/recall-journal-hook",
+);
 const GIT_TEST_TIMEOUT_MS = 10_000;
 const temporaryDirectories = [];
 
@@ -64,6 +68,19 @@ function validV2Config() {
       workspace: { id: "workspace-id", name: "Journal" },
     },
   };
+}
+
+function validV3Config() {
+  return {
+    version: 3,
+    projectMemory: { enabled: true },
+  };
+}
+
+function readFixture(version, filename) {
+  return fs
+    .readFileSync(path.join(fixtureRoot, version, filename), "utf8")
+    .trimEnd();
 }
 
 function recallProject(id = "recall-project-id", name = "Roadmap") {
@@ -185,6 +202,122 @@ test("injects the Codex journal skill when Codex config is valid", () => {
   assert.equal(
     output.hookSpecificOutput.additionalContext.includes(configDirectory),
     false,
+  );
+});
+
+test("keeps legacy v1 and v2 hook context byte-for-byte compatible", () => {
+  for (const version of ["v1", "v2"]) {
+    const result = runHook({
+      environment: {
+        ...cleanEnvironment(),
+        CODEX_HOME: path.join(fixtureRoot, version),
+        PLUGIN_ROOT: pluginRoot,
+      },
+    });
+
+    assert.equal(result.status, 0, version);
+    assert.equal(result.stderr, "", version);
+    const context = JSON.parse(result.stdout).hookSpecificOutput
+      .additionalContext;
+    assert.equal(context, readFixture(version, "additional-context.txt"));
+  }
+});
+
+test("routes a strict v3 config to structured project memory only", () => {
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: path.join(fixtureRoot, "v3"),
+      PLUGIN_ROOT: pluginRoot,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.equal(context, readFixture("v3", "additional-context.txt"));
+  assert.match(context, /resolve_project/);
+  assert.match(context, /get_project_context/);
+  assert.match(context, /structured-memory-only/);
+  for (const legacyInstruction of [
+    "workspaceId",
+    "projectId",
+    "create_today_note",
+    "exactly one journal note",
+    "toggle entries",
+    "$recall:recall-journal",
+  ]) {
+    assert.equal(context.includes(legacyInstruction), false, legacyInstruction);
+  }
+});
+
+test("uses the host-specific name in v3 without changing its protocol", () => {
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CLAUDE_CONFIG_DIR: path.join(fixtureRoot, "v3"),
+      CLAUDE_PLUGIN_ROOT: pluginRoot,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.equal(
+    context,
+    readFixture("v3", "additional-context.txt").replace("Codex", "Claude Code"),
+  );
+});
+
+test("rejects malformed or mixed v3 configs instead of choosing a journal protocol", () => {
+  const malformed = [
+    { version: 3 },
+    { version: 3, projectMemory: null },
+    { version: 3, projectMemory: { enabled: false } },
+    { version: 3, projectMemory: { enabled: true, fallback: "legacy" } },
+    { ...validV3Config(), journal: { dailyNote: false } },
+    { ...validV3Config(), global: validV2Config().global },
+    { ...validV3Config(), projects: {} },
+    { ...validV3Config(), scope: "global" },
+    { ...validV3Config(), workspace: validProjectWorkspace() },
+  ];
+
+  for (const config of malformed) {
+    const result = runHook({
+      environment: {
+        ...cleanEnvironment(),
+        CODEX_HOME: makeConfigDirectory(config),
+        PLUGIN_ROOT: pluginRoot,
+      },
+    });
+
+    assert.equal(result.status, 0, JSON.stringify(config));
+    assert.equal(result.stderr, "", JSON.stringify(config));
+    assert.equal(result.stdout, "", JSON.stringify(config));
+  }
+});
+
+test("documents v3 as reader-only and keeps v1/v2 as the sole writer", () => {
+  const [skill, configuration] = [
+    "plugins/recall/skills/recall-journal/SKILL.md",
+    "plugins/recall/skills/recall-journal/references/configuration.md",
+  ].map((relativePath) =>
+    fs.readFileSync(path.join(repositoryRoot, relativePath), "utf8"),
+  );
+
+  assert.match(
+    skill,
+    /reader-only \*\*version 3 structured project\s+memory\*\*/,
+  );
+  assert.match(
+    skill,
+    /never create or update a legacy journal note or Today summary/,
+  );
+  assert.match(configuration, /"projectMemory": \{ "enabled": true \}/);
+  assert.match(
+    configuration,
+    /Current setup and\s+reconfiguration flows below continue to write version 2 only/,
   );
 });
 

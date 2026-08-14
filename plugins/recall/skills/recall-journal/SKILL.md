@@ -64,6 +64,17 @@ It defines the v1-compatible/v2 schemas, canonical absolute filesystem-project
 path, workspace and Recall Project selection, compatibility errors,
 confirmation, and atomic write protocol.
 
+One compatibility exception is reader-only **version 3 structured project
+memory**. When lifecycle context explicitly identifies a valid v3 config,
+follow that context instead of the legacy named-note workflow below: resolve
+the current project and read its compact project context when those tools are
+available, but never create or update a legacy journal note or Today summary.
+This plugin release does not write v3 configs or structured sessions. If the
+project cannot be resolved or either structured read tool is unavailable,
+continue the user's task without project memory and without prompting for a
+legacy destination. Never rewrite or downgrade a v3 config through the v1/v2
+configuration flow.
+
 Each effective destination contains one write-ready Recall workspace and
 optionally one live Recall Project inside it. A filesystem-project destination
 overrides the global destination; a v2 config may intentionally contain only
