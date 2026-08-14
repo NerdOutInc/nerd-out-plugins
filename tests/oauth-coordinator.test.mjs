@@ -238,6 +238,20 @@ async function waitFor(predicate, message, timeoutMs = 15_000) {
   throw new Error(message);
 }
 
+async function waitForSignal(signal, message, timeoutMs = 10_000) {
+  let timeout;
+  try {
+    return await Promise.race([
+      signal,
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 const waitForExit = (child) =>
   new Promise((resolve) =>
     child.once("exit", (code, signal) => resolve({ code, signal })),
@@ -818,7 +832,10 @@ test("OAuth discovery finishes before the credential mutation lease is acquired"
     const child = spawnCoordinator(harness, "authorize");
     t.after(() => stopProcess(child));
     const capture = captureProcess(child);
-    await fixture.metadataStarted;
+    await waitForSignal(
+      fixture.metadataStarted,
+      "OAuth protected-resource discovery never started",
+    );
 
     const credentialLock = path.join(
       harness.cacheDirectory,
@@ -1023,15 +1040,10 @@ test("verify-only serializes behind a live bridge that is already mid-refresh", 
       })}\n`,
     );
 
-    await Promise.race([
+    await waitForSignal(
       fixture.refreshStarted,
-      new Promise((_, reject) =>
-        setTimeout(
-          () => reject(new Error("live bridge never began refresh")),
-          10_000,
-        ),
-      ),
-    ]);
+      "live bridge never began refresh",
+    );
     const verify = spawnCoordinator(harness, "verify-only");
     const verifyCapture = captureProcess(verify);
     assert.deepEqual(await waitForExit(verify), { code: 0, signal: null });
