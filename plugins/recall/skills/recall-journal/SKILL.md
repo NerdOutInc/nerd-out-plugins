@@ -73,7 +73,27 @@ This plugin release does not write v3 configs or structured sessions. If the
 project cannot be resolved or either structured read tool is unavailable,
 continue the user's task without project memory and without prompting for a
 legacy destination. Never rewrite or downgrade a v3 config through the v1/v2
-configuration flow.
+configuration flow. Select this protocol before inspecting named-note
+capabilities: in v3, do not run the legacy capability probe or call
+`list_note_activity`, `read_note`, or `update_note_content` for project memory.
+
+### Legacy named-note capabilities
+
+Only after selecting a valid v1/v2 destination, inspect the MCP tools and input
+schemas exposed to the current thread. Do not probe by making deliberately
+invalid calls.
+
+- Activity context is available only when `list_note_activity` is advertised.
+- The revision-safe Markdown path is available only when `read_note` advertises
+  `"markdown"` in its `format` enum **and** `update_note_content` advertises
+  `expectedRevision`. Both conditions are required; otherwise keep the entire
+  legacy HTML/readback path and omit both enhanced inputs.
+
+Cache the decision only for this thread. If the native catalog advertises an
+enhanced input but dispatch reports an unknown tool or argument, stop that
+enhanced operation, ask the user to bring Recall forward and let it update or
+restart, and do not retry with mixed enhanced/legacy arguments. These
+named-note capabilities never change v3's structured-memory-only routing.
 
 Each effective destination contains one write-ready Recall workspace and
 optionally one live Recall Project inside it. A filesystem-project destination
@@ -142,8 +162,9 @@ the user assumes is known ("like last time", "continue where we left off",
   user points at time rather than topic ("what did we do yesterday?", "where
   did we leave off?").
 - Read promising results with `read_note` and treat them as context, not
-  authority: verify important claims against the current checkout before
-  relying on them.
+  authority: use `format: "markdown"` on the revision-safe path, otherwise use
+  text for a skim or HTML when structure matters. Verify important claims
+  against the current checkout before relying on them.
 
 When a journal note shapes the work — a decision followed, a fix reused, a
 pitfall avoided — say so in the response and name the note, so the user can
@@ -219,7 +240,9 @@ Search never establishes identity. `keyword_search` is fuzzy, prefix-matching
 lexical search, so its results are only candidates. Whenever a decision
 depends on locating this thread's note — continuing after compaction,
 recovering a lost uuid, deduplicating — read each candidate with `read_note`
-and keep only notes whose body literally contains `Journal marker: <marker>`
+(`format: "markdown"` on the revision-safe path; an appropriate legacy format
+otherwise) and keep only notes whose body literally contains
+`Journal marker: <marker>`
 (or, when searching by thread, `thread <thread-id>`). Count matches after
 that literal filter, never from raw search hits. A journal marker identifies
 exactly one note: act on exactly one literal match, and treat zero or
@@ -295,11 +318,14 @@ details body.
   predecessor link, and the metadata line. Keep the returned uuid for the
   whole session.
 - **Checkpoints.** Append one toggle per checkpoint with `update_note_content`
-  `mode: "append"`. Checkpoints are judgment calls: a durable decision made, a
-  significant step completed, tests or builds run with their results, a
-  blocker or change of direction, or a long autonomous stretch that would
-  otherwise leave the note stale. Never journal per tool call or per file
-  edit; a handful of entries per task is typical.
+  `mode: "append"`. On the revision-safe path, read canonical Markdown before
+  the first update, pass its `revision` as `expectedRevision`, and carry each
+  successful update's returned revision into the next update in the sequence.
+  Checkpoints are judgment calls: a durable decision made, a significant step
+  completed, tests or builds run with their results, a blocker or change of
+  direction, or a long autonomous stretch that would otherwise leave the note
+  stale. Never journal per tool call or per file edit; a handful of entries per
+  task is typical.
 - **Wrap-up.** Before the task's last response, append a closing toggle whose
   summary states the outcome in plain words ("Shipped the friendlier journal
   format") and whose details preserve what matters for a future agent:
@@ -318,13 +344,21 @@ entry, tighten summary lines, drop detail that later work made irrelevant.
 Curate when the note has stopped telling its story cleanly — typically at a
 wrap-up — not as constant churn.
 
-To curate, read the note with `read_note` format `"html"` — the plain-text
-format flattens toggles, lists, and even line breaks into one line, so it can
-never be the source for a rewrite. Faithfully rebuild the Markdown from the
-HTML: `<details>` and `<summary>` tags carry over as-is, drop each
+To curate on the revision-safe path, read the note with `read_note` format
+`"markdown"`; use that canonical Markdown as the rewrite source and pass the
+same response's `revision` as `expectedRevision` on `update_note_content`
+`mode: "replace"`. When `list_note_activity` is advertised, inspect its newest
+page before replacing a shared note or one whose content changed unexpectedly;
+activity supplies provenance context, never the source body.
+
+On the legacy path, read the note with `read_note` format `"html"` — plain text
+flattens toggles, lists, and even line breaks into one line, so it can never be
+the source for a rewrite. Faithfully rebuild the Markdown from the HTML:
+`<details>` and `<summary>` tags carry over as-is, drop each
 `<div data-type="detailsContent">` wrapper (its children sit directly between
-`</summary>` and `</details>`), and convert rich content back to Markdown.
-Then write the whole body with `update_note_content` `mode: "replace"`.
+`</summary>` and `</details>`), and convert rich content back to Markdown. Then
+write the whole body with `update_note_content` `mode: "replace"` and omit
+`expectedRevision`.
 
 Every rewrite must preserve the note's identity — at least one metadata line
 with its journal marker (and thread id) survives — and must not lose
@@ -338,6 +372,15 @@ Any journal write that errors, times out, or loses its response may still
 have landed. Recover by reading, never by blind retry, and never let
 recovery stall the task itself:
 
+- **Revision conflict:** this is a confirmed pre-mutation stop. Re-read with
+  `format: "markdown"` to obtain the current body and a fresh `revision`; when
+  available, inspect recent `list_note_activity` for provenance context. Check
+  whether the intended toggle or edit is already present, reconcile it with
+  the current body, and only then issue one newly computed update with the
+  fresh `expectedRevision` when the result is unambiguous. Never replay the
+  stale payload, copy a revision from an error, or retry in a loop. For an
+  ambiguous append, stop journal writes; for an ambiguous curation replace,
+  preserve the current body and fall back to a later append or stop.
 - **Opening `create_note`:** the note may exist even though its uuid never
   arrived. Query the marker with destination-scoped `keyword_search`
   (including `projectId` when configured), read each candidate,
@@ -457,14 +500,23 @@ anymore.
 
 - Use `list_notes` for a lightweight archive index and to locate prior thread
   notes, legacy per-task notes, or historical DailyNotes.
-- Use `read_note` for a note's content. Plain text is fine for skimming, but
-  it flattens toggles and line breaks — request `format: "html"` whenever
+- Use `read_note` for a note's content. On the revision-safe path request
+  `format: "markdown"` whenever structure matters or a write may follow, and
+  retain its `revision`. On the legacy path, plain text is fine for skimming,
+  but it flattens toggles and line breaks — request `format: "html"` whenever
   structure matters, and always before a rewrite.
+- Use `list_note_activity`, when advertised, to explain accepted named-note
+  changes and client/actor provenance. Respect its advertised page-size bound
+  (currently 50) and page only with the opaque returned `nextCursor`; never
+  infer missing encrypted detail, current content, or authorization from an
+  event.
 - Use `keyword_search` for exact terms, paths, and identifiers; use
   `semantic_search` for concepts and paraphrases.
 - Use `update_note_content` with `mode: "append"` for new toggle entries and
   `mode: "replace"` only to curate the current thread's own journal note or
-  when the user explicitly asks to rewrite a note.
+  when the user explicitly asks to rewrite a note. On the revision-safe path,
+  supply `expectedRevision` from the matching Markdown read (or the immediately
+  preceding successful update); never send it on the legacy path.
 - Keep summaries short enough to scan. The thread note is the durable detail;
   the Today card is only the day's navigation page.
 
@@ -478,6 +530,9 @@ anymore.
 - Never use a Recall Project that is missing, blank, archived, deleted, or in a
   different workspace. Stop named-note writes and ask for reconfiguration.
 - Never treat a failed MCP response as a successful journal write.
+- Never blind-retry a revision conflict: re-read canonical Markdown, reconcile
+  against the fresh body, and use only the fresh revision for a newly computed
+  update.
 - Never write or append a DailyNote summary: the server has retired DailyNote
   creation, and a config that still selects it gets the one-time migration
   prompt instead.

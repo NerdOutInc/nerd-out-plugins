@@ -91,6 +91,13 @@ Write tools appear when at least one confirmed workspace is set to **Write**
 in Recall's MCP Server settings. A workspace omitted from the policy remains
 blocked.
 
+The skills inspect the current MCP catalog before using newer note capabilities.
+When available, they can read one named note's accepted activity and pair
+canonical Markdown reads with opaque revision-checked content updates. Older
+Recall builds keep the existing HTML/readback workflow; the skills never send
+only half of the revision-safe field pair. Structured version 3 project memory
+remains exclusive and never falls through to these legacy named-note tools.
+
 The plugin supports multiple skills in its `skills/` directory. In addition to
 the direct note workflow, the journal skill
 (`$recall:recall-journal` in Codex,
