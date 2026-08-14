@@ -78,6 +78,12 @@ explicitly asks to reconfigure one. During that explicit reconfiguration — or
 a confirmed summary-target migration — translate all preserved v1 destinations
 to v2 and update only the requested setting.
 
+Versions 1 and 2 remain the supported named-note writer. Their `global`
+destination is deliberately available outside Git and outside every configured
+filesystem-project path, which preserves automatic memory in general-purpose
+agent threads. Never auto-migrate a version 1 or 2 config to structured project
+memory: a silent migration could remove that global, non-repository behavior.
+
 ## Reader-only structured project memory
 
 The hook also recognizes this exact version 3 activation shape:
@@ -89,17 +95,58 @@ The hook also recognizes this exact version 3 activation shape:
 }
 ```
 
-Version 3 is reserved for structured project memory. It is mutually exclusive
-with the legacy `scope`, `workspace`, `journal`, `global`, and `projects`
-fields; mixed or additional fields make the file invalid so the hook can never
-route one prompt into both journal protocols. In this compatibility release,
-v3 is **reader-only**: the hook tells the agent to use `resolve_project` and
-`get_project_context` when available, while the skill never creates legacy
-journal notes, Today summaries, structured sessions, or v3 config files.
+Version 3 is repository-only structured project memory. It has no global or
+non-Git fallback: the agent may call `resolve_project` only with a supported
+non-local Git remote and may pass only an exact result to
+`get_project_context`. No supported remote, an unavailable tool, `none`,
+`ambiguous`, `not_ready`, or context that is not ready means continue without
+project memory.
 
-Do not write, migrate, reconfigure, or downgrade v3. If either structured read
-tool is unavailable or the current filesystem project does not resolve to one
-project, continue the user's task without project memory. Current setup and
+The hook also recognizes this exact version 4 reader configuration:
+
+```json
+{
+  "version": 4,
+  "projectMemory": {
+    "enabled": true,
+    "defaultProject": {
+      "workspace": { "id": "workspace-id", "name": "Workspace name" },
+      "recallProject": { "id": "project-id", "name": "Project name" }
+    }
+  }
+}
+```
+
+Version 4 adds one explicit default Recall Project for sessions that have no
+filesystem repository identity. Both the workspace and Recall Project are
+required; a workspace-root default is invalid. The saved Project id is passed
+to `get_project_context` as `projectUuid`, and the returned Project and
+workspace ids must match the saved destination exactly.
+
+Routing is fail-closed and happens before any named-note capability probe:
+
+1. A `.git` directory or gitfile in the working directory or any ancestor is
+   repository identity. Use repository-first routing even when that repository
+   has no supported remote. With a supported non-local remote, only an exact
+   `resolve_project` result may feed `get_project_context`.
+2. Only when the hook proves the working directory exists and has no `.git`
+   marker in any ancestor may the agent call `get_project_context` directly for
+   the configured default Project. Do not call `resolve_project` or invent
+   repository metadata on this route.
+3. If the working directory is missing, inaccessible, or otherwise cannot be
+   classified, continue without project memory and do not use the default.
+
+The default is never a recovery path. Do not use it after a repository has no
+supported remote, after `resolve_project` returns `none`, `ambiguous`, or
+`not_ready`, when either required tool is unavailable, or when structured
+context is missing, blocked, mismatched, or not ready.
+
+Versions 3 and 4 are mutually exclusive with the legacy `scope`, `workspace`,
+`journal`, `global`, and `projects` fields. Mixed or additional fields make the
+file invalid so one prompt can never enter both protocols. Both versions are
+**reader-only** in this plugin release: never create or update legacy journal
+notes, Today summaries, structured sessions, or structured config files. Do
+not write, migrate, reconfigure, or downgrade v3 or v4. Current setup and
 reconfiguration flows below continue to write version 2 only.
 
 ## Resolve the current filesystem project

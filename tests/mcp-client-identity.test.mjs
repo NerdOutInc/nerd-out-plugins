@@ -204,8 +204,10 @@ test("host manifests share the current plugin version", async () => {
   // 0.17.0 remains the socket-bridge floor the Recall app gates first-use
   // authorization on. 0.18.0 adds the reader-first v3 project-memory hook;
   // 0.19.0 adds capability-probed activity and revision-safe note workflows.
+  // 0.20.0 adds strict v4 repository-first/default-no-repository reads and the
+  // explicit host-surface contract.
   // Both hosts must receive that behavior together.
-  assert.equal(codexPlugin.version, "0.19.0");
+  assert.equal(codexPlugin.version, "0.20.0");
   assert.equal(claudePlugin.version, codexPlugin.version);
   const desktop = await readJson("desktop-extensions/recall/manifest.json");
   assert.equal(desktop.version, "0.8.0");

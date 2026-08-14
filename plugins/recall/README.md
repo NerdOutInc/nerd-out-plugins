@@ -25,7 +25,10 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
-Plugin `0.19.0` capability-probes newer Recall builds for note activity,
+Plugin `0.20.0` documents the host support boundary and adds a strict,
+reader-only version 4 memory route: repositories always resolve first, while
+an explicit default Recall Project is used only when no repository identity
+exists. Plugin `0.19.0` capability-probes newer Recall builds for note activity,
 canonical Markdown, and revision-checked content updates while keeping the
 older note workflow intact. Plugin `0.18.0` adds a reader-only version 3
 activation path for future structured project memory while leaving the current
@@ -102,6 +105,47 @@ claude plugin install recall@recall --scope user
 ```
 
 Start a new thread after installing so the plugin tools are loaded.
+
+## Host and memory support
+
+Plugin installation, a local MCP connection, skills, and lifecycle hooks are
+separate capabilities. The current support boundary is:
+
+| Surface | Recall tools and skills | Automatic journal or project memory |
+| --- | --- | --- |
+| Codex app and Codex CLI | Supported through the local bridge after plugin trust and native approval. | Supported. The bundled Codex `UserPromptSubmit` hook reads this agent's config. |
+| Claude Code | Supported through the local bridge after plugin installation and native approval. | Supported. The bundled Claude Code `UserPromptSubmit` hook reads this agent's config. |
+| Claude Desktop ordinary chat | Local desktop plugin tools and skills are available. | Not automatic. Claude's plugin hooks do not run in ordinary chat, so invoke a skill or Recall tool explicitly. |
+| Claude Cowork on the local desktop | Claude supports plugin skills, hooks, and local MCP servers in local Cowork sessions. | Not yet verified end to end by Recall. The current hook treats every non-Codex host as Claude Code and reads the Claude Code config location, so do not rely on automatic memory until Recall adds a Cowork-specific fixture. |
+| Claude remote Cowork, web, or mobile | Recall's loopback MCP server is not reachable from the remote environment. | Unsupported while the only Recall transport is local to the Mac. |
+| ChatGPT chat and work surfaces | This package does not currently register a ChatGPT app or connection. | Unsupported. A Codex plugin install and Codex lifecycle hooks do not establish automatic memory in ChatGPT chat. |
+
+These boundaries follow the host documentation: Claude plugins can expose
+skills in Claude and Cowork, but hooks run in Cowork rather than ordinary
+Claude chat, and remote Cowork cannot reach a local MCP server
+([Claude plugins](https://support.claude.com/en/articles/13837440-use-plugins-in-claude),
+[Cowork architecture](https://support.claude.com/en/articles/14479288-claude-cowork-architecture-overview)).
+OpenAI's plugin format can package capabilities for ChatGPT and Codex, but each
+capability still needs a supported surface and configuration; this Recall
+package currently ships a Codex MCP registration and Codex hook, not a ChatGPT
+connection
+([OpenAI plugins](https://learn.chatgpt.com/docs/plugins),
+[Codex hooks](https://learn.chatgpt.com/docs/hooks)).
+
+The journal config version controls automatic memory only where the host runs
+the hook:
+
+| Config | Repository session | Proven non-repository session | Writes |
+| --- | --- | --- | --- |
+| v1/v2 | A matching filesystem-project destination wins; otherwise the global destination remains available. | The global destination remains available, so existing general-purpose and non-Git chats keep working. | Legacy named-note journal and optional Today summary. |
+| v3 | Repository-only structured lookup. No supported remote or no exact `resolve_project` match means no project memory. | No memory; v3 has no global or default fallback. | None; reader-only. |
+| v4 | Repository-first structured lookup, even when the repository has no usable remote. Never use the default after `none`, `ambiguous`, or `not_ready`. | Read the one explicitly configured default Recall Project directly, but only after the hook proves no repository identity exists. | None; reader-only in this release. |
+
+Do not auto-migrate v1/v2 users to v3 or v4: doing so could silently remove
+their global, non-Git memory. The v4 default is not an error fallback, and
+structured modes never mix with legacy named-note writes. Direct, explicit
+Recall tool use remains available wherever the local MCP connection and skills
+are actually loaded.
 
 ### Moving an existing install to Recall
 
@@ -242,13 +286,15 @@ under `skills/` that contains a `SKILL.md`. It currently includes:
   under the repo included — then journal to and recall from the project's
   workspace and optional Recall Project instead of the global destination.
 
-  The hook can also read the reserved version 3 project-memory activation
-  shape. In this compatibility release that mode is intentionally read-only:
-  it resolves the current project and loads compact structured context when the
-  app advertises those tools, but never writes either structured sessions or
-  the legacy note/Today journal. Current setup and reconfiguration continue to
-  write version 2 only. Version 3 also bypasses the legacy named-note
-  capability probe, so one prompt can never enter both protocols.
+  The hook can also read the reserved version 3 and version 4 project-memory
+  activation shapes. Both modes are intentionally reader-only. Version 3 is
+  repository-only; version 4 is repository-first and may read one explicit
+  default Recall Project only after proving that no repository identity exists.
+  Neither mode writes structured sessions or the legacy note/Today journal.
+  Current setup and reconfiguration continue to write version 2 only, and do
+  not auto-migrate existing global users. Both structured versions bypass the
+  legacy named-note capability probe, so one prompt can never enter both
+  protocols.
 
 In Codex, invoke skills as `$recall:recall` and
 `$recall:recall-journal`; in Claude Code, use

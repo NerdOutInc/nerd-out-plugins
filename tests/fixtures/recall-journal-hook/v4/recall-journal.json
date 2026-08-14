@@ -1,0 +1,10 @@
+{
+  "version": 4,
+  "projectMemory": {
+    "enabled": true,
+    "defaultProject": {
+      "workspace": { "id": "default-workspace-id", "name": "General Memory" },
+      "recallProject": { "id": "default-project-id", "name": "General" }
+    }
+  }
+}

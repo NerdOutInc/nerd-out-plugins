@@ -112,8 +112,8 @@ test("Recall skills document capability-gated activity and conditional writes", 
   assert.match(journalSkill, /omit both enhanced inputs/);
 });
 
-test("structured v3 remains exclusive from every legacy note capability", async () => {
-  const [journalSkill, v3Context] = await Promise.all([
+test("structured v3 and v4 stay exclusive from every legacy note capability", async () => {
+  const [journalSkill, v3Context, v4Context] = await Promise.all([
     readFile(
       new URL("plugins/recall/skills/recall-journal/SKILL.md", repositoryRoot),
       "utf8"
@@ -121,22 +121,37 @@ test("structured v3 remains exclusive from every legacy note capability", async 
     readFile(
       new URL("../recall-journal-hook/v3/additional-context.txt", fixtureRoot),
       "utf8"
+    ),
+    readFile(
+      new URL("../recall-journal-hook/v4/repository-context.txt", fixtureRoot),
+      "utf8"
     )
   ]);
-  const v3Start = journalSkill.indexOf("One compatibility exception");
-  const v3End = journalSkill.indexOf("### Legacy named-note capabilities");
-  assert.notEqual(v3Start, -1, "expected the structured v3 section");
-  assert.ok(v3End > v3Start, "expected legacy capabilities after structured v3");
-  const v3Section = journalSkill.slice(v3Start, v3End);
+  const structuredStart = journalSkill.indexOf("One compatibility exception");
+  const structuredEnd = journalSkill.indexOf(
+    "### Legacy named-note capabilities"
+  );
+  assert.notEqual(structuredStart, -1, "expected the structured-mode section");
+  assert.ok(
+    structuredEnd > structuredStart,
+    "expected legacy capabilities after structured modes"
+  );
+  const structuredSection = journalSkill.slice(structuredStart, structuredEnd);
 
-  assert.match(v3Section, /Select this protocol before/);
-  assert.match(v3Section, /do not run the legacy capability probe/);
+  assert.match(structuredSection, /Select this protocol before/);
+  assert.match(structuredSection, /do not run the legacy capability probe/);
   for (const legacyTool of [
     "list_note_activity",
     "read_note",
     "update_note_content"
   ]) {
-    assert.equal(v3Section.includes("`" + legacyTool + "`"), true, legacyTool);
-    assert.equal(v3Context.includes(legacyTool), false, legacyTool);
+    assert.equal(
+      structuredSection.includes("`" + legacyTool + "`"),
+      true,
+      legacyTool
+    );
+    for (const context of [v3Context, v4Context]) {
+      assert.equal(context.includes(legacyTool), false, legacyTool);
+    }
   }
 });
