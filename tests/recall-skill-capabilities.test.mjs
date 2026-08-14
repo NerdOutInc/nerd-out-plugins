@@ -12,6 +12,12 @@ async function readJson(url) {
   return JSON.parse(await readFile(url, "utf8"));
 }
 
+function requireTool(catalog, name) {
+  const tool = catalog.tools.find((candidate) => candidate.name === name);
+  assert.ok(tool, `expected ${name} in fixture catalog`);
+  return tool;
+}
+
 function advertisedCapabilities(catalog) {
   const tools = new Map(catalog.tools.map((tool) => [tool.name, tool]));
   const readFormats =
@@ -37,9 +43,7 @@ test("capability fixtures require the complete revision-safe pair", async () => 
     activity: true,
     revisionSafeMarkdown: true
   });
-  const activitySchema = enhanced.tools.find(
-    ({ name }) => name === "list_note_activity"
-  ).inputSchema;
+  const activitySchema = requireTool(enhanced, "list_note_activity").inputSchema;
   assert.equal(activitySchema.properties.limit.maximum, 50);
   assert.deepEqual(activitySchema.required, ["uuid"]);
   assert.deepEqual(advertisedCapabilities(legacy), {
@@ -48,8 +52,9 @@ test("capability fixtures require the complete revision-safe pair", async () => 
   });
 
   const missingMarkdown = structuredClone(enhanced);
-  missingMarkdown.tools.find(
-    ({ name }) => name === "read_note"
+  requireTool(
+    missingMarkdown,
+    "read_note"
   ).inputSchema.properties.format.enum = ["text", "html", "both"];
   assert.equal(
     advertisedCapabilities(missingMarkdown).revisionSafeMarkdown,
@@ -57,8 +62,9 @@ test("capability fixtures require the complete revision-safe pair", async () => 
   );
 
   const missingExpectedRevision = structuredClone(enhanced);
-  delete missingExpectedRevision.tools.find(
-    ({ name }) => name === "update_note_content"
+  delete requireTool(
+    missingExpectedRevision,
+    "update_note_content"
   ).inputSchema.properties.expectedRevision;
   assert.equal(
     advertisedCapabilities(missingExpectedRevision).revisionSafeMarkdown,
@@ -117,10 +123,11 @@ test("structured v3 remains exclusive from every legacy note capability", async 
       "utf8"
     )
   ]);
-  const v3Section = journalSkill.slice(
-    journalSkill.indexOf("One compatibility exception"),
-    journalSkill.indexOf("### Legacy named-note capabilities")
-  );
+  const v3Start = journalSkill.indexOf("One compatibility exception");
+  const v3End = journalSkill.indexOf("### Legacy named-note capabilities");
+  assert.notEqual(v3Start, -1, "expected the structured v3 section");
+  assert.ok(v3End > v3Start, "expected legacy capabilities after structured v3");
+  const v3Section = journalSkill.slice(v3Start, v3End);
 
   assert.match(v3Section, /Select this protocol before/);
   assert.match(v3Section, /do not run the legacy capability probe/);
