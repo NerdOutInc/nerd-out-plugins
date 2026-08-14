@@ -142,6 +142,13 @@ test("Project activity requires exact response capability and a usable cursor", 
   malformedCapability.capabilities.activityDeltas = "true";
   assert.equal(projectActivityContract(malformedCapability, catalog).observation, "unknown");
   assert.equal(projectActivityContract(unavailable, catalog).observation, "unknown");
+
+  const capabilityWithoutAvailableData = structuredClone(unavailable);
+  capabilityWithoutAvailableData.capabilities.activityDeltas = true;
+  assert.equal(
+    projectActivityContract(capabilityWithoutAvailableData, catalog).observation,
+    "unknown",
+  );
   assert.equal(unavailable.project.id, "project-explicit");
   assert.equal(unavailable.recentNotes.items.length, 1);
 });
@@ -182,6 +189,15 @@ test("operation activity detail stays unknown unless its result capability is ex
     operationFields.map(() => "present"),
   );
   assert.equal(interpreted.summary.trust, "untrusted_agent_authored_context");
+
+  const withheldDespiteRawFields = structuredClone(enhanced);
+  withheldDespiteRawFields.capabilities.operationActivityDetail = false;
+  const withheld = operationDetailContract(withheldDespiteRawFields);
+  assert.deepEqual(
+    Object.values(withheld.operationFields),
+    operationFields.map(() => "unknown"),
+  );
+  assert.equal(withheld.summary, null);
 
   for (const capability of [false, "true", undefined]) {
     const gated = structuredClone(enhanced);
