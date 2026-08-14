@@ -227,6 +227,9 @@ test("host manifests supply useful OAuth client names", async () => {
     "--client-name",
     "Claude",
   ]);
+  assert.equal(claude.mcpServers.recall.type, "stdio");
+  assert.equal(Object.hasOwn(claude.mcpServers.recall, "url"), false);
+  assert.equal(/cowork/i.test(JSON.stringify(claude.mcpServers.recall)), false);
   assert.deepEqual(desktop.server.mcp_config.args.slice(-2), [
     "--client-name",
     "Claude Desktop",
