@@ -1,0 +1,45 @@
+{
+  "tools": [
+    {
+      "name": "list_note_activity",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "uuid": { "type": "string" },
+          "limit": { "type": "integer", "maximum": 50 },
+          "cursor": { "type": "string" }
+        },
+        "required": ["uuid"]
+      }
+    },
+    {
+      "name": "read_note",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "noteType": { "type": "string" },
+          "uuid": { "type": "string" },
+          "format": {
+            "type": "string",
+            "enum": ["text", "html", "both", "markdown"]
+          }
+        },
+        "required": ["noteType", "uuid"]
+      }
+    },
+    {
+      "name": "update_note_content",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "noteType": { "type": "string" },
+          "uuid": { "type": "string" },
+          "text": { "type": "string" },
+          "mode": { "type": "string", "enum": ["replace", "append"] },
+          "expectedRevision": { "type": "string" }
+        },
+        "required": ["noteType", "uuid", "text", "mode"]
+      }
+    }
+  ]
+}

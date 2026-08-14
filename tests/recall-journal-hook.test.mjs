@@ -247,6 +247,10 @@ test("routes a strict v3 config to structured project memory only", () => {
     "exactly one journal note",
     "toggle entries",
     "$recall:recall-journal",
+    "list_note_activity",
+    "read_note",
+    "update_note_content",
+    "expectedRevision",
   ]) {
     assert.equal(context.includes(legacyInstruction), false, legacyInstruction);
   }

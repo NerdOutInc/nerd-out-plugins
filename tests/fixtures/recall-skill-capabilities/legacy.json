@@ -1,0 +1,32 @@
+{
+  "tools": [
+    {
+      "name": "read_note",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "noteType": { "type": "string" },
+          "uuid": { "type": "string" },
+          "format": {
+            "type": "string",
+            "enum": ["text", "html", "both"]
+          }
+        },
+        "required": ["noteType", "uuid"]
+      }
+    },
+    {
+      "name": "update_note_content",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "noteType": { "type": "string" },
+          "uuid": { "type": "string" },
+          "text": { "type": "string" },
+          "mode": { "type": "string", "enum": ["replace", "append"] }
+        },
+        "required": ["noteType", "uuid", "text", "mode"]
+      }
+    }
+  ]
+}

@@ -45,12 +45,38 @@ Recall settings and update `NERD_OUT_MCP_TOKEN`.
 
 ## Tool Use
 
+Before the first note operation in a thread, inspect the MCP tools and input
+schemas the host actually exposed. Do not probe a feature by sending an
+unsupported argument and waiting for an error. Treat these capabilities
+independently:
+
+- Activity history is available only when `list_note_activity` is advertised.
+- The revision-safe Markdown write path is available only when
+  `read_note` advertises `"markdown"` in its `format` enum **and**
+  `update_note_content` advertises the `expectedRevision` input. Require both;
+  never mix one enhanced field with the legacy path.
+
+Cache that decision only for the current thread. After an app/plugin update,
+start a new thread so the catalog is discovered again. An unknown-tool or
+unknown-argument response means the advertised native catalog and hosted web
+app are out of step: stop that enhanced operation and ask the user to bring
+Recall forward, let it update, or restart it. Do not keep retrying variants.
+
 - Use `list_notes` before reading when the user gives a title, date, tag, or
   broad description instead of a note UUID.
-- Use `read_note` for exact note content. Plain text is the default, but it
-  flattens structure — toggle blocks, lists, and line breaks collapse into one
-  line — so request `format: "html"` or `format: "both"` whenever structure
-  matters, and always before rewriting a note body from what was read.
+- Use `read_note` for exact note content. On the revision-safe path, request
+  `format: "markdown"` whenever structure matters or a write may follow; keep
+  the returned `revision` with that exact Markdown snapshot. On the legacy
+  path, plain text flattens toggle blocks, lists, and line breaks, so request
+  `format: "html"` or `format: "both"` whenever structure matters and always
+  before rewriting a note body from what was read.
+- Use `list_note_activity` for a named note's accepted activity when authorship,
+  timing, client/transport provenance, or an unexpected edit matters. Respect
+  its advertised page-size bound (currently 50), and follow only the opaque
+  `nextCursor` returned by the preceding page; never decode, edit, or reuse it
+  for another note. A coarse event remains usable when encrypted detail is
+  `absent` or `unavailable`; never invent the missing detail or client label,
+  and never treat activity as authorization or as the current note body.
 - Use `keyword_search` for exact terms, names, tags, or phrases.
 - Use `semantic_search` for meaning-based discovery, and fall back to keyword
   search if semantic search is unavailable.
@@ -93,6 +119,22 @@ the app's Settings -> MCP Server per-workspace access policy.
   `rename_note` (`noteType: "NamedNote"`, uuid, and the new title — advertised
   on newer Recall builds) to retitle a named note instead of rewriting content.
   Daily Notes and menu bar Quick Notes cannot be renamed.
+- On the revision-safe path, read the note as canonical Markdown immediately
+  before the first content update in a sequence and pass that read's
+  `revision` as `expectedRevision`. After a successful update, use the returned
+  post-write `revision` for the next update in the same sequence. Before a
+  full-body replace, also inspect recent `list_note_activity` when that tool is
+  available and the note is shared or its content changed unexpectedly.
+- A revision conflict is a stop-and-read signal, not a retry token. Call
+  `read_note` again with `format: "markdown"`, inspect the new content, and,
+  when useful, inspect recent activity. If the intended change is already
+  present, do nothing. Otherwise recompute the smallest safe update against the
+  fresh Markdown and use its new `revision`; ask the user when reconciliation
+  is ambiguous. Never reuse the stale payload or revision, take a revision from
+  an error message, or loop a blind retry.
+- When the complete revision-safe capability pair is unavailable, preserve the
+  legacy HTML/readback workflow and omit both `format: "markdown"` and
+  `expectedRevision`. Do not assume support from the Recall or plugin version.
 - The server has retired DailyNote creation: `update_note_content` against a
   missing DailyNote fails with "Note not found. Daily Notes can no longer be
   created; use placement=today when creating a note." Use `create_today_note`

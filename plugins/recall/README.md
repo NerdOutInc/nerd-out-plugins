@@ -25,13 +25,15 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
-Plugin `0.18.0` adds a reader-only version 3 activation path for future
-structured project memory while leaving the current version 1/2 named-note
-journal unchanged. Plugin `0.17.0` introduced the signed local bridge;
-`0.16.0` made the journal human-first; `0.15.0` retired DailyNote creation;
-`0.14.0` added Today summaries; `0.13.0` added Project-aware destinations; and
-the `0.12.x` line added the OAuth coordinator, scope alignment, and Codex hook
-trust preflight.
+Plugin `0.19.0` capability-probes newer Recall builds for note activity,
+canonical Markdown, and revision-checked content updates while keeping the
+older note workflow intact. Plugin `0.18.0` adds a reader-only version 3
+activation path for future structured project memory while leaving the current
+version 1/2 named-note journal unchanged. Plugin `0.17.0` introduced the signed
+local bridge; `0.16.0` made the journal human-first; `0.15.0` retired DailyNote
+creation; `0.14.0` added Today summaries; `0.13.0` added Project-aware
+destinations; and the `0.12.x` line added the OAuth coordinator, scope
+alignment, and Codex hook trust preflight.
 
 Both Claude (`.mcp.json`) and Codex (`.codex-plugin/mcp.json`) register the same
 bridge implementation but pass their own client names. When Recall's one-click
@@ -181,6 +183,11 @@ connects) replaces this setup.
 
 Recall advertises `list_notes`, `read_note`, `keyword_search`,
 `semantic_search`, `get_index_status`, `list_workspaces`, and `list_projects`.
+Newer builds also advertise `list_note_activity` for one named note's accepted
+activity and extend `read_note` / `update_note_content` with canonical Markdown
+plus opaque revision tokens for conditional writes. The skills inspect the
+live schemas before using those additions; if the complete revision pair is
+not present, they keep the legacy HTML/readback workflow without mixing fields.
 Named-note list/search tools accept an explicit workspace + Project filter, and
 `create_note` can file a new named note in that exact Project.
 `create_today_note` makes one short, retry-safe Today card in an explicit
@@ -240,7 +247,8 @@ under `skills/` that contains a `SKILL.md`. It currently includes:
   it resolves the current project and loads compact structured context when the
   app advertises those tools, but never writes either structured sessions or
   the legacy note/Today journal. Current setup and reconfiguration continue to
-  write version 2 only.
+  write version 2 only. Version 3 also bypasses the legacy named-note
+  capability probe, so one prompt can never enter both protocols.
 
 In Codex, invoke skills as `$recall:recall` and
 `$recall:recall-journal`; in Claude Code, use
