@@ -150,7 +150,7 @@ Chat and Cowork, while hooks run in Cowork rather than ordinary Chat. A Cowork
 cloud sandbox has no direct cloud loopback path to Recall, but Claude Desktop
 can keep the plugin MCP process on the device and broker its tools into a cloud
 session while the app is open and online. The loopback listener never becomes a
-public connector
+public connector.
 ([Claude plugins](https://support.claude.com/en/articles/13837440-use-plugins-in-claude),
 [Cowork surfaces](https://support.claude.com/en/articles/15520349-use-claude-cowork-on-web-desktop-and-mobile),
 [Cowork architecture](https://support.claude.com/en/articles/14479288-claude-cowork-architecture-overview)).
