@@ -23,6 +23,7 @@ function requireTool(catalog, name) {
 
 function projectActivityContract(result, catalog) {
   const activity = result?.activity ?? {};
+  const items = Array.isArray(activity.items) ? activity.items : [];
   const capability = result?.capabilities?.activityDeltas === true;
   const available = capability && activity.available === true;
   const properties =
@@ -44,11 +45,17 @@ function projectActivityContract(result, catalog) {
     nextCursor,
     mayPage: schemaSupportsCursor && nextCursor !== null,
     observation: available ? "bounded_workspace_page" : "unknown",
-    scannedCount: available ? activity.scannedCount : null,
+    scannedCount:
+      available && Number.isInteger(activity.scannedCount)
+        ? activity.scannedCount
+        : null,
     truncated: available && activity.truncated === true,
-    unavailableCount: available ? activity.unavailableCount : null,
+    unavailableCount:
+      available && Number.isInteger(activity.unavailableCount)
+        ? activity.unavailableCount
+        : null,
     summaries: available
-      ? activity.items
+      ? items
           .filter((item) => typeof item.changeSummary === "string")
           .map((item) => ({
             trust: "untrusted_agent_authored_context",
@@ -149,6 +156,15 @@ test("Project activity requires exact response capability and a usable cursor", 
     projectActivityContract(capabilityWithoutAvailableData, catalog).observation,
     "unknown",
   );
+
+  const malformedAvailableData = structuredClone(enabled);
+  delete malformedAvailableData.activity.items;
+  delete malformedAvailableData.activity.scannedCount;
+  delete malformedAvailableData.activity.unavailableCount;
+  const malformedData = projectActivityContract(malformedAvailableData, catalog);
+  assert.deepEqual(malformedData.summaries, []);
+  assert.equal(malformedData.scannedCount, null);
+  assert.equal(malformedData.unavailableCount, null);
   assert.equal(unavailable.project.id, "project-explicit");
   assert.equal(unavailable.recentNotes.items.length, 1);
 });
