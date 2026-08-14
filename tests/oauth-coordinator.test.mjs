@@ -506,6 +506,15 @@ test("approve, reuse, inspect, denial, state mismatch, and cancel stay browserle
           harness.cacheDirectory,
           `${serverHash}_tokens.json`,
         );
+        const credentialLockPath = path.join(
+          harness.cacheDirectory,
+          `${serverHash}_credentials.lock`,
+        );
+        const credentialLockOwner = {
+          nonce: "foreign-owner",
+          pid: process.pid,
+          timestamp: Date.now(),
+        };
         await Promise.all([
           writeFile(
             clientPath,
@@ -527,6 +536,13 @@ test("approve, reuse, inspect, denial, state mismatch, and cancel stay browserle
               token_type: "bearer",
             }),
             { mode: 0o600 },
+          ),
+          mkdir(credentialLockPath, { mode: 0o700, recursive: true }).then(() =>
+            writeFile(
+              path.join(credentialLockPath, "owner.json"),
+              JSON.stringify(credentialLockOwner),
+              { mode: 0o600 },
+            ),
           ),
         ]);
         const registrationsBefore = fixture.counters.dynamicRegistrations;
@@ -557,6 +573,12 @@ test("approve, reuse, inspect, denial, state mismatch, and cancel stay browserle
         assert.equal(
           JSON.parse(await readFile(tokenPath, "utf8")).access_token,
           "access-1",
+        );
+        assert.deepEqual(
+          JSON.parse(
+            await readFile(path.join(credentialLockPath, "owner.json"), "utf8"),
+          ),
+          credentialLockOwner,
         );
       } finally {
         await rm(harness.root, { force: true, recursive: true });

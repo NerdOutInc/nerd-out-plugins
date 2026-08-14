@@ -317,6 +317,22 @@ async function runNetworkedMode(args: CoordinatorArguments): Promise<void> {
     const requiredScope = oauthScopeForSupportedScopes(
       discovery.protectedResourceMetadata?.scopes_supported
     );
+    const reportAuthorizationRequired = async () => {
+      writeRecord({
+        clientId: (await inspectCache(serverUrlHash)).clientId,
+        mode: args.mode,
+        reason: "authorization-required",
+        status: "invalid",
+        type: "result",
+      });
+    };
+    if (
+      args.mode === "verify-only" &&
+      !(await cachedClientHasScope(serverUrlHash, requiredScope))
+    ) {
+      await reportAuthorizationRequired();
+      return;
+    }
     credentialLease = await acquireCredentialMutationLock(serverUrlHash, COORDINATOR_TIMEOUT_MS);
     const configuredPort = await readConfiguredCallbackPort(serverUrlHash);
     let callbackPort = configuredPort ?? defaultCallbackPort(serverUrlHash);
@@ -332,13 +348,7 @@ async function runNetworkedMode(args: CoordinatorArguments): Promise<void> {
       args.mode === "verify-only" &&
       !(await cachedClientHasScope(serverUrlHash, requiredScope))
     ) {
-      writeRecord({
-        clientId: (await inspectCache(serverUrlHash)).clientId,
-        mode: args.mode,
-        reason: "authorization-required",
-        status: "invalid",
-        type: "result",
-      });
+      await reportAuthorizationRequired();
       return;
     }
     provider = new CoordinatedNodeOAuthClientProvider(
