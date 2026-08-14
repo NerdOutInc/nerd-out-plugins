@@ -16,6 +16,9 @@ import { promisify } from "node:util";
 
 import {
   DEFAULT_CLIENT_NAME,
+  oauthScopeForSupportedScopes,
+  RECALL_LEGACY_OAUTH_SCOPE,
+  RECALL_PROJECT_CONTEXT_OAUTH_SCOPE,
   RECALL_LOOPBACK_HOST,
   clientCacheDirectory,
   parseClientName,
@@ -85,6 +88,67 @@ test("the bridge passes the supported dynamic-registration override", () => {
   assert.deepEqual(JSON.parse(args[metadataFlagIndex + 1]), {
     client_name: "Codex",
     scope: "notes:read notes:write",
+  });
+});
+
+test("OAuth scope discovery widens only from explicit compatible metadata", () => {
+  assert.equal(
+    oauthScopeForSupportedScopes(undefined),
+    RECALL_LEGACY_OAUTH_SCOPE
+  );
+  assert.equal(oauthScopeForSupportedScopes({}), RECALL_LEGACY_OAUTH_SCOPE);
+  assert.equal(
+    oauthScopeForSupportedScopes(["notes:read", "notes:write"]),
+    RECALL_LEGACY_OAUTH_SCOPE
+  );
+  assert.equal(
+    oauthScopeForSupportedScopes([
+      "journal:write",
+      "notes:write",
+      "journal:read",
+      "notes:read",
+      "unknown:scope",
+    ]),
+    RECALL_PROJECT_CONTEXT_OAUTH_SCOPE
+  );
+  assert.equal(
+    oauthScopeForSupportedScopes([
+      "notes:read",
+      "notes:write",
+      "journal:read",
+    ]),
+    RECALL_PROJECT_CONTEXT_OAUTH_SCOPE
+  );
+  assert.equal(
+    oauthScopeForSupportedScopes([
+      "notes:read",
+      "notes:write",
+      "journal:write",
+    ]),
+    RECALL_LEGACY_OAUTH_SCOPE
+  );
+  assert.equal(
+    oauthScopeForSupportedScopes([
+      "notes:read",
+      "journal:read",
+      "journal:write",
+    ]),
+    RECALL_LEGACY_OAUTH_SCOPE
+  );
+});
+
+test("the proxy accepts the scope selected for the installed Recall resource", () => {
+  const args = proxyArgs(
+    "/tmp/proxy.mjs",
+    "http://127.0.0.1:38473/mcp",
+    "Codex",
+    RECALL_PROJECT_CONTEXT_OAUTH_SCOPE
+  );
+  const metadataFlagIndex = args.indexOf("--static-oauth-client-metadata");
+
+  assert.deepEqual(JSON.parse(args[metadataFlagIndex + 1]), {
+    client_name: "Codex",
+    scope: RECALL_PROJECT_CONTEXT_OAUTH_SCOPE,
   });
 });
 
@@ -206,11 +270,13 @@ test("host manifests share the current plugin version", async () => {
   // 0.19.0 adds capability-probed activity and revision-safe note workflows.
   // 0.20.0 adds strict v4 repository-first/default-no-repository reads and the
   // explicit host-surface contract.
+  // 0.21.0 negotiates additive journal read scope from the installed app while
+  // preserving notes-only authorization against older Recall builds.
   // Both hosts must receive that behavior together.
-  assert.equal(codexPlugin.version, "0.20.0");
+  assert.equal(codexPlugin.version, "0.21.0");
   assert.equal(claudePlugin.version, codexPlugin.version);
   const desktop = await readJson("desktop-extensions/recall/manifest.json");
-  assert.equal(desktop.version, "0.8.0");
+  assert.equal(desktop.version, "0.9.0");
 });
 
 test("Recall skills require full production note URLs in chat", async () => {

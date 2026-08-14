@@ -37,8 +37,10 @@ const readBody = async (request) => {
 function createOAuthFixture({
   challengeHeader = 'Bearer scope=notes:read, resource_metadata="http://127.0.0.1:38474/.well-known/oauth-protected-resource/mcp"',
   challengeStatus = 401,
+  metadataDelayMs = 0,
   refreshDelayMs = 0,
   registrationScopeResponse = "echo",
+  scopesSupported = ["notes:read", "notes:write"],
   validAccessTokens = new Set(["access-1"]),
 } = {}) {
   const counters = {
@@ -52,7 +54,11 @@ function createOAuthFixture({
   };
   let activeRefreshes = 0;
   let maximumConcurrentRefreshes = 0;
+  let releaseMetadataStarted;
   let releaseRefreshStarted;
+  const metadataStarted = new Promise((resolve) => {
+    releaseMetadataStarted = resolve;
+  });
   const refreshStarted = new Promise((resolve) => {
     releaseRefreshStarted = resolve;
   });
@@ -64,12 +70,15 @@ function createOAuthFixture({
       request.url === "/.well-known/oauth-protected-resource/mcp" ||
       request.url === "/.well-known/oauth-protected-resource"
     ) {
+      releaseMetadataStarted();
+      if (metadataDelayMs)
+        await new Promise((resolve) => setTimeout(resolve, metadataDelayMs));
       response.setHeader("content-type", "application/json");
       response.end(
         JSON.stringify({
           authorization_servers: [issuer],
           resource: serverUrl,
-          scopes_supported: ["notes:read", "notes:write"],
+          scopes_supported: scopesSupported,
         }),
       );
       return;
@@ -86,7 +95,7 @@ function createOAuthFixture({
           issuer,
           registration_endpoint: `${issuer}/oauth/register`,
           response_types_supported: ["code"],
-          scopes_supported: ["notes:read", "notes:write"],
+          scopes_supported: scopesSupported,
           token_endpoint: `${issuer}/oauth/token`,
           token_endpoint_auth_methods_supported: ["none"],
         }),
@@ -197,6 +206,7 @@ function createOAuthFixture({
     listen: () =>
       new Promise((resolve) => server.listen(38474, "127.0.0.1", resolve)),
     maximumConcurrentRefreshes: () => maximumConcurrentRefreshes,
+    metadataStarted,
     refreshStarted,
     stop: () => new Promise((resolve) => server.close(resolve)),
   };
@@ -226,6 +236,20 @@ async function waitFor(predicate, message, timeoutMs = 15_000) {
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error(message);
+}
+
+async function waitForSignal(signal, message, timeoutMs = 10_000) {
+  let timeout;
+  try {
+    return await Promise.race([
+      signal,
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 const waitForExit = (child) =>
@@ -496,6 +520,15 @@ test("approve, reuse, inspect, denial, state mismatch, and cancel stay browserle
           harness.cacheDirectory,
           `${serverHash}_tokens.json`,
         );
+        const credentialLockPath = path.join(
+          harness.cacheDirectory,
+          `${serverHash}_credentials.lock`,
+        );
+        const credentialLockOwner = {
+          nonce: "foreign-owner",
+          pid: process.pid,
+          timestamp: Date.now(),
+        };
         await Promise.all([
           writeFile(
             clientPath,
@@ -518,6 +551,13 @@ test("approve, reuse, inspect, denial, state mismatch, and cancel stay browserle
             }),
             { mode: 0o600 },
           ),
+          mkdir(credentialLockPath, { mode: 0o700, recursive: true }).then(() =>
+            writeFile(
+              path.join(credentialLockPath, "owner.json"),
+              JSON.stringify(credentialLockOwner),
+              { mode: 0o600 },
+            ),
+          ),
         ]);
         const registrationsBefore = fixture.counters.dynamicRegistrations;
         const requestsBefore = fixture.counters.requests;
@@ -537,7 +577,9 @@ test("approve, reuse, inspect, denial, state mismatch, and cancel stay browserle
           fixture.counters.dynamicRegistrations,
           registrationsBefore,
         );
-        assert.equal(fixture.counters.requests, requestsBefore);
+        // verify-only discovers the current resource scope before deciding
+        // whether the cached registration is compatible, but never mutates it.
+        assert.ok(fixture.counters.requests > requestsBefore);
         assert.equal(
           JSON.parse(await readFile(clientPath, "utf8")).client_id,
           "working-read-only-client",
@@ -545,6 +587,12 @@ test("approve, reuse, inspect, denial, state mismatch, and cancel stay browserle
         assert.equal(
           JSON.parse(await readFile(tokenPath, "utf8")).access_token,
           "access-1",
+        );
+        assert.deepEqual(
+          JSON.parse(
+            await readFile(path.join(credentialLockPath, "owner.json"), "utf8"),
+          ),
+          credentialLockOwner,
         );
       } finally {
         await rm(harness.root, { force: true, recursive: true });
@@ -737,6 +785,85 @@ test("approve, reuse, inspect, denial, state mismatch, and cancel stay browserle
   );
 });
 
+test("journal read scope is requested only when the installed resource advertises it", async (t) => {
+  const fixture = createOAuthFixture({
+    scopesSupported: [
+      "notes:read",
+      "notes:write",
+      "journal:read",
+      "journal:write",
+    ],
+  });
+  await fixture.listen();
+  t.after(() => fixture.stop());
+  const harness = await makeHarness();
+  try {
+    const child = spawnCoordinator(harness, "authorize");
+    t.after(() => stopProcess(child));
+    const capture = captureProcess(child);
+    const authorization = await waitFor(
+      () =>
+        capture.records.find(
+          (record) => record.type === "authorization_required",
+        ),
+      `coordinator emitted no authorization request: ${capture.stderr()}`,
+    );
+    const expectedScope = "notes:read notes:write journal:read";
+    assert.equal(
+      new URL(authorization.authorizationUrl).searchParams.get("scope"),
+      expectedScope,
+    );
+    assert.equal(fixture.counters.registeredScopes.at(-1), expectedScope);
+
+    child.kill("SIGTERM");
+    assert.deepEqual(await waitForExit(child), { code: 0, signal: null });
+    assert.equal(capture.records.at(-1)?.status, "cancelled");
+  } finally {
+    await rm(harness.root, { force: true, recursive: true });
+  }
+});
+
+test("OAuth discovery finishes before the credential mutation lease is acquired", async (t) => {
+  const fixture = createOAuthFixture({ metadataDelayMs: 500 });
+  await fixture.listen();
+  t.after(() => fixture.stop());
+  const harness = await makeHarness();
+  try {
+    const child = spawnCoordinator(harness, "authorize");
+    t.after(() => stopProcess(child));
+    const capture = captureProcess(child);
+    await waitForSignal(
+      fixture.metadataStarted,
+      "OAuth protected-resource discovery never started",
+    );
+
+    const credentialLock = path.join(
+      harness.cacheDirectory,
+      `${serverHash}_credentials.lock`,
+    );
+    assert.equal(
+      await stat(credentialLock)
+        .then(() => true)
+        .catch(() => false),
+      false,
+      `discovery held the credential lease: ${capture.stderr()}`,
+    );
+
+    const authorization = await waitFor(
+      () =>
+        capture.records.find(
+          (record) => record.type === "authorization_required",
+        ),
+      `coordinator emitted no authorization request: ${capture.stderr()}`,
+    );
+    assert.ok(authorization.authorizationUrl);
+    child.kill("SIGTERM");
+    assert.deepEqual(await waitForExit(child), { code: 0, signal: null });
+  } finally {
+    await rm(harness.root, { force: true, recursive: true });
+  }
+});
+
 for (const registrationScopeResponse of ["omit", "narrow"]) {
   test(`authorization-code exchange survives a DCR response that ${registrationScopeResponse}s scope`, async (t) => {
     const fixture = createOAuthFixture({ registrationScopeResponse });
@@ -913,15 +1040,10 @@ test("verify-only serializes behind a live bridge that is already mid-refresh", 
       })}\n`,
     );
 
-    await Promise.race([
+    await waitForSignal(
       fixture.refreshStarted,
-      new Promise((_, reject) =>
-        setTimeout(
-          () => reject(new Error("live bridge never began refresh")),
-          10_000,
-        ),
-      ),
-    ]);
+      "live bridge never began refresh",
+    );
     const verify = spawnCoordinator(harness, "verify-only");
     const verifyCapture = captureProcess(verify);
     assert.deepEqual(await waitForExit(verify), { code: 0, signal: null });

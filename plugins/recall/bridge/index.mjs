@@ -35,6 +35,7 @@ import { spawn } from "node:child_process";
 import { accessSync, constants as fsConstants } from "node:fs";
 import {
   clientCacheDirectory,
+  oauthScopeForSupportedScopes,
   parseClientName,
   proxyArgs,
 } from "./client-identity.mjs";
@@ -44,6 +45,7 @@ const HOST = "127.0.0.1";
 const PORT = 38473;
 const WAIT_FOR_APP_MS = 60_000;
 const POLL_INTERVAL_MS = 2_000;
+const OAUTH_METADATA_TIMEOUT_MS = 2_000;
 
 // The helper's exit-code contract (recall-app apple-app/McpBridgeSources).
 const HELPER_EXIT = {
@@ -196,6 +198,28 @@ async function waitForApp() {
   return false;
 }
 
+async function discoverOAuthScope() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), OAUTH_METADATA_TIMEOUT_MS);
+  try {
+    const metadataUrl = new URL(
+      "/.well-known/oauth-protected-resource/mcp",
+      SERVER_URL
+    );
+    const response = await fetch(metadataUrl, {
+      headers: { accept: "application/json" },
+      signal: controller.signal,
+    });
+    if (!response.ok) return oauthScopeForSupportedScopes(undefined);
+    const metadata = await response.json();
+    return oauthScopeForSupportedScopes(metadata?.scopes_supported);
+  } catch {
+    return oauthScopeForSupportedScopes(undefined);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // The legacy OAuth fallback: wait for the loopback listener, then hand stdio to
 // the bundled mcp-remote proxy. Only reached when no socket-capable helper is
 // installed, or the installed helper reports an unsupported protocol version.
@@ -220,9 +244,10 @@ async function runOAuthFallback() {
     path.dirname(fileURLToPath(import.meta.url)),
     "mcp-remote-proxy.bundle.mjs"
   );
+  const oauthScope = await discoverOAuthScope();
   const child = spawn(
     process.execPath,
-    proxyArgs(bundlePath, SERVER_URL, clientName),
+    proxyArgs(bundlePath, SERVER_URL, clientName, oauthScope),
     {
       env: {
         ...process.env,
