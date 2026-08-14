@@ -97,7 +97,7 @@ function operationDetailContract(result) {
   };
 }
 
-test("Project activity requires exact response capability and a usable cursor", async () => {
+test("Project activity requires exact capability and gates paging on a usable cursor", async () => {
   const [catalog, enabled, unavailable] = await Promise.all([
     readJson("catalog.json"),
     readJson("project-activity-enabled.json"),
