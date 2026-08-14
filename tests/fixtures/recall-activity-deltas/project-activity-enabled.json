@@ -1,0 +1,33 @@
+{
+  "capabilities": {
+    "activityDeltas": true
+  },
+  "activity": {
+    "available": true,
+    "count": 3,
+    "includedCount": 2,
+    "items": [
+      {
+        "id": "activity-exact",
+        "coverage": "exact_snapshot",
+        "projectRole": "arrived",
+        "changeSummary": "Agent says the implementation landed.",
+        "changeSummaryTruncated": false
+      },
+      {
+        "id": "activity-inferred",
+        "coverage": "current_membership_inferred",
+        "projectRole": "member"
+      }
+    ],
+    "coverage": "mixed",
+    "cursorSupported": true,
+    "hasMore": true,
+    "nextCursor": "opaque-project-activity-cursor",
+    "truncated": true,
+    "scannedCount": 100,
+    "unavailableCount": 1,
+    "newestScannedAt": 1786723200000,
+    "oldestScannedAt": 1786636800000
+  }
+}

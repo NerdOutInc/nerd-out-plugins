@@ -1,0 +1,34 @@
+{
+  "capabilities": {
+    "activityDeltas": false
+  },
+  "project": {
+    "id": "project-explicit",
+    "workspaceId": "workspace-readable"
+  },
+  "repositoryBindings": {
+    "available": true,
+    "linked": false,
+    "items": []
+  },
+  "recentNotes": {
+    "available": true,
+    "count": 1,
+    "items": [{ "uuid": "recent-note" }]
+  },
+  "activity": {
+    "available": false,
+    "count": 0,
+    "includedCount": 0,
+    "items": [],
+    "coverage": null,
+    "cursorSupported": false,
+    "hasMore": false,
+    "nextCursor": null,
+    "truncated": false,
+    "scannedCount": 0,
+    "unavailableCount": 0,
+    "newestScannedAt": null,
+    "oldestScannedAt": null
+  }
+}
