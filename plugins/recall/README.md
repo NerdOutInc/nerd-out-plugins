@@ -185,9 +185,10 @@ collapsible toggles in the editor. The
 `create_note`, `create_today_note`, and `update_note_content` write tools — plus
 `rename_note` on newer app builds, for title-only renames of named notes —
 appear
-when at least one workspace is set to **Read & write** in Recall's MCP Server settings. Reads and
-writes are filtered independently by each workspace's Block / Read only / Read
-& write policy; an unconfigured workspace stays blocked.
+when at least one workspace is set to **Write** in Recall's MCP Server
+settings. Reads and writes are filtered independently by each workspace's
+**Block**, **Read**, or **Write** policy; an unconfigured workspace stays
+blocked.
 
 ## Skills
 

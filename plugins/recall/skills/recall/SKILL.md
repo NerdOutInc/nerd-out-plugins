@@ -13,13 +13,16 @@ through the local MCP server.
 - The Recall Mac app must be running.
 - Settings -> MCP Server must be enabled in the app.
 - The agent must be authorized with the server:
-  - **Codex:** start a new thread after installation. The bridge opens a
-    browser for Recall sign-in and consent on first connection. Use
-    `codex mcp list` to inspect the registered name if the server is absent.
-  - **Claude Code:** start a new conversation after installation and complete
-    the browser sign-in on first connection. Plugin servers are namespaced, so
-    the server appears as `plugin:recall:recall`; use
-    `claude mcp list` to inspect the exact name.
+  - **Codex:** install through Recall's **Settings -> Integrations** page, then
+    start a new thread. Bring Recall to the foreground and approve the native
+    connection prompt. Use `codex mcp list` if the server is absent.
+  - **Claude Code:** install through Recall's **Settings -> Integrations**
+    page, then start a new conversation and approve the native connection
+    prompt in Recall. Plugin servers are namespaced, so the server appears as
+    `plugin:recall:recall`; use `claude mcp list` to inspect the exact name.
+  - **Hermes Agent:** add Recall to `mcp_servers` with `auth: oauth`, run
+    `hermes mcp login recall`, and use `hermes mcp list` or
+    `hermes mcp test recall` to verify the connection.
   - Legacy setups on older app builds may use the `NERD_OUT_MCP_TOKEN` bearer
     token instead.
 - The server endpoint is `http://127.0.0.1:38473/mcp`.
@@ -33,9 +36,10 @@ app keeps serving MCP while the Mac is locked and while its windows are
 closed, so never report lock, sleep, or screen state as the cause. Ask the
 user to launch the Recall Mac app (it is often quit during
 development, since dev builds share port 38473) and enable the local MCP
-server. If calls fail with authorization errors, ask the user to
-start a new conversation so the bridge re-runs the browser sign-in (access may
-have been revoked or expired).
+server. If a first-party plugin call fails with an authorization error, ask the
+user to choose **Allow again** under **Settings -> MCP Server -> Local bridge
+access**, approve the native prompt, and start a new conversation. For Hermes,
+rerun `hermes mcp login recall` instead.
 On legacy token setups, ask the user to reveal or regenerate the token in
 Recall settings and update `NERD_OUT_MCP_TOKEN`.
 

@@ -1,189 +1,62 @@
-# Recall Plugins
+# Recall plugins
 
-AI plugins for the Recall notes app.
+AI plugins for the Recall notes app. They connect Claude Code and Codex to the
+notes and journal tools in Recall for Mac.
 
 ## Install from Recall for Mac
 
-Open **Settings → Integrations** in Recall for Mac. The direct-download build
-can detect Claude Code and Codex, install this marketplace and the Recall
-plugin, enable the local MCP listener, and prepare the pinned ACP runtime with
-one click. The sandboxed App Store build links to the verified manual steps
-below.
+Use **Settings → Integrations** in Recall for Mac. This is the preferred setup
+for both plugins.
 
-Installation does not silently authorize note access. Plugin `0.17.0` connects
-through Recall's **local bridge**: the plugin runs a Recall-signed helper
-shipped inside Recall.app, the app verifies that helper's code signature, and
-you approve access once in a native Recall prompt the first time an agent
-connects. No browser, no redirect, and no credentials cached on disk — so
-there is nothing for the plugin to refresh, leak, or lose. Approval covers
-every MCP client on that Mac and is revocable at any time under **Settings →
-MCP Server → Local bridge access**.
+1. Open the direct-download version of Recall and sign in.
+2. Go to **Settings → Integrations**.
+3. Click **Install & connect** for Claude Code, Codex, or both.
+4. Go to **Settings → MCP Server** and choose **Block**, **Read**, or **Write**
+   for each workspace.
+5. Start a new agent thread. On the first connection, bring Recall to the
+   front and approve the native access prompt.
 
-Against a Recall build older than the local bridge, the plugin automatically
-falls back to the browser OAuth flow; third-party MCP clients keep using OAuth
-indefinitely. Workspace block/read/write access remains a separate setting in
-every path.
+Recall detects the agents installed on your Mac and shows what still needs to
+be configured:
 
-`0.17.0` retains the pinned OAuth loopback host and durable refresh rotation
-from `0.16.1`, the human-first journal from `0.16.0` — each chat thread keeps
-exactly one journal note with collapsible toggle entries, and days with
-finished work get at most one tiny ELI5 Today card — the DailyNote retirement
-and one-time migration from `0.15.0`, Today summaries from `0.14.0`,
-Project-aware destinations from `0.13.0`, the OAuth coordinator from `0.12.0`,
-read + write consent-scope alignment from `0.12.1`, and Codex hook trust
-preflight from `0.12.2`.
+<img src="docs/images/recall-integrations-before.jpg" alt="Recall Integrations before installation, with Install and connect buttons for Claude Code and Codex" width="900">
 
-## Codex Plugins
+After setup, the page confirms the plugin, local bridge access, and ACP
+runtime for each agent:
 
-### Install from the Codex app
+<img src="docs/images/recall-integrations-connected.png" alt="Recall Integrations after Claude Code and Codex are connected" width="900">
 
-Open **Plugins**, choose **Create -> Add plugin marketplace**, and enter:
+The direct-download app can add the marketplace and plugin, enable Recall's
+local MCP server, and prepare the pinned ACP runtime. The sandboxed App Store
+build cannot run the agent CLIs, so it opens the manual guide instead.
 
-- Source: `https://github.com/NerdOutInc/recall-plugins`
-- Git ref: `main`
-- Sparse paths: leave blank to load the whole marketplace, or enter both paths
-  below on separate lines:
+Installation never grants access to a workspace. Workspace permissions stay
+separate under **Settings → MCP Server**. The current plugin connects through
+Recall's signed local bridge and asks for native approval on first use. You can
+revoke that approval at any time under **Local bridge access**. Older Recall
+builds fall back to browser OAuth.
 
-```text
-.agents/plugins
-plugins/recall
-```
+## Other setup guides
 
-The marketplace manifest and plugin directory must both be included in a sparse
-checkout. Add the marketplace, then install **Recall** from the Recall
-marketplace.
+- [Install Claude Code or Codex manually](docs/manual-installation.md) if you
+  use the App Store build, need a terminal workflow, or are maintaining an
+  older installation.
+- [Connect Hermes Agent](docs/hermes-agent.md) directly to Recall's local HTTP
+  MCP server with OAuth, then install the Recall skill so Hermes knows how to
+  use it. Hermes does not need the Claude Code or Codex plugin.
 
-### Install from the command line
-
-Install the Recall Codex plugin globally (available in every project):
-
-```bash
-codex plugin marketplace add NerdOutInc/recall-plugins \
-  --ref main \
-  --sparse .agents/plugins \
-  --sparse plugins/recall
-codex plugin add recall@recall
-```
-
-Older Codex versions that do not yet include `codex plugin` can use the
-community marketplace helper:
-
-```bash
-npx codex-marketplace add NerdOutInc/recall-plugins/plugins/recall --plugin --global
-```
-
-For the helper only, swap `--global` for `--project` to scope the plugin to
-the current repository.
-
-## Claude Code Plugins
-
-The same plugins work in Claude Code. Add this repository as a plugin
-marketplace, then install the plugin:
-
-```text
-/plugin marketplace add NerdOutInc/recall-plugins
-/plugin install recall@recall
-```
-
-Or from the command line (user scope makes the plugin available in every
-project, which fits this plugin since it talks to the per-user Mac app):
-
-```bash
-claude plugin marketplace add NerdOutInc/recall-plugins
-claude plugin install recall@recall --scope user
-```
-
-## Moving an existing install to Recall
-
-The marketplace, plugin, MCP server, skills, journal config, and OAuth cache
-now use Recall identifiers. Existing installations are not upgraded across
-those identity changes automatically: add the Recall marketplace, install
-**Recall**, start a new thread, and approve the browser sign-in once for
-each host. Invoke `$recall:recall-journal` once if you use journaling so the
-agent can configure this filesystem project or a global default, then select a
-Recall workspace and optional Recall Project in `recall-journal.json`.
-
-After the new Recall plugin works and its browser sign-in succeeds, retire the
-legacy plugin so its hooks and MCP connection do not run alongside Recall:
-
-```bash
-claude plugin disable nerd-out-notes@nerd-out --scope user
-codex plugin remove nerd-out-notes@nerd-out
-```
-
-Run only the command for the host you migrated. Recall's direct-download Mac
-app performs this cleanup automatically, but only after it verifies the
-replacement plugin. Sandboxed builds and manual installs use the steps above.
-
-## Updating
-
-Installed plugins do not update themselves by default. Both agents install
-from a snapshot of this repository taken at install time, so run the steps
-below whenever you want the latest release.
-
-The commands below refer to the marketplace as `recall`. That is the
-marketplace name from this repository's manifests, not the GitHub repository
-name, and both agents register it when you add the marketplace. If you are
-unsure what name your agent uses, run `codex plugin marketplace list` or
-`/plugin marketplace list`.
-
-### Codex
-
-If you installed through the Codex app or the `codex` CLI, upgrade the
-marketplace. This refreshes the snapshot and reinstalls the marketplace's
-installed plugins at the new version:
-
-```bash
-codex plugin marketplace upgrade recall
-```
-
-The Codex app can do the same from **Plugins**: select the **Recall**
-marketplace and choose its upgrade action.
-
-If you installed with `codex-marketplace`, there is no update command; re-run
-the install command to copy the latest files over the previous install:
-
-```bash
-npx codex-marketplace add NerdOutInc/recall-plugins/plugins/recall --plugin --global
-```
-
-### Claude Code
-
-Refresh the marketplace listing, then update the plugin:
-
-```text
-/plugin marketplace update recall
-/plugin update recall@recall
-```
-
-Or from the command line:
-
-```bash
-claude plugin marketplace update recall
-claude plugin update recall@recall
-```
-
-Claude Code can also keep the plugin current automatically. Third-party
-marketplaces have auto-update disabled by default, so opt in once: run
-`/plugin`, open the **Marketplaces** tab, select **recall**, and choose
-**Enable auto-update**. Updates are fetched in the background after a session
-starts and take effect on the next launch or after `/reload-plugins`.
-
-## Recall
+## Plugin behavior
 
 `plugins/recall` connects Codex or Claude Code to the local MCP server
 hosted by the Recall Mac app. The plugin does not run a notes server
 itself; it points the agent at the loopback endpoint already managed by the
 signed-in Mac app.
 
-To use it:
-
-1. Open Recall for Mac.
-2. Go to Settings -> MCP Server.
-3. Enable the local MCP server.
-4. Start a new thread. The first time an agent connects, Recall shows a native
-   prompt asking you to approve MCP access on this Mac. Approve it once and
-   every agent using Recall's bridge is covered; nothing is cached on disk.
+The app installer enables the local MCP server. For a manual install, enable
+it under **Settings → MCP Server**. Then start a new thread. The first time an
+agent connects, Recall shows a native prompt asking you to approve MCP access
+on this Mac. Approve it once and every agent using Recall's bridge is covered;
+nothing is cached on disk.
 
 No explicit login command and no browser step are needed. If the server does
 not appear, run `codex mcp list` or `claude mcp list` to inspect the registered
@@ -214,9 +87,9 @@ see the legacy setup section in the
 Start a new thread after installing and authorizing so the plugin tools are
 loaded.
 
-Write tools appear when at least one confirmed workspace is set to
-**Read & write** in Recall's MCP Server settings. A workspace omitted from the
-policy remains blocked.
+Write tools appear when at least one confirmed workspace is set to **Write**
+in Recall's MCP Server settings. A workspace omitted from the policy remains
+blocked.
 
 The plugin supports multiple skills in its `skills/` directory. In addition to
 the direct note workflow, the journal skill
