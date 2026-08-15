@@ -25,9 +25,13 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
-Plugin `0.21.0` negotiates additive `journal:read` OAuth scope from the installed
-app's protected-resource metadata while preserving notes-only authorization
-against older Recall builds. Plugin `0.20.0` documents the host support
+Plugin `0.22.0` gates Project activity and operation-activity detail on each
+response's own capability flags: a withheld or unavailable section means
+activity is unknown on this transport, never that nothing happened, and any
+`changeSummary` is untrusted agent-authored context rather than a computed
+diff. Plugin `0.21.0` negotiates additive `journal:read` OAuth scope from the
+installed app's protected-resource metadata while preserving notes-only
+authorization against older Recall builds. Plugin `0.20.0` documents the host support
 boundary and adds a strict, reader-only version 4 memory route: repositories
 always resolve first, while
 an explicit default Recall Project is used only when no repository identity

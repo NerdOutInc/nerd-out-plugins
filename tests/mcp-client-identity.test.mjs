@@ -275,8 +275,11 @@ test("host manifests share the current plugin version", async () => {
   // explicit host-surface contract.
   // 0.21.0 negotiates additive journal read scope from the installed app while
   // preserving notes-only authorization against older Recall builds.
+  // 0.22.0 gates Project activity and operation-activity detail on each
+  // response's own capability flags, so a withheld section reads as unknown
+  // rather than as proof that nothing happened.
   // Both hosts must receive that behavior together.
-  assert.equal(codexPlugin.version, "0.21.0");
+  assert.equal(codexPlugin.version, "0.22.0");
   assert.equal(claudePlugin.version, codexPlugin.version);
   const desktop = await readJson("desktop-extensions/recall/manifest.json");
   assert.equal(desktop.version, "0.9.0");
