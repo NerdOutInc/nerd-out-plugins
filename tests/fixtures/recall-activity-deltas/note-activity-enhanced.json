@@ -1,0 +1,21 @@
+{
+  "capabilities": {
+    "operationActivityDetail": true
+  },
+  "events": [
+    {
+      "id": "note-activity",
+      "detailStatus": "available",
+      "detail": {
+        "actorName": "Brian",
+        "clientLabel": "Codex",
+        "fromTitle": "Before",
+        "toTitle": "After",
+        "changeSummary": "Agent says the heading was clarified.",
+        "previousRevision": "revision-before",
+        "projectIdSnapshot": "project-explicit",
+        "resultingRevision": "revision-after"
+      }
+    }
+  ]
+}
