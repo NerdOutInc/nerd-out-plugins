@@ -5,39 +5,114 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "noteType": { "type": "string" },
-          "uuid": { "type": "string" },
-          "expectedRevision": { "type": "string" },
-          "idempotencyKey": { "type": "string" },
-          "changeSummary": { "type": "string" },
-          "replacements": { "type": "array" },
+          "noteType": {
+            "type": "string"
+          },
+          "uuid": {
+            "type": "string"
+          },
+          "expectedRevision": {
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "changeSummary": {
+            "type": "string"
+          },
+          "replacements": {
+            "type": "array"
+          },
           "evidence": {
             "type": "array",
             "maxItems": 8,
             "items": {
               "type": "object",
               "properties": {
-                "version": { "type": "number", "enum": [1] },
-                "kind": { "type": "string", "enum": ["commit", "pr", "test_run", "build"] },
-                "capturedAt": { "type": "number" },
-                "comment": { "type": "string", "maxLength": 256 },
-                "sha": { "type": "string" },
-                "branch": { "type": "string" },
-                "paths": { "type": "array", "maxItems": 8 },
-                "number": { "type": "number" },
-                "headSha": { "type": "string" },
-                "state": { "type": "string", "enum": ["open", "merged", "closed"] },
-                "verdict": { "type": "string", "enum": ["pass", "fail", "mixed"] },
-                "command": { "type": "string" },
-                "deploymentId": { "type": "string" },
-                "environment": { "type": "string" }
+                "version": {
+                  "type": "number",
+                  "enum": [
+                    1
+                  ]
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "commit",
+                    "pr",
+                    "test_run",
+                    "build"
+                  ]
+                },
+                "capturedAt": {
+                  "type": "number"
+                },
+                "comment": {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                "sha": {
+                  "type": "string"
+                },
+                "branch": {
+                  "type": "string"
+                },
+                "paths": {
+                  "type": "array",
+                  "maxItems": 8
+                },
+                "number": {
+                  "type": "number"
+                },
+                "headSha": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "open",
+                    "merged",
+                    "closed"
+                  ]
+                },
+                "verdict": {
+                  "type": "string",
+                  "enum": [
+                    "pass",
+                    "fail",
+                    "mixed"
+                  ]
+                },
+                "command": {
+                  "type": "string"
+                },
+                "deploymentId": {
+                  "type": "string"
+                },
+                "environment": {
+                  "type": "string"
+                }
               },
-              "required": ["version", "kind", "capturedAt"]
+              "required": [
+                "version",
+                "kind",
+                "capturedAt"
+              ]
             }
           },
-          "supersedes": { "type": "array", "maxItems": 8 }
+          "supersedes": {
+            "type": "array",
+            "maxItems": 8
+          }
         },
-        "required": ["noteType", "uuid", "expectedRevision", "idempotencyKey", "changeSummary", "replacements"]
+        "required": [
+          "noteType",
+          "uuid",
+          "expectedRevision",
+          "idempotencyKey",
+          "changeSummary",
+          "replacements"
+        ]
       }
     },
     {
@@ -45,18 +120,45 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "noteType": { "type": "string" },
-          "uuid": { "type": "string" },
-          "text": { "type": "string" },
-          "mode": { "type": "string" },
-          "backlinks": { "type": "array" },
-          "expectedRevision": { "type": "string" },
-          "idempotencyKey": { "type": "string" },
-          "changeSummary": { "type": "string" },
-          "evidence": { "type": "array", "maxItems": 8 },
-          "supersedes": { "type": "array", "maxItems": 8 }
+          "noteType": {
+            "type": "string"
+          },
+          "uuid": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "backlinks": {
+            "type": "array"
+          },
+          "expectedRevision": {
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "changeSummary": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "array",
+            "maxItems": 8
+          },
+          "supersedes": {
+            "type": "array",
+            "maxItems": 8
+          }
         },
-        "required": ["noteType", "uuid", "text", "mode"]
+        "required": [
+          "noteType",
+          "uuid",
+          "text",
+          "mode"
+        ]
       }
     },
     {
@@ -64,19 +166,50 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "workspaceId": { "type": "string" },
-          "projectUuid": { "type": "string" },
-          "entryUuid": { "type": "string" },
-          "idempotencyKey": { "type": "string" },
-          "entryType": { "type": "string" },
-          "title": { "type": "string" },
-          "text": { "type": "string" },
-          "sessionUuid": { "type": "string" },
-          "refs": { "type": "object" },
-          "evidence": { "type": "array", "maxItems": 8 },
-          "supersedes": { "type": "array", "maxItems": 8 }
+          "workspaceId": {
+            "type": "string"
+          },
+          "projectUuid": {
+            "type": "string"
+          },
+          "entryUuid": {
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "entryType": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "sessionUuid": {
+            "type": "string"
+          },
+          "refs": {
+            "type": "object"
+          },
+          "evidence": {
+            "type": "array",
+            "maxItems": 8
+          },
+          "supersedes": {
+            "type": "array",
+            "maxItems": 8
+          }
         },
-        "required": ["workspaceId", "projectUuid", "entryUuid", "idempotencyKey", "entryType", "title"]
+        "required": [
+          "workspaceId",
+          "projectUuid",
+          "entryUuid",
+          "idempotencyKey",
+          "entryType",
+          "title"
+        ]
       }
     },
     {
@@ -84,17 +217,91 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "workspaceId": { "type": "string" },
-          "projectUuid": { "type": "string" },
-          "sessionUuid": { "type": "string" },
-          "idempotencyKey": { "type": "string" },
-          "outcome": { "type": "string" },
-          "runningSummary": { "type": "string" },
-          "followUps": { "type": "array" },
-          "evidence": { "type": "array", "maxItems": 8 },
-          "supersedes": { "type": "array", "maxItems": 8 }
+          "workspaceId": {
+            "type": "string"
+          },
+          "projectUuid": {
+            "type": "string"
+          },
+          "sessionUuid": {
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "runningSummary": {
+            "type": "string"
+          },
+          "followUps": {
+            "type": "array"
+          },
+          "evidence": {
+            "type": "array",
+            "maxItems": 8
+          },
+          "supersedes": {
+            "type": "array",
+            "maxItems": 8
+          }
         },
-        "required": ["workspaceId", "projectUuid", "sessionUuid", "idempotencyKey", "outcome"]
+        "required": [
+          "workspaceId",
+          "projectUuid",
+          "sessionUuid",
+          "idempotencyKey",
+          "outcome"
+        ]
+      }
+    },
+    {
+      "name": "close_handoff",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": {
+            "type": "string"
+          },
+          "projectUuid": {
+            "type": "string"
+          },
+          "handoffUuid": {
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "done",
+              "dropped"
+            ]
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "sessionUuid": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "array",
+            "maxItems": 8
+          },
+          "supersedes": {
+            "type": "array",
+            "maxItems": 8
+          }
+        },
+        "required": [
+          "workspaceId",
+          "projectUuid",
+          "handoffUuid",
+          "idempotencyKey",
+          "disposition"
+        ]
       }
     },
     {
@@ -102,11 +309,19 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "uuid": { "type": "string" },
-          "limit": { "type": "integer" },
-          "cursor": { "type": "string" }
+          "uuid": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "cursor": {
+            "type": "string"
+          }
         },
-        "required": ["uuid"]
+        "required": [
+          "uuid"
+        ]
       }
     }
   ]

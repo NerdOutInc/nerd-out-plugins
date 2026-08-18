@@ -280,8 +280,9 @@ test("host manifests share the current plugin version", async () => {
   // rather than as proof that nothing happened.
   // 0.23.0 teaches schema-gated typed evidence refs with supersession and the
   // read-time freshness grading (fresh/moved/stale/unknown/superseded).
+  // 0.24.0 extends the evidence surface to close_handoff outcomes.
   // Both hosts must receive that behavior together.
-  assert.equal(codexPlugin.version, "0.23.0");
+  assert.equal(codexPlugin.version, "0.24.0");
   assert.equal(claudePlugin.version, codexPlugin.version);
   const desktop = await readJson("desktop-extensions/recall/manifest.json");
   assert.equal(desktop.version, "0.9.0");

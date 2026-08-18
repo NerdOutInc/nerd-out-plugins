@@ -185,8 +185,8 @@ instruction, or authorization.
 
 Evidence is advertised per tool: before attaching it, check that the current
 input schema of that exact tool (`patch_note_content`, strict
-`update_note_content`, `append_entry`, or `close_session`) declares an
-`evidence` property. An older Recall build hard-rejects unknown arguments, so
+`update_note_content`, `append_entry`, `close_session`, or `close_handoff`)
+declares an `evidence` property. An older Recall build hard-rejects unknown arguments, so
 never send evidence to a schema that does not advertise it, and never probe by
 sending it anyway. After a write, verify the echo: the result's projected
 content (or the next read) shows the recorded refs, and a response without
@@ -196,9 +196,9 @@ instead of assuming the evidence was recorded.
 ### Writing evidence
 
 Attach evidence to claims whose truth decays: a `decision`, `shipped`, or
-`summary` entry, a session outcome, or a substantive note patch that asserts
-something about the code ("X is fixed", "docs now match the shipped
-behavior"). Skip it for trivial edits.
+`summary` entry, a session or handoff close outcome, or a substantive note
+patch that asserts something about the code ("X is fixed", "docs now match
+the shipped behavior"). Skip it for trivial edits.
 
 - Each ref is `{version: 1, kind, capturedAt, ...}` with kind-specific
   fields: `commit` (`sha`, optional `branch` and repo-relative `paths` the

@@ -25,6 +25,9 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
+Plugin `0.24.0` extends the evidence surface to `close_handoff`: a handoff's
+close outcome may carry the same schema-gated `evidence`/`supersedes` pair as
+the other write tools, and readers grade it identically.
 Plugin `0.23.0` teaches typed evidence refs: schema-gated per tool, a write
 can cite the commit, PR head, test run, or build a claim was checked against
 (plus a `supersedes` retraction list), and reads grade each ref against the
