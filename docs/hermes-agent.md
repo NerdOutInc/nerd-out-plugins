@@ -58,9 +58,17 @@ For a read-only connection, use this instead:
       scope: "notes:read"
 ```
 
+Newer Recall builds also advertise `journal:read` and `journal:write` for the
+Project coordination tools (structured Project context, agent work sessions,
+typed timeline entries, handoffs, directed asks, and collaboration comment
+threads). Add them to `scope` only when you want Hermes to use that surface;
+each tool enforces its own exact scope set (`get_project_context` needs both
+`notes:read` and `journal:read`), and an existing grant never widens on its
+own — rerun `hermes mcp login recall` after changing the scope line.
+
 Recall's per-workspace policy remains the final gate. Granting
-`notes:write` in OAuth does not override a workspace set to **Read** or
-**Block**.
+`notes:write` or `journal:write` in OAuth does not override a workspace set to
+**Read** or **Block**.
 
 ## 2. Install the Recall skill
 

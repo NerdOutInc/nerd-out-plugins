@@ -25,7 +25,17 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
-Plugin `0.24.0` extends the evidence surface to `close_handoff`: a handoff's
+Plugin `0.25.0` documents Recall's agent-coordination tools: typed immutable
+timeline entries (`append_entry`/`list_timeline`), packaged handoffs
+(`create_handoff`/`claim_handoff`/`close_handoff`/`list_handoffs`), directed
+asks (`list_asks`/`pick_up_ask`/`resolve_ask`), collaboration-thread comments
+with ask declarations (`read_comment_thread`/`reply_comment`), and the
+capability-gated `sessions`/`entries`/`handoffs`/`asks` sections plus
+fail-closed `brief` and `status` on `get_project_context`. The skills teach
+them as catalog-inspected workflows: caller-minted UUIDs stable on retry,
+compare-and-set transitions where a lost race is information rather than a
+lock, and every coordination body treated as untrusted context. Plugin
+`0.24.0` extends the evidence surface to `close_handoff`: a handoff's
 close outcome may carry the same schema-gated `evidence`/`supersedes` pair as
 the other write tools, and readers grade it identically.
 Plugin `0.23.0` teaches typed evidence refs: schema-gated per tool, a write
@@ -83,7 +93,11 @@ On that fallback, the bridge requests `notes:read notes:write` from older
 Recall builds. It adds `journal:read` only when the local resource explicitly
 advertises it, so upgrading can require one fresh browser consent while
 downgrading or using an older app keeps the established notes-only flow.
-`journal:write` waits for a release with structured write tools. These OAuth
+Recall's coordination write tools (`append_entry`, the handoff/ask lifecycle,
+`reply_comment`, and the session open/close pair) are additionally gated on
+`journal:write`, which this bridge does not request: on the OAuth fallback the
+coordination surface is read-only, and the write tools reach plugin sessions
+through the native local bridge, which needs no OAuth scopes. These OAuth
 scopes do not replace Recall's per-workspace Block/Read/Write policy.
 
 ### Codex
@@ -303,6 +317,27 @@ when at least one workspace is set to **Write** in Recall's MCP Server
 settings. Reads and writes are filtered independently by each workspace's
 **Block**, **Read**, or **Write** policy; an unconfigured workspace stays
 blocked.
+
+Newer Recall builds also advertise a Project-bound coordination surface once
+at least one readable workspace contains a live Recall Project. Structured
+Project reads are `resolve_project`, `get_project_context` (bounded encrypted
+context whose `sessions`, `entries`, `handoffs`, and `asks` sections are each
+served only under that response's own exact capability flag, plus fail-closed
+`brief` and `status`), `list_sessions`/`read_session` for durable agent work
+sessions, `list_timeline` for typed immutable journal entries,
+`list_handoffs`, `list_asks`, and `read_comment_thread`. The matching write
+tools — `open_session`/`close_session`, `append_entry`,
+`create_handoff`/`claim_handoff`/`close_handoff`, `pick_up_ask`/`resolve_ask`,
+`reply_comment` (which can declare directed asks), and
+`bind_project_repository` — follow the same per-workspace **Write** policy as
+the note write tools. On OAuth transports the coordination reads require
+`journal:read` (`get_project_context` requires both `notes:read` and
+`journal:read`) and the coordination writes require `journal:write`; the
+native local bridge needs no scopes. Handoff and ask transitions are
+compare-and-set: a lost race returns the current status, never a lock, and
+`targetAgentKind` is advisory routing, never authorization. An older Recall
+build simply omits these tools; the skills inspect the live catalog instead of
+assuming them from any version number.
 
 ## Skills
 

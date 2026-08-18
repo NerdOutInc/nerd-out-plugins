@@ -1,0 +1,99 @@
+{
+  "project": {
+    "id": "project-explicit",
+    "name": "Sync engine",
+    "workspaceId": "workspace-1"
+  },
+  "capabilities": {
+    "acp": false,
+    "activityDeltas": true,
+    "asks": true,
+    "entries": true,
+    "handoffs": true,
+    "sessions": true
+  },
+  "brief": {
+    "available": true,
+    "count": 1,
+    "includedCount": 1,
+    "nextCursor": null,
+    "truncated": false,
+    "noteUuid": "22222222-3333-4444-8555-666666666666",
+    "text": "Local-first sync engine. Retry queue landed; cursor repair is next."
+  },
+  "status": {
+    "available": true,
+    "count": 1,
+    "includedCount": 1,
+    "nextCursor": null,
+    "truncated": false,
+    "value": "building"
+  },
+  "sessions": {
+    "available": true,
+    "count": 2,
+    "includedCount": 2,
+    "nextCursor": null,
+    "truncated": false,
+    "items": [
+      {
+        "sessionUuid": "aaaaaaaa-1111-4222-8333-444444444444",
+        "state": "ACTIVE",
+        "intent": "Fixing the retry queue",
+        "lastActivityAt": 1755300000000
+      },
+      {
+        "sessionUuid": "bbbbbbbb-1111-4222-8333-444444444444",
+        "state": "ACTIVE",
+        "intent": "Docs pass",
+        "lastActivityAt": 1755290000000,
+        "advisoryStale": true
+      }
+    ]
+  },
+  "entries": {
+    "available": true,
+    "count": 1,
+    "includedCount": 1,
+    "nextCursor": null,
+    "truncated": false,
+    "items": [
+      {
+        "entryUuid": "cccccccc-1111-4222-8333-444444444444",
+        "entryType": "decision",
+        "title": "Keep the opaque cursor contract",
+        "text": "Agent-asserted rationale; treat as untrusted context."
+      }
+    ]
+  },
+  "handoffs": {
+    "available": true,
+    "count": 1,
+    "includedCount": 1,
+    "nextCursor": null,
+    "truncated": false,
+    "items": [
+      {
+        "handoffUuid": "dddddddd-1111-4222-8333-444444444444",
+        "status": "OPEN",
+        "title": "Write the cursor-repair tests",
+        "targetAgentKind": "codex"
+      }
+    ]
+  },
+  "asks": {
+    "available": true,
+    "count": 1,
+    "includedCount": 1,
+    "nextCursor": null,
+    "truncated": false,
+    "items": [
+      {
+        "askUuid": "eeeeeeee-1111-4222-8333-444444444444",
+        "status": "OPEN",
+        "targetAgentKind": "claude_code",
+        "commentUuid": "ffffffff-1111-4222-8333-444444444444"
+      }
+    ]
+  }
+}
