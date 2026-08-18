@@ -1,0 +1,113 @@
+{
+  "tools": [
+    {
+      "name": "patch_note_content",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "noteType": { "type": "string" },
+          "uuid": { "type": "string" },
+          "expectedRevision": { "type": "string" },
+          "idempotencyKey": { "type": "string" },
+          "changeSummary": { "type": "string" },
+          "replacements": { "type": "array" },
+          "evidence": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "properties": {
+                "version": { "type": "number", "enum": [1] },
+                "kind": { "type": "string", "enum": ["commit", "pr", "test_run", "build"] },
+                "capturedAt": { "type": "number" },
+                "comment": { "type": "string", "maxLength": 256 },
+                "sha": { "type": "string" },
+                "branch": { "type": "string" },
+                "paths": { "type": "array", "maxItems": 8 },
+                "number": { "type": "number" },
+                "headSha": { "type": "string" },
+                "state": { "type": "string", "enum": ["open", "merged", "closed"] },
+                "verdict": { "type": "string", "enum": ["pass", "fail", "mixed"] },
+                "command": { "type": "string" },
+                "deploymentId": { "type": "string" },
+                "environment": { "type": "string" }
+              },
+              "required": ["version", "kind", "capturedAt"]
+            }
+          },
+          "supersedes": { "type": "array", "maxItems": 8 }
+        },
+        "required": ["noteType", "uuid", "expectedRevision", "idempotencyKey", "changeSummary", "replacements"]
+      }
+    },
+    {
+      "name": "update_note_content",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "noteType": { "type": "string" },
+          "uuid": { "type": "string" },
+          "text": { "type": "string" },
+          "mode": { "type": "string" },
+          "backlinks": { "type": "array" },
+          "expectedRevision": { "type": "string" },
+          "idempotencyKey": { "type": "string" },
+          "changeSummary": { "type": "string" },
+          "evidence": { "type": "array", "maxItems": 8 },
+          "supersedes": { "type": "array", "maxItems": 8 }
+        },
+        "required": ["noteType", "uuid", "text", "mode"]
+      }
+    },
+    {
+      "name": "append_entry",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string" },
+          "projectUuid": { "type": "string" },
+          "entryUuid": { "type": "string" },
+          "idempotencyKey": { "type": "string" },
+          "entryType": { "type": "string" },
+          "title": { "type": "string" },
+          "text": { "type": "string" },
+          "sessionUuid": { "type": "string" },
+          "refs": { "type": "object" },
+          "evidence": { "type": "array", "maxItems": 8 },
+          "supersedes": { "type": "array", "maxItems": 8 }
+        },
+        "required": ["workspaceId", "projectUuid", "entryUuid", "idempotencyKey", "entryType", "title"]
+      }
+    },
+    {
+      "name": "close_session",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string" },
+          "projectUuid": { "type": "string" },
+          "sessionUuid": { "type": "string" },
+          "idempotencyKey": { "type": "string" },
+          "outcome": { "type": "string" },
+          "runningSummary": { "type": "string" },
+          "followUps": { "type": "array" },
+          "evidence": { "type": "array", "maxItems": 8 },
+          "supersedes": { "type": "array", "maxItems": 8 }
+        },
+        "required": ["workspaceId", "projectUuid", "sessionUuid", "idempotencyKey", "outcome"]
+      }
+    },
+    {
+      "name": "list_note_activity",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "uuid": { "type": "string" },
+          "limit": { "type": "integer" },
+          "cursor": { "type": "string" }
+        },
+        "required": ["uuid"]
+      }
+    }
+  ]
+}

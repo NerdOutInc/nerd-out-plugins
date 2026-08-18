@@ -1,0 +1,112 @@
+{
+  "git": {
+    "head": "ffff000011112222333344445555666677778888",
+    "ancestorsOfHead": [
+      "2dda0955aa11bb22cc33dd44ee55ff6677889900",
+      "aaaa000011112222333344445555666677778888",
+      "ffff000011112222333344445555666677778888"
+    ],
+    "touchedSince": {
+      "2dda0955aa11bb22cc33dd44ee55ff6677889900": ["web-app/lib/sync/retry.ts"],
+      "aaaa000011112222333344445555666677778888": [],
+      "ffff000011112222333344445555666677778888": []
+    }
+  },
+  "supersededRecordUuids": ["99999999-2222-4333-8444-555555555555"],
+  "cases": [
+    {
+      "name": "head commit is fresh",
+      "recordUuid": "11111111-0000-4000-8000-000000000001",
+      "ref": {
+        "version": 1,
+        "kind": "commit",
+        "capturedAt": 1,
+        "sha": "ffff000011112222333344445555666677778888"
+      },
+      "expected": "fresh"
+    },
+    {
+      "name": "ancestor with untouched declared paths is fresh",
+      "recordUuid": "11111111-0000-4000-8000-000000000002",
+      "ref": {
+        "version": 1,
+        "kind": "commit",
+        "capturedAt": 1,
+        "sha": "2dda0955aa11bb22cc33dd44ee55ff6677889900",
+        "paths": ["docs/sync.md"]
+      },
+      "expected": "fresh"
+    },
+    {
+      "name": "ancestor whose declared path changed since is stale",
+      "recordUuid": "11111111-0000-4000-8000-000000000003",
+      "ref": {
+        "version": 1,
+        "kind": "commit",
+        "capturedAt": 1,
+        "sha": "2dda0955aa11bb22cc33dd44ee55ff6677889900",
+        "paths": ["web-app/lib/sync/retry.ts", "docs/sync.md"]
+      },
+      "expected": "stale"
+    },
+    {
+      "name": "ancestor with no declared paths is only moved",
+      "recordUuid": "11111111-0000-4000-8000-000000000004",
+      "ref": {
+        "version": 1,
+        "kind": "commit",
+        "capturedAt": 1,
+        "sha": "aaaa000011112222333344445555666677778888"
+      },
+      "expected": "moved"
+    },
+    {
+      "name": "locally unknown sha is unknown, never assumed fresh",
+      "recordUuid": "11111111-0000-4000-8000-000000000005",
+      "ref": {
+        "version": 1,
+        "kind": "commit",
+        "capturedAt": 1,
+        "sha": "0123456789abcdef0123456789abcdef01234567",
+        "paths": ["docs/sync.md"]
+      },
+      "expected": "unknown"
+    },
+    {
+      "name": "pr ref is graded on its headSha",
+      "recordUuid": "11111111-0000-4000-8000-000000000006",
+      "ref": {
+        "version": 1,
+        "kind": "pr",
+        "capturedAt": 1,
+        "number": 57,
+        "headSha": "aaaa000011112222333344445555666677778888",
+        "state": "merged"
+      },
+      "expected": "moved"
+    },
+    {
+      "name": "supersession outranks a git comparison that would be fresh",
+      "recordUuid": "99999999-2222-4333-8444-555555555555",
+      "ref": {
+        "version": 1,
+        "kind": "commit",
+        "capturedAt": 1,
+        "sha": "ffff000011112222333344445555666677778888"
+      },
+      "expected": "superseded"
+    },
+    {
+      "name": "supersession outranks unknown",
+      "recordUuid": "99999999-2222-4333-8444-555555555555",
+      "ref": {
+        "version": 1,
+        "kind": "test_run",
+        "capturedAt": 1,
+        "verdict": "pass",
+        "sha": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "expected": "superseded"
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "tools": [
+    {
+      "name": "patch_note_content",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "noteType": { "type": "string" },
+          "uuid": { "type": "string" },
+          "expectedRevision": { "type": "string" },
+          "idempotencyKey": { "type": "string" },
+          "changeSummary": { "type": "string" },
+          "replacements": { "type": "array" }
+        },
+        "required": ["noteType", "uuid", "expectedRevision", "idempotencyKey", "changeSummary", "replacements"]
+      }
+    },
+    {
+      "name": "update_note_content",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "noteType": { "type": "string" },
+          "uuid": { "type": "string" },
+          "text": { "type": "string" },
+          "mode": { "type": "string" },
+          "backlinks": { "type": "array" },
+          "expectedRevision": { "type": "string" },
+          "idempotencyKey": { "type": "string" },
+          "changeSummary": { "type": "string" }
+        },
+        "required": ["noteType", "uuid", "text", "mode"]
+      }
+    },
+    {
+      "name": "append_entry",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string" },
+          "projectUuid": { "type": "string" },
+          "entryUuid": { "type": "string" },
+          "idempotencyKey": { "type": "string" },
+          "entryType": { "type": "string" },
+          "title": { "type": "string" },
+          "text": { "type": "string" },
+          "sessionUuid": { "type": "string" },
+          "refs": { "type": "object" }
+        },
+        "required": ["workspaceId", "projectUuid", "entryUuid", "idempotencyKey", "entryType", "title"]
+      }
+    }
+  ]
+}

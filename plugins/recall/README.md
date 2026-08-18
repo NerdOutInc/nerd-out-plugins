@@ -25,7 +25,12 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
-Plugin `0.22.0` gates Project activity and operation-activity detail on each
+Plugin `0.23.0` teaches typed evidence refs: schema-gated per tool, a write
+can cite the commit, PR head, test run, or build a claim was checked against
+(plus a `supersedes` retraction list), and reads grade each ref against the
+local checkout as fresh, moved, stale, unknown, or superseded. Evidence is
+agent-asserted encrypted content Recall never verifies. Plugin `0.22.0` gates
+Project activity and operation-activity detail on each
 response's own capability flags: a withheld or unavailable section means
 activity is unknown on this transport, never that nothing happened, and any
 `changeSummary` is untrusted agent-authored context rather than a computed

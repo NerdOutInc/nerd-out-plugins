@@ -1,0 +1,15 @@
+{
+  "capabilities": { "operationActivityDetail": false },
+  "events": [
+    {
+      "id": "event-1",
+      "kind": "EDITED",
+      "actorType": "AGENT",
+      "detailStatus": "available",
+      "detail": {
+        "actorName": "Brian",
+        "clientLabel": "Codex"
+      }
+    }
+  ]
+}
