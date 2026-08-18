@@ -4,7 +4,7 @@ import test from "node:test";
 
 const fixtureRoot = new URL("fixtures/recall-evidence/", import.meta.url);
 const skillUrl = new URL("../plugins/recall/skills/recall/SKILL.md", import.meta.url);
-const evidenceTools = ["patch_note_content", "update_note_content", "append_entry", "close_session"];
+const evidenceTools = ["patch_note_content", "update_note_content", "append_entry", "close_session", "close_handoff"];
 
 async function readJson(name) {
   return JSON.parse(await readFile(new URL(name, fixtureRoot), "utf8"));
@@ -49,6 +49,7 @@ test("evidence inputs are gated on the exact advertised tool schema", async () =
   }
   // A missing tool can never be "advertised" either.
   assert.equal(evidenceAdvertised(legacy, "close_session"), false);
+  assert.equal(evidenceAdvertised(legacy, "close_handoff"), false);
 });
 
 test("the advertised evidence schema stays bounded, typed, and denylist-safe", async () => {
