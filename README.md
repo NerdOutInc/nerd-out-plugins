@@ -96,8 +96,12 @@ authorizing. Older Recall builds continue to request only `notes:read` and
 `notes:write`; builds that advertise structured Project context also add
 `journal:read`. An existing notes-only grant is replaced
 through normal browser consent when those capabilities become available.
-Native local-bridge sessions need no OAuth scopes. `journal:write` remains out
-of this release until structured write tools ship, and workspace Block/Read/Write
+Native local-bridge sessions need no OAuth scopes. Recall's coordination
+write tools (typed timeline entries, handoffs, directed asks, comment
+replies, and session open/close) are gated on `journal:write`, which this
+bridge still does not request — on the OAuth fallback the coordination
+surface is read-only, while the native local bridge carries the full
+policy-permitted catalog. Workspace Block/Read/Write
 policy remains the independent data-access gate on both transports.
 
 Older app builds without OAuth support can still use the shared bearer token —

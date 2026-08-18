@@ -1,0 +1,62 @@
+{
+  "project": {
+    "id": "project-explicit",
+    "name": "Sync engine",
+    "workspaceId": "workspace-1"
+  },
+  "capabilities": {
+    "acp": false,
+    "activityDeltas": false,
+    "asks": false,
+    "entries": false,
+    "handoffs": false,
+    "sessions": false
+  },
+  "brief": {
+    "available": false,
+    "count": 0,
+    "includedCount": 0,
+    "nextCursor": null,
+    "truncated": false
+  },
+  "status": {
+    "available": false,
+    "count": 0,
+    "includedCount": 0,
+    "nextCursor": null,
+    "truncated": false,
+    "value": null
+  },
+  "sessions": {
+    "available": false,
+    "count": 0,
+    "includedCount": 0,
+    "items": [],
+    "nextCursor": null,
+    "truncated": false
+  },
+  "entries": {
+    "available": false,
+    "count": 0,
+    "includedCount": 0,
+    "items": [],
+    "nextCursor": null,
+    "truncated": false
+  },
+  "handoffs": {
+    "available": false,
+    "count": 0,
+    "includedCount": 0,
+    "items": [],
+    "nextCursor": null,
+    "truncated": false
+  },
+  "asks": {
+    "available": false,
+    "count": 0,
+    "includedCount": 0,
+    "items": [],
+    "nextCursor": null,
+    "truncated": false
+  }
+}

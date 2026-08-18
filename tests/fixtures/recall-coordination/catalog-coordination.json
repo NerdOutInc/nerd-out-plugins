@@ -1,0 +1,228 @@
+{
+  "comment": "Mirrors the coordination slice of apple-app/Sources/McpToolCatalog.swift (31-tool catalog). Schema facts pinned by recall-coordination-contract.test.mjs; the Swift catalog remains the authority.",
+  "tools": [
+    {
+      "name": "get_project_context",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectUuid": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "workspaceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "noteLimit": { "type": "integer", "minimum": 1, "maximum": 20 },
+          "noteCursor": { "type": "string", "maxLength": 1024 },
+          "activityLimit": { "type": "integer", "minimum": 1, "maximum": 12 },
+          "activityCursor": { "type": "string", "maxLength": 1024 },
+          "callerSessionUuid": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+          }
+        },
+        "required": ["projectUuid"]
+      }
+    },
+    {
+      "name": "append_entry",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "projectUuid": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "entryUuid": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+          },
+          "entryType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "title": { "type": "string", "minLength": 1, "maxLength": 1024 },
+          "text": { "type": "string", "maxLength": 16384 },
+          "sessionUuid": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+          },
+          "refs": {
+            "type": "object",
+            "properties": {
+              "commits": { "type": "array", "maxItems": 32, "items": { "type": "string", "minLength": 1, "maxLength": 1024 } },
+              "entryUuids": { "type": "array", "maxItems": 32, "items": { "type": "string" } },
+              "files": { "type": "array", "maxItems": 32, "items": { "type": "string", "minLength": 1, "maxLength": 1024 } },
+              "handoffUuids": { "type": "array", "maxItems": 32, "items": { "type": "string" } },
+              "prUrls": { "type": "array", "maxItems": 32, "items": { "type": "string", "minLength": 1, "maxLength": 1024 } }
+            }
+          },
+          "evidence": { "type": "array", "maxItems": 8 },
+          "supersedes": { "type": "array", "maxItems": 8 }
+        },
+        "required": ["workspaceId", "projectUuid", "entryUuid", "idempotencyKey", "entryType", "title"]
+      }
+    },
+    {
+      "name": "list_timeline",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "projectUuid": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "entryTypes": {
+            "type": "array",
+            "maxItems": 16,
+            "items": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z0-9_]*$" }
+          },
+          "sessionUuid": { "type": "string" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 50 },
+          "cursor": { "type": "string", "maxLength": 1024 }
+        },
+        "required": ["workspaceId", "projectUuid"]
+      }
+    },
+    {
+      "name": "create_handoff",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "projectUuid": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "handoffUuid": { "type": "string" },
+          "idempotencyKey": { "type": "string" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 1024 },
+          "context": { "type": "string", "maxLength": 16384 },
+          "acceptanceCriteria": { "type": "string", "maxLength": 16384 },
+          "targetAgentKind": { "type": "string", "maxLength": 64 },
+          "sourceSessionUuid": { "type": "string" },
+          "refs": { "type": "object" }
+        },
+        "required": ["workspaceId", "projectUuid", "handoffUuid", "idempotencyKey", "title"]
+      }
+    },
+    {
+      "name": "claim_handoff",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "projectUuid": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "handoffUuid": { "type": "string" },
+          "sessionUuid": { "type": "string" }
+        },
+        "required": ["workspaceId", "projectUuid", "handoffUuid", "sessionUuid"]
+      }
+    },
+    {
+      "name": "close_handoff",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "projectUuid": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "handoffUuid": { "type": "string" },
+          "idempotencyKey": { "type": "string" },
+          "disposition": { "type": "string", "enum": ["done", "dropped"] },
+          "outcome": { "type": "string", "maxLength": 16384 },
+          "sessionUuid": { "type": "string" }
+        },
+        "required": ["workspaceId", "projectUuid", "handoffUuid", "idempotencyKey", "disposition"]
+      }
+    },
+    {
+      "name": "list_handoffs",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "projectUuid": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "status": { "type": "string", "enum": ["OPEN", "CLAIMED", "DONE", "DROPPED"] },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 50 },
+          "cursor": { "type": "string", "maxLength": 1024 }
+        },
+        "required": ["workspaceId", "projectUuid"]
+      }
+    },
+    {
+      "name": "list_asks",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "projectUuid": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "status": { "type": "string", "enum": ["OPEN", "PICKED_UP", "RESOLVED", "DISMISSED"] },
+          "targetAgentKind": { "type": "string", "maxLength": 64, "pattern": "^[a-z][a-z0-9_]*$" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 50 },
+          "cursor": { "type": "string", "maxLength": 1024 }
+        },
+        "required": ["workspaceId", "projectUuid"]
+      }
+    },
+    {
+      "name": "pick_up_ask",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "projectUuid": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "askUuid": { "type": "string" },
+          "sessionUuid": { "type": "string" }
+        },
+        "required": ["workspaceId", "projectUuid", "askUuid", "sessionUuid"]
+      }
+    },
+    {
+      "name": "resolve_ask",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "projectUuid": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "askUuid": { "type": "string" },
+          "disposition": { "type": "string", "enum": ["resolved", "dismissed"] },
+          "sessionUuid": { "type": "string" }
+        },
+        "required": ["workspaceId", "projectUuid", "askUuid", "disposition"]
+      }
+    },
+    {
+      "name": "read_comment_thread",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "threadUuid": { "type": "string" }
+        },
+        "required": ["workspaceId", "threadUuid"]
+      }
+    },
+    {
+      "name": "reply_comment",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "threadUuid": { "type": "string" },
+          "commentUuid": { "type": "string" },
+          "text": { "type": "string", "minLength": 1, "maxLength": 16384 },
+          "askDeclarations": {
+            "type": "array",
+            "maxItems": 4,
+            "items": {
+              "type": "object",
+              "properties": {
+                "uuid": { "type": "string" },
+                "targetAgentKind": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z0-9_]*$" }
+              },
+              "required": ["uuid", "targetAgentKind"],
+              "additionalProperties": false
+            }
+          },
+          "idempotencyKey": { "type": "string" }
+        },
+        "required": ["workspaceId", "threadUuid", "commentUuid", "text"]
+      }
+    }
+  ]
+}

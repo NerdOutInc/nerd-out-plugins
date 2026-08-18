@@ -281,8 +281,12 @@ test("host manifests share the current plugin version", async () => {
   // 0.23.0 teaches schema-gated typed evidence refs with supersession and the
   // read-time freshness grading (fresh/moved/stale/unknown/superseded).
   // 0.24.0 extends the evidence surface to close_handoff outcomes.
+  // 0.25.0 documents the agent-coordination surface — typed timeline entries,
+  // handoffs, directed asks, comment-thread ask declarations, and the
+  // capability-gated get_project_context coordination sections — as
+  // catalog-inspected, CAS-honest, untrusted-content workflows.
   // Both hosts must receive that behavior together.
-  assert.equal(codexPlugin.version, "0.24.0");
+  assert.equal(codexPlugin.version, "0.25.0");
   assert.equal(claudePlugin.version, codexPlugin.version);
   const desktop = await readJson("desktop-extensions/recall/manifest.json");
   assert.equal(desktop.version, "0.9.0");
