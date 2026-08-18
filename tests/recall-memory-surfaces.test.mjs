@@ -143,6 +143,85 @@ test("v4 is a strict reader-before-writer contract", async () => {
     skill,
     /never create or update a legacy journal note or Today summary/,
   );
-  assert.match(skill, /does not write structured config or\s+session data/);
+  // Version 5 writes structured sessions, so the old blanket "writes nothing
+  // structured" sentence is gone. What must survive is the narrower contract:
+  // v3/v4 stay readers, and no config version is ever written but v1/v2.
+  assert.match(
+    skill,
+    /create a\s+structured session under version 3 or version 4/,
+  );
+  assert.match(
+    skill,
+    /never writes, migrates, or downgrades a version 3,\s+version 4, or version 5 config/,
+  );
   assert.match(skill, /do not auto-migrate v1\/v2 global\s+users/);
+});
+
+test("v5 teaches the session tools and retires the hand-executed mechanics", async () => {
+  const skill = await read("plugins/recall/skills/recall-journal/SKILL.md");
+
+  // The structured protocol must name the whole write path.
+  assert.match(skill, /## Structured journaling \(version 5\)/);
+  assert.match(skill, /`open_session`/);
+  assert.match(skill, /`append_entry`/);
+  assert.match(skill, /`close_session`/);
+  assert.match(skill, /`daySummary`/);
+  assert.match(skill, /`previousSession`/);
+
+  // Continuity honesty: absence must never read as proof of no predecessor.
+  assert.match(skill, /`sessionContinuityAvailable`/);
+  assert.match(skill, /absence means unknown/);
+
+  // Awareness is advisory, never a lock.
+  assert.match(skill, /never a lock/);
+
+  // The app owns the card's mechanics now.
+  assert.match(
+    skill,
+    /Do not compute an\s+idempotency key, do not emit a heading, and do not attach a backlink/,
+  );
+
+  // Every close-result state must be explained, including the two that are
+  // easy to misreport as success or as failure.
+  for (const status of [
+    "created",
+    "already_exists",
+    "deferred",
+    "failed",
+  ]) {
+    assert.match(skill, new RegExp(`\`${status}\``), status);
+  }
+});
+
+test("v5 forbids a hybrid and keeps the legacy protocol as the whole fallback", async () => {
+  const skill = await read("plugins/recall/skills/recall-journal/SKILL.md");
+
+  // The fallback is all-or-nothing: a partial structured surface must not
+  // produce structured sessions plus a hand-built card.
+  assert.match(skill, /Structured journaling needs \*\*all\*\* of/);
+  assert.match(skill, /Fall back to the \*\*entire\*\* legacy protocol/);
+  assert.match(skill, /Never mix the two/);
+
+  // Degradation is always explicit to the user.
+  assert.match(
+    skill,
+    /say plainly in the\s+final response that structured journaling was unavailable/,
+  );
+
+  // The legacy sections must remain present and explicitly scoped, because
+  // v1/v2 users and the fallback both still execute them.
+  assert.match(skill, /The rest of this document is the legacy note protocol/);
+  assert.match(skill, /### Thread identity and journal markers/);
+  assert.match(skill, /### Write-failure protocol/);
+});
+
+test("v5 never invents continuity or rewrites the archive", async () => {
+  const skill = await read("plugins/recall/skills/recall-journal/SKILL.md");
+
+  assert.match(skill, /Never invent a lineage key when the host supplies no/);
+  assert.match(skill, /Never rewrite history/);
+  assert.match(
+    skill,
+    /Older journal notes stay readable archive[\s\S]*never migrated or rewritten/,
+  );
 });

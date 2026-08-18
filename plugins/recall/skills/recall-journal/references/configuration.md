@@ -141,13 +141,23 @@ supported remote, after `resolve_project` returns `none`, `ambiguous`, or
 `not_ready`, when either required tool is unavailable, or when structured
 context is missing, blocked, mismatched, or not ready.
 
-Versions 3 and 4 are mutually exclusive with the legacy `scope`, `workspace`,
-`journal`, `global`, and `projects` fields. Mixed or additional fields make the
-file invalid so one prompt can never enter both protocols. Both versions are
-**reader-only** in this plugin release: never create or update legacy journal
-notes, Today summaries, structured sessions, or structured config files. Do
-not write, migrate, reconfigure, or downgrade v3 or v4. Current setup and
-reconfiguration flows below continue to write version 2 only.
+Versions 3, 4, and 5 are mutually exclusive with the legacy `scope`,
+`workspace`, `journal`, `global`, and `projects` fields. Mixed or additional
+fields make the file invalid so one prompt can never enter both protocols.
+
+Versions 3 and 4 are **reader-only**: never create or update legacy journal
+notes, Today summaries, or structured sessions under them.
+
+**Version 5 is the structured writer.** It carries the same
+`projectMemory.defaultProject` shape as version 4 and is validated by the same
+exact-shape rules, but a valid version 5 config directs the agent to write
+structured sessions instead of legacy notes — see "Structured journaling
+(version 5)" in the skill. It never writes a legacy journal note or a
+hand-built Today card.
+
+Do not write, migrate, reconfigure, or downgrade a v3, v4, or v5 config.
+Current setup and reconfiguration flows below continue to write version 2 only,
+so a user reaches version 5 only by writing the file themselves.
 
 ## Resolve the current filesystem project
 
