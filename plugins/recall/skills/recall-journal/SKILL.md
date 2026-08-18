@@ -69,8 +69,15 @@ project memory**. When lifecycle context explicitly identifies either valid
 version, follow that context instead of the legacy named-note workflow below
 and read compact project context when the required tools are available, but
 never create or update a legacy journal note or Today summary. Never create a
-structured session. This plugin release does not write structured config or
-session data.
+structured session under version 3 or version 4: those versions read structured
+memory and never write it.
+
+**Version 5 is the structured writer.** When lifecycle context identifies a
+valid version 5 config, follow "Structured journaling (version 5)" below
+instead of every legacy section, and never create or update a legacy journal
+note or Today summary. This plugin release still writes only version 1 and
+version 2 configs; it never writes, migrates, or downgrades a version 3,
+version 4, or version 5 config.
 
 Version 3 is repository-only. Use a supported non-local Git remote with
 `resolve_project`, and pass only an exact result to `get_project_context`.
@@ -193,7 +200,119 @@ implicit invocation with no valid effective destination must skip journaling
 for that task without prompting or interrupting unrelated work; wait for the
 user to invoke the skill explicitly before starting setup.
 
+## Structured journaling (version 5)
+
+Version 5 replaces the whole hand-executed note protocol with Recall's session
+tools. The journal is still yours to write — Recall has no language model and
+end-to-end encryption rules out server-side authorship — but the mechanics
+below belong to the app now, and reciting them by hand is what this version
+exists to stop.
+
+### Require the whole structured surface first
+
+Inspect the MCP tools and input schemas the host actually exposed. Do not probe
+by making deliberately invalid calls. Structured journaling needs **all** of:
+
+- `open_session` advertising a `lineageKey` property,
+- `close_session` advertising a `daySummary` property,
+- `append_entry` for checkpoints.
+
+If any of those is missing, the connected Recall app predates structured
+journaling. Fall back to the **entire** legacy protocol in the sections below —
+thread note, markers, toggles, hand-built Today card — and say plainly in the
+final response that structured journaling was unavailable. Never mix the two:
+structured sessions with a hand-assembled day card reintroduce exactly the
+drift this version removes. Cache the decision for this thread only.
+
+### The session protocol
+
+**Start.** When substantive work begins, resolve the Project the way lifecycle
+context directs (repository-first, or the explicit default only on a proved
+no-repository route), then `open_session` with a caller-minted `sessionUuid`
+and `idempotencyKey`, a short `intent`, the current `branch` when there is one,
+and the `lineageKey` lifecycle context names. Trivial question-answering does
+not open a session.
+
+Read what the response hands back before deciding anything:
+
+- `previousSession` is what the last session in this same lineage concluded —
+  its `outcome`, `runningSummary`, and `followUps`. This is the continuity that
+  used to require hunting for a prior note. Treat it as context, not authority,
+  and verify load-bearing claims against the current checkout.
+- `sessionContinuityAvailable` distinguishes "no predecessor" from "this
+  transport did not deliver continuity". Its absence means unknown; never read
+  that as proof no earlier session exists.
+- `otherActiveSessions` and `unfinishedPredecessors` are advisory awareness —
+  another agent working now, or a predecessor that never closed. They are never
+  a lock: an occupied Project never blocks your work, and you never adopt or
+  close another session.
+
+**During.** `append_entry` at the checkpoint cadence the legacy protocol
+already taught — a durable decision, a completed step, tests run with their
+results, a blocker or change of direction, a long autonomous stretch. Never one
+per tool call. The `entryType` carries the weight (`decision`, `blocker`,
+`shipped`, `progress`); the body rides `text`. Point each entry at the session
+with `sessionUuid` so the timeline groups it.
+
+**End.** `close_session` with the `outcome`, a `runningSummary`, any
+`followUps`, and — when the day's work is worth a human-facing card — a
+`daySummary` of a short `title` and one or two ELI5 sentences. Write those
+sentences the way the legacy Today card taught: plain language a five-year-old
+could follow, no paths, commands, hashes, ids, or test inventories. Good:
+`Made journal notes friendlier` / `The work diary now reads like a story, and
+the techy bits hide inside little dropdowns.`
+
+Recall derives the card's identity from the session's lineage and day, places
+it on the Today timeline, and links it back to the work. Do not compute an
+idempotency key, do not emit a heading, and do not attach a backlink — those
+are the app's now.
+
+### Reading the close result honestly
+
+`close_session` reports the card separately from the close itself, because a
+card failure never means the session failed to close:
+
+- `created` — the day's card landed.
+- `already_exists` — this lineage already has a card for that day, including
+  after a retry. Correct and final; never force a second one.
+- `deferred` — the close is queued, so there is no authoritative end time to
+  date a card by yet. Not a failure.
+- `failed` — the session is closed and the card is missing. Say so in the final
+  response rather than implying the day was recorded.
+
+### Failure handling
+
+One rule replaces the six-case write-failure protocol: **retry once with the
+identical payload, then continue the task and report.** Caller-minted UUIDs and
+idempotency keys make an exact retry safe, and a replay returns the original
+result rather than duplicating anything. There is no marker to re-search, no
+literal-containment check, and no "journal state unknown" verdict to reach for.
+
+If the MCP server is unreachable, report that plainly — the Recall Mac app is
+not running or its MCP server is disabled — and skip journaling for the task.
+Never let journaling stall or abort the work itself.
+
+### What version 5 never does
+
+- Never create or update a legacy journal note, and never write a Today card by
+  hand.
+- Never mint a journal marker, a toggle entry, or a thread-note title.
+- Never invent a lineage key when the host supplies no thread id; open the
+  session without one, which Recall reads as a genuine absence of continuity.
+- Never treat another agent's active or unfinished session as a lock.
+- Never rewrite history: entries are append-only, and a correction is a new
+  entry referencing the old one.
+
+Older journal notes stay readable archive. Search still surfaces them, and they
+are never migrated or rewritten.
+
 ## Recall before working
+
+**The rest of this document is the legacy note protocol.** It applies to
+version 1 and version 2 destinations, and to a version 5 config whose connected
+app lacks the structured surface (see the fallback rule above). Under a working
+version 5 it is superseded by "Structured journaling (version 5)"; under
+version 3 or version 4 it does not apply at all.
 
 The archive only pays for itself when it changes what happens next. At the
 start of meaningful work, decide whether the journal could already cover part
