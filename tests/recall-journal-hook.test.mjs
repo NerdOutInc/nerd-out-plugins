@@ -1539,3 +1539,202 @@ test("sanitizes the project workspace name in the injected context", () => {
   assert.equal(context.includes("\n"), false);
   assert.equal(context.includes(JSON.stringify('Line break "quoted"')), true);
 });
+
+const v5ThreadId = "11111111-2222-4333-8444-555555555555";
+
+test("uses repository-first v5 routing without exposing the default Project", () => {
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: path.join(fixtureRoot, "v5"),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: {
+      hook_event_name: "UserPromptSubmit",
+      cwd: repositoryRoot,
+      session_id: v5ThreadId,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.equal(context, readFixture("v5", "repository-context.txt"));
+  assert.match(context, /repository-first routing/);
+  assert.match(context, /none, ambiguous, or not_ready/);
+  assert.equal(context.includes("default-workspace-id"), false);
+  assert.equal(context.includes("default-project-id"), false);
+  assert.equal(context.includes("General Memory"), false);
+});
+
+test("uses the explicit v5 default only when no repository identity exists", () => {
+  const noRepository = makeTemporaryDirectory();
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: path.join(fixtureRoot, "v5"),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: {
+      hook_event_name: "UserPromptSubmit",
+      cwd: noRepository,
+      session_id: v5ThreadId,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.equal(context, readFixture("v5", "no-repository-context.txt"));
+  assert.match(context, /default-project-id/);
+});
+
+test("withholds the v5 default when repository identity cannot be proved", () => {
+  const missingDirectory = path.join(
+    makeTemporaryDirectory(),
+    "missing-working-directory",
+  );
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: path.join(fixtureRoot, "v5"),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: {
+      hook_event_name: "UserPromptSubmit",
+      cwd: missingDirectory,
+      session_id: v5ThreadId,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(
+    context,
+    /could not prove whether filesystem repository identity exists/,
+  );
+  assert.equal(context.includes("default-workspace-id"), false);
+  assert.equal(context.includes("default-project-id"), false);
+});
+
+test("v5 names the session tools and never the retired card recipe", () => {
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: path.join(fixtureRoot, "v5"),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: {
+      hook_event_name: "UserPromptSubmit",
+      cwd: repositoryRoot,
+      session_id: v5ThreadId,
+    },
+  });
+
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(context, /open_session/);
+  assert.match(context, /append_entry/);
+  assert.match(context, /close_session/);
+  assert.match(context, /daySummary/);
+  // The mechanics this version exists to retire must never be recited again.
+  assert.equal(context.includes("create_today_note"), false);
+  assert.equal(context.includes("### Full journal entry"), false);
+  assert.equal(context.includes("idempotencyKey"), false);
+  assert.equal(context.includes("journal marker"), false);
+});
+
+test("v5 carries the thread id as the session lineage key", () => {
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: path.join(fixtureRoot, "v5"),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: {
+      hook_event_name: "UserPromptSubmit",
+      cwd: repositoryRoot,
+      session_id: v5ThreadId,
+    },
+  });
+
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(context, new RegExp(`lineageKey ${v5ThreadId}`));
+});
+
+test("v5 opens without a lineage key rather than inventing one", () => {
+  for (const input of [
+    { hook_event_name: "UserPromptSubmit", cwd: repositoryRoot },
+    {
+      hook_event_name: "UserPromptSubmit",
+      cwd: repositoryRoot,
+      session_id: "not a valid id",
+    },
+  ]) {
+    const result = runHook({
+      environment: {
+        ...cleanEnvironment(),
+        CODEX_HOME: path.join(fixtureRoot, "v5"),
+        PLUGIN_ROOT: pluginRoot,
+      },
+      input,
+    });
+
+    const context = JSON.parse(result.stdout).hookSpecificOutput
+      .additionalContext;
+    assert.match(context, /without a lineageKey; never invent one/);
+    assert.equal(context.includes("lineageKey not a valid id"), false);
+  }
+});
+
+test("rejects a v5 config carrying an unknown key", () => {
+  const home = makeTemporaryDirectory();
+  fs.writeFileSync(
+    path.join(home, "recall-journal.json"),
+    JSON.stringify({
+      version: 5,
+      projectMemory: {
+        enabled: true,
+        defaultProject: {
+          workspace: { id: "w", name: "W" },
+          recallProject: { id: "p", name: "P" },
+        },
+        sessions: { enabled: true },
+      },
+    }),
+  );
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: home,
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: repositoryRoot },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout.trim(), "");
+});
+
+test("rejects a v5 config with no default Project", () => {
+  const home = makeTemporaryDirectory();
+  fs.writeFileSync(
+    path.join(home, "recall-journal.json"),
+    JSON.stringify({ version: 5, projectMemory: { enabled: true } }),
+  );
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: home,
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: { hook_event_name: "UserPromptSubmit", cwd: repositoryRoot },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout.trim(), "");
+});
