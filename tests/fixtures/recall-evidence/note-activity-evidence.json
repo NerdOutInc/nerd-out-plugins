@@ -1,0 +1,36 @@
+{
+  "capabilities": { "operationActivityDetail": true },
+  "events": [
+    {
+      "id": "event-1",
+      "kind": "EDITED",
+      "actorType": "AGENT",
+      "detailStatus": "available",
+      "detail": {
+        "changeSummary": "Updated the sync retry doc to match the shipped backoff.",
+        "evidence": [
+          {
+            "version": 1,
+            "kind": "commit",
+            "capturedAt": 1755500000000,
+            "sha": "2dda0955aa11bb22cc33dd44ee55ff6677889900",
+            "branch": "main",
+            "paths": ["web-app/lib/sync/retry.ts", "docs/sync.md"]
+          },
+          {
+            "version": 1,
+            "kind": "test_run",
+            "capturedAt": 1755500000001,
+            "verdict": "pass",
+            "command": "pnpm test",
+            "sha": "2dda0955aa11bb22cc33dd44ee55ff6677889900"
+          }
+        ],
+        "evidenceTruncated": true,
+        "supersedes": ["11111111-2222-4333-8444-555555555555"],
+        "previousRevision": "yjs-sv1:before",
+        "resultingRevision": "yjs-sv1:after"
+      }
+    }
+  ]
+}
