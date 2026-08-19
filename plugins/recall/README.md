@@ -25,6 +25,17 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
+Plugin `0.26.0` releases version 5 structured journaling. A project opts in
+by hand-writing the version 5 config; the hook then routes that thread to
+`open_session` carrying its lineage key, and the skill teaches the session
+protocol — `open_session` for the predecessor's conclusions, `append_entry`
+at checkpoints, and `close_session` with an optional `daySummary` whose
+Today card the app places, dates, and links itself. The gate is
+all-or-nothing: unless the installed Recall build advertises `lineageKey`
+on `open_session` and `daySummary` on `close_session`, the skill falls back
+to the entire legacy note protocol rather than a hybrid. Version 1 and 2
+journal configurations are untouched and are never auto-migrated.
+
 Plugin `0.25.0` documents Recall's agent-coordination tools: typed immutable
 timeline entries (`append_entry`/`list_timeline`), packaged handoffs
 (`create_handoff`/`claim_handoff`/`close_handoff`/`list_handoffs`), directed
