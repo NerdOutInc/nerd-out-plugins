@@ -50,7 +50,8 @@ test("the host matrix distinguishes skills, local MCP, and automatic hooks", asy
   assert.match(readme, /hooks run in Cowork rather than ordinary Chat/);
   assert.match(readme, /no direct cloud loopback path to Recall/);
   assert.match(readme, /legacy standalone Recall desktop extension/);
-  assert.match(readme, /advisory, self-reported label/);
+  assert.match(readme, /authenticate the\s+outermost signed host/);
+  assert.match(readme, /label cannot grant access or control attribution/);
   assert.doesNotMatch(readme, /remote Cowork cannot reach a local MCP server/);
   assert.match(
     readme,

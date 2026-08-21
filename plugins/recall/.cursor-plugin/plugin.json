@@ -1,10 +1,10 @@
 {
   "name": "recall",
+  "displayName": "Recall",
   "version": "0.27.0",
-  "description": "Read, search, and update notes in Recall through the Mac app's local MCP server.",
+  "description": "Use Recall's local MCP server and project journal from Cursor.",
   "author": {
-    "name": "Nerd Out Inc.",
-    "url": "https://github.com/NerdOutInc"
+    "name": "Nerd Out Inc."
   },
   "homepage": "https://github.com/NerdOutInc/recall-plugins/tree/main/plugins/recall",
   "repository": "https://github.com/NerdOutInc/recall-plugins",
@@ -12,7 +12,11 @@
     "recall",
     "notes",
     "mcp",
+    "journal",
     "local-first",
     "productivity"
-  ]
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./mcp.json",
+  "hooks": "./.cursor-plugin/hooks.json"
 }

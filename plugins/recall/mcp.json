@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "recall": {
+      "command": "/bin/sh",
+      "args": [
+        "./bridge/recall-node",
+        "./bridge/index.mjs",
+        "--client-name",
+        "Cursor"
+      ],
+      "cwd": "${CURSOR_PLUGIN_ROOT}"
+    }
+  }
+}

@@ -291,8 +291,10 @@ test("host manifests share the current plugin version", async () => {
   // toggle, and recovery choreography. It needs a Recall build advertising
   // lineageKey on open_session and daySummary on close_session; anything
   // less falls back to the entire legacy note protocol.
-  // Both hosts must receive that behavior together.
-  assert.equal(codexPlugin.version, "0.26.0");
+  // 0.27.0 adds the native Cursor package and explicit host identity while
+  // preserving the same shared skills and bridge implementation.
+  // Both existing hosts must receive that behavior together.
+  assert.equal(codexPlugin.version, "0.27.0");
   assert.equal(claudePlugin.version, codexPlugin.version);
   const desktop = await readJson("desktop-extensions/recall/manifest.json");
   assert.equal(desktop.version, "0.9.0");

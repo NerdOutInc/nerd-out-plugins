@@ -1,13 +1,37 @@
-# Install Recall manually for Claude Code or Codex
+# Install Recall manually for Cursor, Claude Code, or Codex
 
-Recall for Mac can install both plugins from **Settings → Integrations**. That
-is the preferred setup. Use this guide when you have the sandboxed App Store
-build, want a terminal-based install, or need to maintain an older setup.
+Recall for Mac can start every supported setup from **Settings →
+Integrations**. That is the preferred route. It installs Claude Code and Codex
+directly; Cursor remains a guided install because Cursor owns its plugin UI.
+Use this guide when you have the sandboxed App Store build, want a terminal
+workflow, or need to maintain an older setup.
 
 These commands still work with the current Claude Code and Codex plugin CLIs.
 After installing, open Recall for Mac and enable **Settings → MCP Server**.
 Choose **Block**, **Read**, or **Write** for each workspace before starting a
 new agent thread.
+
+## Cursor
+
+After Recall is published in Cursor's reviewed marketplace, open **Customize →
+Plugins**, find **Recall**, and choose **Install** with user or project scope.
+Until then, use Cursor's documented local-development path: clone this
+repository, create `~/.cursor/plugins/local` if needed, and symlink the
+`plugins/recall` directory as `~/.cursor/plugins/local/recall`. Restart Cursor
+or run **Developer: Reload Window**. For example:
+
+```bash
+mkdir -p "$HOME/.cursor/plugins/local"
+ln -s /absolute/path/to/recall-plugins/plugins/recall "$HOME/.cursor/plugins/local/recall"
+```
+
+Cursor's public CLI does not currently expose a supported plugin-install
+command. Do not copy Claude's installed plugin or edit Cursor's private cache
+by hand.
+
+The Cursor package has its own `.cursor-plugin` manifest, MCP registration,
+`sessionStart` journal hook, and `~/.cursor/recall-journal.json`. Start a
+new Cursor chat after installation so those capabilities load.
 
 ## Codex
 
@@ -70,17 +94,19 @@ claude plugin install recall@recall --scope user
 
 Start a new thread after installation. The current plugin uses the signed
 local bridge included with Recall for Mac. Bring Recall to the front and
-approve the native prompt the first time an agent connects. The same approval
-covers MCP clients on that Mac until you revoke it under **Settings → MCP
-Server → Local bridge access**.
+approve the host-named native prompt the first time each agent connects.
+Cursor, Claude Code, and Codex receive independent grants; revoking one ends
+only that host's sessions under **Settings → MCP Server → Local bridge
+access**.
 
 Older Recall builds use browser OAuth instead. Complete the browser approval
 once for each host. In either case, the workspace policy in Recall remains the
 final access check.
 
-If the plugin does not appear, inspect the registered MCP servers with
-`codex mcp list` or `claude mcp list`. Claude Code namespaces plugin servers,
-so Recall normally appears there as `plugin:recall:recall`.
+If the plugin does not appear, inspect Cursor's **Customize → Plugins** details
+or the registered MCP servers with `codex mcp list` or `claude mcp list`.
+Claude Code namespaces plugin servers, so Recall normally appears there as
+`plugin:recall:recall`.
 
 ## Move from the old Nerd Out plugin
 
@@ -103,8 +129,12 @@ sandboxed builds leave it to you. Very polite of them, if slightly lazy.
 
 ## Update a manual install
 
-Both agents install from a marketplace snapshot. The marketplace name is
+All three hosts install from a marketplace snapshot. The marketplace name is
 `recall`, as declared by this repository's manifests.
+
+For a published Cursor install, refresh or update Recall from **Customize →
+Plugins**. For the local-development symlink, update the source checkout and
+run **Developer: Reload Window**. Start a new chat after the update.
 
 For Codex, refresh the marketplace snapshot and its installed plugins:
 
