@@ -1,27 +1,30 @@
 # Recall plugins
 
-AI plugins for the Recall notes app. They connect Codex and Claude Code to the
+AI plugins for the Recall notes app. They connect Cursor, Codex, and Claude Code to the
 notes tools in Recall for Mac and statically register the Claude Desktop Chat
 and Cowork routes documented below.
 Automatic memory support is narrower than skill installation or direct tool
 use; see the [host and memory support matrix](plugins/recall/README.md#host-and-memory-support)
-for the current Claude chat, Cowork, ChatGPT, Codex, Git, and non-Git boundary.
+for the current Cursor, Claude chat, Cowork, ChatGPT, Codex, Git, and non-Git boundary.
 
 ## Install from Recall for Mac
 
 Use **Settings → Integrations** in Recall for Mac. This is the preferred setup
-for both plugins.
+for every supported host.
 
 1. Open the direct-download version of Recall and sign in.
 2. Go to **Settings → Integrations**.
-3. Click **Install & connect** for Claude Code, Codex, or both.
+3. Click **Install & connect** for Claude Code or Codex. For Cursor, click
+   **Show steps**. Install from **Customize → Plugins** after the package is
+   published, or use the documented local-plugin path while testing it.
 4. Go to **Settings → MCP Server** and choose **Block**, **Read**, or **Write**
    for each workspace.
 5. Start a new agent thread. On the first connection, bring Recall to the
    front and approve the native access prompt.
 
 Recall detects the agents installed on your Mac and shows what still needs to
-be configured:
+be configured. Cursor stays guided because its public CLI does not expose a
+supported plugin-install command:
 
 <img src="docs/images/recall-integrations-before.jpg" alt="Recall Integrations before installation, with Install and connect buttons for Claude Code and Codex" width="900">
 
@@ -30,19 +33,22 @@ runtime for each agent:
 
 <img src="docs/images/recall-integrations-connected.png" alt="Recall Integrations after Claude Code and Codex are connected" width="900">
 
-The direct-download app can add the marketplace and plugin, enable Recall's
-local MCP server, and prepare the pinned ACP runtime. The sandboxed App Store
-build cannot run the agent CLIs, so it opens the manual guide instead.
+The direct-download app can add the Claude/Codex marketplace and plugin, enable
+Recall's local MCP server, and prepare their pinned ACP runtimes. Cursor owns
+its plugin install UI, so Recall opens verified Cursor-specific steps instead. The
+sandboxed App Store build also uses guided steps for every host.
 
 Installation never grants access to a workspace. Workspace permissions stay
 separate under **Settings → MCP Server**. The current plugin connects through
-Recall's signed local bridge and asks for native approval on first use. You can
-revoke that approval at any time under **Local bridge access**. Older Recall
+Recall's signed local bridge and asks for native approval for each signed host
+on first use. Cursor cannot inherit Claude or Codex approval merely by copying
+their plugin files. You can revoke each host independently under **Local bridge
+access**. Older Recall
 builds fall back to browser OAuth.
 
 ## Other setup guides
 
-- [Install Claude Code or Codex manually](docs/manual-installation.md) if you
+- [Install Cursor, Claude Code, or Codex manually](docs/manual-installation.md) if you
   use the App Store build, need a terminal workflow, or are maintaining an
   older installation.
 - [Connect Hermes Agent](docs/hermes-agent.md) directly to Recall's local HTTP
@@ -51,20 +57,20 @@ builds fall back to browser OAuth.
 
 ## Plugin behavior
 
-`plugins/recall` connects Codex, Claude Code, and supported Claude Desktop
+`plugins/recall` connects Cursor, Codex, Claude Code, and supported Claude Desktop
 surfaces to the local MCP server hosted by the Recall Mac app. The plugin does
 not run a notes server itself; it points the agent at the loopback endpoint
 already managed by the signed-in Mac app.
 
 The app installer enables the local MCP server. For a manual install, enable
 it under **Settings → MCP Server**. Then start a new thread. The first time an
-agent connects, Recall shows a native prompt asking you to approve MCP access
-on this Mac. Approve it once and every agent using Recall's bridge is covered;
-nothing is cached on disk.
+agent connects, Recall verifies the outermost signed host and shows a prompt
+for that host. Claude Code, Codex, and Cursor have separate grants and separate
+attribution; approving one never approves the others. Nothing is cached on disk.
 
 No explicit login command and no browser step are needed. If the server does
 not appear, run `codex mcp list` or `claude mcp list` to inspect the registered
-name. Claude Code plugin servers are namespaced, so it normally appears as
+name, or open Cursor's plugin details under **Customize**. Claude Code plugin servers are namespaced, so it normally appears as
 `plugin:recall:recall`.
 
 If the prompt does not appear, bring Recall to the front — the prompt waits
@@ -77,7 +83,8 @@ Each session names the transport it used in the host's MCP log
 (`[recall] transport: local-socket` or `transport: oauth-http`) — the fastest
 way to tell which path a connection took.
 
-On the OAuth fallback path, plugins register useful client names: **Codex** for
+On the OAuth fallback path, plugins register useful client names: **Cursor**
+for the Cursor plugin, **Codex** for
 the Codex plugin, **Claude** for every surface using the shared Claude plugin,
 and **Claude Desktop** for the standalone desktop extension. The names are
 self-reported, advisory session labels rather than authenticated host
@@ -109,7 +116,8 @@ see the legacy setup section in the
 [plugin README](plugins/recall/README.md).
 
 Start a new thread after installing and authorizing so the plugin tools are
-loaded.
+loaded. The local bridge stores no client OAuth credential; Recall persists
+only the user's host-specific approval state.
 
 Write tools appear when at least one confirmed workspace is set to **Write**
 in Recall's MCP Server settings. A workspace omitted from the policy remains
@@ -130,7 +138,7 @@ their non-Git memory keeps working.
 The plugin supports multiple skills in its `skills/` directory. In addition to
 the direct note workflow, the journal skill
 (`$recall:recall-journal` in Codex,
-`/recall:recall-journal` in Claude Code) configures a per-agent
+`/recall:recall-journal` in Claude Code, and `/recall-journal` in Cursor) configures a per-agent
 `recall-journal.json` with a global destination and/or absolute-path filesystem
 project destinations. Each selects a Recall workspace and optional Recall
 Project. A bundled per-prompt hook detects that valid opt-in config, reminds
@@ -159,8 +167,9 @@ tools, and hook are loaded. Codex requires a one-time review and trust decision
 for the plugin hook. The first explicit `$recall:recall-journal` invocation
 checks the active Codex hook inventory and asks the user to open `/hooks` when
 the Recall handler is new, modified, disabled, or missing. The skill never
-changes or bypasses hook trust; Claude Code skips this Codex-only preflight
-because it has no separate per-hook trust switch. The hook reads the per-agent
+changes or bypasses hook trust; Claude Code and Cursor skip this Codex-only
+preflight. Cursor runs its native `sessionStart` hook and reads its
+separate config under `~/.cursor`. The hook reads the per-agent
 journal config, asks local Git for worktree metadata when available, and adds
 agent context; the journal skill still validates the live workspace and
 performs every note write through the Recall MCP server.

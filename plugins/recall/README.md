@@ -1,6 +1,6 @@
 # Recall Plugin
 
-Use Claude (Desktop, Cowork, or Claude Code) or Codex with the local MCP
+Use Cursor, Claude (Desktop, Cowork, or Claude Code), or Codex with the local MCP
 server hosted by Recall for Mac.
 
 ## How the plugin connects
@@ -25,8 +25,12 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
-Plugin `0.26.0` releases version 5 structured journaling. A project opts in
-by hand-writing the version 5 config; the hook then routes that thread to
+Plugin `0.27.0` adds a separate native Cursor package, `sessionStart` hook,
+Cursor-owned journal config, and Cursor client label. Recall app releases with
+host attestation authorize and attribute Cursor independently even if Cursor
+imports an older Claude package. Plugin `0.26.0` releases version 5 structured
+journaling. A project opts in by hand-writing the version 5 config; the hook
+then routes that thread to
 `open_session` carrying its lineage key, and the skill teaches the session
 protocol — `open_session` for the predecessor's conclusions, `append_entry`
 at checkpoints, and `close_session` with an optional `daySummary` whose
@@ -74,9 +78,12 @@ creation; `0.14.0` added Today summaries; `0.13.0` added Project-aware
 destinations; and the `0.12.x` line added the OAuth coordinator, scope
 alignment, and Codex hook trust preflight.
 
-Both Claude (`.mcp.json`) and Codex (`.codex-plugin/mcp.json`) register the same
-bridge implementation but pass their own client names. When Recall's one-click
-installer has prepared the integration, the bridge and journal hook use
+Claude (`.mcp.json`), Codex (`.codex-plugin/mcp.json`), and Cursor
+(`mcp.json`) register the same bridge implementation but pass
+their own diagnostic client names. Current Recall builds authenticate the
+outermost signed host, so that label cannot grant access or control attribution.
+When Recall's one-click installer has prepared the integration, the bridge and
+journal hook use
 Recall's pinned private Node runtime after verifying that it launches a
 supported Node version. Otherwise they fall back to Node.js 18+ from `PATH`,
 which keeps manual and non-Recall installs working if the private runtime is
@@ -94,10 +101,12 @@ the source, then byte-compares the committed artifacts.
 
 ## Install
 
-The direct-download Recall Mac app can perform this setup from
-**Settings → Integrations**. It installs the marketplace/plugin and prepares a
-pinned private Node + ACP runtime in one action. The first plugin connection
-uses Recall's native local-bridge approval when supported; older builds use the
+The direct-download Recall Mac app starts this setup from
+**Settings → Integrations**. It installs the Claude Code or Codex marketplace
+and plugin and prepares their pinned private Node + ACP runtime in one action.
+For Cursor it presents a separate guided row that opens Cursor's own plugin
+installation flow. The first plugin connection uses Recall's native
+host-specific local-bridge approval when supported; older builds use the
 browser OAuth fallback. Workspace access remains explicit either way.
 
 On that fallback, the bridge requests `notes:read notes:write` from older
@@ -133,6 +142,22 @@ codex plugin add recall@recall
 
 Older Codex versions without `codex plugin` can use
 `npx codex-marketplace add NerdOutInc/recall-plugins/plugins/recall --plugin --global`.
+
+### Cursor
+
+After Recall is published in Cursor's reviewed marketplace, open **Customize →
+Plugins**, find **Recall**, and install it with user or project scope. While
+testing before publication, clone this repository and symlink `plugins/recall`
+to `~/.cursor/plugins/local/recall`, then restart Cursor or run **Developer:
+Reload Window**. Cursor owns this install flow; its public CLI does not
+currently provide a supported plugin install command, so Recall opens these
+guided steps instead of editing Cursor's private plugin cache or copying
+Claude's installed package.
+
+The Cursor package has its own manifest, MCP registration, native
+`sessionStart` hook, and `~/.cursor/recall-journal.json`. Start a new chat
+after installation, bring Recall forward, and approve the **Cursor** prompt.
+That grant is separate from Claude Code and Codex.
 
 ### Claude Desktop (chat and Cowork)
 
@@ -175,6 +200,7 @@ boundary is:
 | --- | --- | --- |
 | Codex app and Codex CLI | Supported through the local bridge after plugin trust and native approval. | Supported. The bundled Codex `UserPromptSubmit` hook reads this agent's config. |
 | Claude Code | Supported through the local bridge after plugin installation and native approval. | Supported. The bundled Claude Code `UserPromptSubmit` hook reads this agent's config. |
+| Cursor | Supported through its separate Cursor plugin and a Cursor-specific native approval. | Supported through Cursor's `sessionStart` hook, stable `session_id` (the conversation id), and `~/.cursor/recall-journal.json`. |
 | Claude Desktop Chat | The shared plugin statically registers Recall's local stdio tools and skills. This route has not been re-certified live by Recall in the current Claude Desktop release. | Not automatic. Hooks do not run in ordinary Chat; invoke a skill or Recall tool explicitly. |
 | Claude web Chat | Plugin skills can be available, but the web surface cannot directly launch this local stdio server or dial Recall's loopback listener. | Not automatic. Hooks do not run in ordinary Chat, and a skill alone cannot supply Recall tools. |
 | Cowork local execution on Claude Desktop | Anthropic documents local plugin MCP servers on the device, but this Recall route is not yet live-certified. Recall and Claude Desktop must both remain running for tool use. | Not yet Recall-certified. Cowork runs plugin hooks, but the current Recall hook treats every non-Codex host as Claude Code and reads the Claude Code config location. |
@@ -228,7 +254,7 @@ are actually loaded.
 | Automatic Recall memory is absent in ordinary Chat | Expected. Claude's plugin hooks do not run in ordinary Chat. | Invoke the Recall skill or tools explicitly when the local connection is available. |
 | Cowork labels the hook as Claude Code or cannot find its journal config | The current hook has no verified Cowork host/config contract. | Use explicit Recall tools only. Do not rely on automatic memory or create a guessed config path until a Cowork-specific release is live-certified. |
 | Recall tools or approval prompts appear twice | The shared Claude plugin and legacy standalone Recall desktop extension are both installed. | Keep the shared plugin, remove or disable the standalone extension, and start a new conversation. |
-| Recall shows the client as `Claude` | Expected. All shared-plugin surfaces use that advisory, self-reported label. | Use the surface and session itself to distinguish Chat, Cowork, or Claude Code; never treat the label as authorization or host proof. |
+| An older Recall build shows the client as `Claude` | Its OAuth/session label is advisory. Current host-attested builds instead authorize and attribute the verified signed host. | Update Recall for independent host grants. On older builds, use the surface and session itself to distinguish Chat, Cowork, or Claude Code; never treat the label as authorization or host proof. |
 
 ### Moving an existing install to Recall
 
@@ -266,7 +292,7 @@ No separate login command is needed. A compatible Direct Recall build can
 use the native local-bridge prompt on first connection. Bring Recall to the
 front, approve it, then start a new conversation or thread. The approval can be
 revoked or reset under **Settings → MCP Server → Local bridge access**. Older
-Recall builds fall back to browser OAuth and keep Claude and Codex credentials
+Recall builds fall back to browser OAuth and keep Cursor, Claude, and Codex credentials
 separate under `~/.mcp-auth/recall/`.
 
 > **Server name:** the plugin registers its server as `recall`, but the

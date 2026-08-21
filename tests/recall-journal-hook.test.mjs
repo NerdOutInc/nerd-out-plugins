@@ -175,23 +175,66 @@ function cleanEnvironment() {
   delete environment.CLAUDE_CONFIG_DIR;
   delete environment.CLAUDE_PLUGIN_ROOT;
   delete environment.CODEX_HOME;
+  delete environment.CURSOR_HOME;
   delete environment.PLUGIN_ROOT;
   return environment;
 }
 
 function runHook({
+  args = [],
   cwd,
   environment,
   input = { hook_event_name: "UserPromptSubmit" },
   script = hookScript,
 }) {
-  return spawnSync(process.execPath, [script], {
+  return spawnSync(process.execPath, [script, ...args], {
     cwd,
     encoding: "utf8",
     env: environment,
     input: typeof input === "string" ? input : JSON.stringify(input),
   });
 }
+
+test("uses Cursor's native session hook, config, and stable conversation id", () => {
+  const configDirectory = makeConfigDirectory();
+  const projectDirectory = makeProjectDirectory("cursor-project");
+  const result = runHook({
+    args: ["--host", "cursor"],
+    environment: {
+      ...cleanEnvironment(),
+      CURSOR_HOME: configDirectory,
+    },
+    input: {
+      hook_event_name: "sessionStart",
+      session_id: "cursor-conversation-123",
+      workspace_roots: [projectDirectory],
+    },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const output = JSON.parse(result.stdout);
+  assert.deepEqual(Object.keys(output), ["additional_context"]);
+  assert.match(output.additional_context, /Cursor/);
+  assert.match(output.additional_context, /\/recall-journal/);
+  assert.match(output.additional_context, /cursor-conversation-123/);
+  assert.equal(output.hookSpecificOutput, undefined);
+});
+
+test("does not run a per-prompt event through Cursor's native session hook", () => {
+  const result = runHook({
+    args: ["--host", "cursor"],
+    environment: {
+      ...cleanEnvironment(),
+      CURSOR_HOME: makeConfigDirectory(),
+    },
+    input: { hook_event_name: "beforeSubmitPrompt" },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.equal(result.stdout, "");
+});
 
 test("injects the Codex journal skill when Codex config is valid", () => {
   const configDirectory = makeConfigDirectory();

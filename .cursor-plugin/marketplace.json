@@ -1,0 +1,17 @@
+{
+  "name": "recall",
+  "owner": {
+    "name": "Nerd Out Inc."
+  },
+  "metadata": {
+    "description": "Official Recall plugins for coding agents."
+  },
+  "plugins": [
+    {
+      "name": "recall",
+      "source": "plugins/recall",
+      "description": "Read, search, and update notes in Recall through the Mac app's local MCP server.",
+      "category": "Productivity"
+    }
+  ]
+}

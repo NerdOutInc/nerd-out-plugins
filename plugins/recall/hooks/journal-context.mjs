@@ -5,18 +5,37 @@ import path from "node:path";
 
 const GIT_RESOLUTION_TIMEOUT_MS = 2_000;
 
-function resolveJournalContext(env = process.env) {
+function requestedHost(args = process.argv.slice(2)) {
+  const index = args.indexOf("--host");
+  if (index < 0) return null;
+  return ["claude-code", "codex", "cursor"].includes(args[index + 1])
+    ? args[index + 1]
+    : null;
+}
+
+function resolveJournalContext(env = process.env, explicitHost = null) {
   // Codex sets both root variables for Claude plugin compatibility; Claude Code
   // sets only CLAUDE_PLUGIN_ROOT, so the unprefixed variable identifies Codex.
-  const isCodex = Boolean(env.PLUGIN_ROOT);
-  const configDirectory = isCodex
-    ? env.CODEX_HOME || path.join(os.homedir(), ".codex")
-    : env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
+  const host =
+    explicitHost ?? (env.PLUGIN_ROOT ? "codex" : "claude-code");
+  const configDirectory =
+    host === "cursor"
+      ? env.CURSOR_HOME || path.join(os.homedir(), ".cursor")
+      : host === "codex"
+        ? env.CODEX_HOME || path.join(os.homedir(), ".codex")
+        : env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
 
   return {
-    agentName: isCodex ? "Codex" : "Claude Code",
+    agentName:
+      host === "cursor" ? "Cursor" : host === "codex" ? "Codex" : "Claude Code",
     configPath: path.join(configDirectory, "recall-journal.json"),
-    skillName: isCodex ? "$recall:recall-journal" : "/recall:recall-journal",
+    host,
+    skillName:
+      host === "cursor"
+        ? "/recall-journal"
+        : host === "codex"
+          ? "$recall:recall-journal"
+          : "/recall:recall-journal",
   };
 }
 
@@ -513,10 +532,12 @@ function buildV5ProjectMemoryHookOutput(
   };
 }
 
-function buildHookOutput(input, env = process.env) {
-  if (input?.hook_event_name !== "UserPromptSubmit") return null;
+function buildHookOutput(input, env = process.env, explicitHost = null) {
+  const context = resolveJournalContext(env, explicitHost);
+  const expectedEvent =
+    context.host === "cursor" ? "sessionStart" : "UserPromptSubmit";
+  if (input?.hook_event_name !== expectedEvent) return null;
 
-  const context = resolveJournalContext(env);
   const config = readValidJournalConfig(context.configPath);
   if (!config) return null;
 
@@ -527,12 +548,16 @@ function buildHookOutput(input, env = process.env) {
   const workingDirectory =
     typeof input.cwd === "string" && input.cwd.length > 0
       ? input.cwd
+      : Array.isArray(input.workspace_roots) && input.workspace_roots.length === 1
+        ? input.workspace_roots[0]
       : process.cwd();
   // Resolved before the structured dispatch because version 5 carries the
   // thread id into the session's lineage key; the legacy path below uses the
   // same value to anchor its single journal note.
   const threadId =
-    sanitizeThreadId(input.session_id) ?? sanitizeThreadId(input.thread_id);
+    sanitizeThreadId(input.conversation_id) ??
+    sanitizeThreadId(input.session_id) ??
+    sanitizeThreadId(input.thread_id);
 
   if (config.projectMemory?.version === 3) {
     return buildV3ProjectMemoryHookOutput(context);
@@ -605,8 +630,17 @@ async function main() {
   try {
     let rawInput = "";
     for await (const chunk of process.stdin) rawInput += chunk;
-    const output = buildHookOutput(JSON.parse(rawInput));
-    if (output) process.stdout.write(JSON.stringify(output));
+    const host = requestedHost();
+    const output = buildHookOutput(JSON.parse(rawInput), process.env, host);
+    if (output) {
+      process.stdout.write(
+        JSON.stringify(
+          host === "cursor"
+            ? { additional_context: output.hookSpecificOutput.additionalContext }
+            : output,
+        ),
+      );
+    }
   } catch {
     // A journaling reminder must never block or break the user's prompt.
   }
