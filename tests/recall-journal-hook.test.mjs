@@ -538,7 +538,7 @@ test("rejects malformed or mixed v4 configs instead of choosing a memory protoco
   }
 });
 
-test("documents v3 and v4 as reader-only while keeping v1/v2 as the sole writer", () => {
+test("keeps v3/v4 reader-only while gating explicit v5 setup", () => {
   const [skill, configuration] = [
     "plugins/recall/skills/recall-journal/SKILL.md",
     "plugins/recall/skills/recall-journal/references/configuration.md",
@@ -556,11 +556,14 @@ test("documents v3 and v4 as reader-only while keeping v1/v2 as the sole writer"
   );
   assert.match(configuration, /"projectMemory": \{ "enabled": true \}/);
   assert.match(configuration, /"version": 4/);
+  assert.match(configuration, /"version": 5/);
   assert.match(
     configuration,
-    /Current setup and\s+reconfiguration flows below continue to write version 2 only/,
+    /Offer \*\*Structured Project activity\*\* only when all of these are\s+advertised/,
   );
   assert.match(configuration, /Never auto-migrate a version 1 or 2 config/);
+  assert.match(configuration, /cannot be translated\s+losslessly/);
+  assert.match(configuration, /Re-check\s+the whole gate immediately before/);
 });
 
 test("accepts a v2 global destination without a Recall Project", () => {
@@ -1683,6 +1686,14 @@ test("v5 names the session tools and never the retired card recipe", () => {
   assert.match(context, /append_entry/);
   assert.match(context, /close_session/);
   assert.match(context, /daySummary/);
+  assert.match(context, /Today -> Now activity/);
+  assert.match(context, /concise plain-language intent/);
+  assert.match(context, /exact current branch only when one exists/);
+  assert.match(context, /useful title/);
+  assert.match(context, /decision, blocker, shipped, or progress/);
+  assert.match(context, /always attach sessionUuid/);
+  assert.match(context, /handful of durable checkpoints/);
+  assert.match(context, /rejoin Today's chronology after close/);
   // The mechanics this version exists to retire must never be recited again.
   assert.equal(context.includes("create_today_note"), false);
   assert.equal(context.includes("### Full journal entry"), false);

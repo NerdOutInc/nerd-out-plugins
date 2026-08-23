@@ -1,6 +1,6 @@
 ---
 name: recall-journal
-description: Keep a concise, searchable journal of agent work in Recall and read it back as the agent's long-term memory. Use when the user invokes the recall-journal skill ($recall:recall-journal in Codex, /recall:recall-journal in Claude Code), asks to configure or reconfigure where journaling goes, or when plugin lifecycle context reports a valid recall-journal.json destination for the current agent. Configure either the current filesystem project or a global default, select a write-ready Recall workspace and optional Recall Project, recall and cite relevant prior notes before deciding, keep one live journal note per chat thread with human-readable toggle entries, add a tiny ELI5 summary card to the configured Today timeline or no day summary, and migrate retired legacy DailyNote summary targets the first time they appear.
+description: Keep a concise, searchable journal of agent work in Recall and read it back as the agent's long-term memory. Use when the user invokes the recall-journal skill ($recall:recall-journal in Codex, /recall:recall-journal in Claude Code, /recall-journal in Cursor), asks to configure, migrate, or reconfigure journaling, or when plugin lifecycle context reports a valid recall-journal.json destination. Explicit setup can choose capability-gated Structured Project activity shown in Today -> Now, or the legacy per-thread journal-note mode; never silently migrate between them.
 ---
 
 # Recall Journal
@@ -60,9 +60,10 @@ approve the hook. The supported action is the user's explicit review in
 
 For any explicit setup, reconfiguration, disabling, or stale-config repair,
 read and follow [references/configuration.md](references/configuration.md).
-It defines the v1-compatible/v2 schemas, canonical absolute filesystem-project
-path, workspace and Recall Project selection, compatibility errors,
-confirmation, atomic write protocol, and strict structured-reader schemas.
+It defines the legacy v1-compatible/v2 schema, structured v3/v4/v5 schemas,
+canonical absolute filesystem-project path, live capability gate, workspace and
+Recall Project selection, explicit mode migration, compatibility errors,
+confirmation, and atomic write protocol.
 
 One compatibility exception is reader-only **version 3 and version 4 structured
 project memory**. When lifecycle context explicitly identifies either valid
@@ -75,9 +76,11 @@ memory and never write it.
 **Version 5 is the structured writer.** When lifecycle context identifies a
 valid version 5 config, follow "Structured journaling (version 5)" below
 instead of every legacy section, and never create or update a legacy journal
-note or Today summary. This plugin release still writes only version 1 and
-version 2 configs; it never writes, migrates, or downgrades a version 3,
-version 4, or version 5 config.
+note or hand-built Today summary. On explicit setup or reconfiguration, the
+configuration reference may write version 5 only after the entire live schema
+gate passes, the user selects an exact write-ready default Recall Project, and
+the user confirms the complete routing consequences. Lifecycle context never
+changes a config version.
 
 Version 3 is repository-only. Use a supported non-local Git remote with
 `resolve_project`, and pass only an exact result to `get_project_context`.
@@ -127,8 +130,10 @@ entry, create, claim, or close a handoff, pick up or resolve an ask, or
 declare an ask from v3 or v4 routing.
 
 Never rewrite, migrate, reconfigure, or downgrade a v3 or v4 config through the
-v1/v2 configuration flow. In particular, do not auto-migrate v1/v2 global
-users: their global destination intentionally supplies memory outside Git.
+v1/v2 configuration flow. An explicit, confirmed whole-mode upgrade may replace
+v3 or v4 with v5 through the configuration reference. In particular, do not
+auto-migrate v1/v2 global users: their global destination intentionally supplies
+memory outside Git and cannot be translated losslessly to a Project-only mode.
 Select this protocol before inspecting named-note capabilities: in v3 or v4,
 do not run the legacy capability probe or call `list_note_activity`,
 `read_note`, or `update_note_content` for project memory.
@@ -229,9 +234,11 @@ drift this version removes. Cache the decision for this thread only.
 **Start.** When substantive work begins, resolve the Project the way lifecycle
 context directs (repository-first, or the explicit default only on a proved
 no-repository route), then `open_session` with a caller-minted `sessionUuid`
-and `idempotencyKey`, a short `intent`, the current `branch` when there is one,
-and the `lineageKey` lifecycle context names. Trivial question-answering does
-not open a session.
+and `idempotencyKey`, a concise plain-language `intent`, the exact current
+`branch` when there is one, and the `lineageKey` lifecycle context names. The
+intent and branch are user-facing in **Today -> Now activity**, so keep the
+intent useful without paths, ids, or boilerplate. Trivial question-answering
+does not open a session.
 
 Read what the response hands back before deciding anything:
 
@@ -247,14 +254,22 @@ Read what the response hands back before deciding anything:
   a lock: an occupied Project never blocks your work, and you never adopt or
   close another session.
 
-**During.** `append_entry` at the checkpoint cadence the legacy protocol
-already taught — a durable decision, a completed step, tests run with their
-results, a blocker or change of direction, a long autonomous stretch. Never one
-per tool call. The `entryType` carries the weight (`decision`, `blocker`,
-`shipped`, `progress`); the body rides `text`. Point each entry at the session
-with `sessionUuid` so the timeline groups it.
+**During.** `append_entry` for a durable decision, a completed phase, meaningful
+tests with their result, a blocker or change of direction, or a long autonomous
+stretch. Give every entry a short, human-readable `title`; use the standard
+`entryType` that best fits (`decision`, `blocker`, `shipped`, or `progress`),
+and put the useful detail in `text`. Always point the entry at this ACTIVE
+session with `sessionUuid` so Now can group it and update session activity.
 
-**End.** `close_session` with the `outcome`, a `runningSummary`, any
+Keep the shared chronology human-scale. Prefer one checkpoint per meaningful
+phase, combine related facts, and summarize a long stretch into one useful
+entry. A normal task should produce only a handful of checkpoints, never one
+per tool call, file, or command. ACTIVE-session entries are folded under the
+session in Today, but they rejoin the shared chronology after close; excessive
+entries can crowd out human notes and widgets.
+
+**End.** `close_session` with the `outcome`, a concise plain-language
+`runningSummary`, any
 `followUps`, and — when the day's work is worth a human-facing card — a
 `daySummary` of a short `title` and one or two ELI5 sentences. Write those
 sentences the way the legacy Today card taught: plain language a five-year-old
@@ -489,6 +504,10 @@ details body.
   `mode: "append"`. On the revision-safe path, read canonical Markdown before
   the first update, pass its `revision` as `expectedRevision`, and carry each
   successful update's returned revision into the next update in the sequence.
+  When the live schema requests `changeSummary`, use one short, specific
+  plain-language sentence describing the accepted change. Recall may show it in
+  Today -> Now activity and the note's History; never use a path, hash, id, raw
+  payload, or generic text such as `Updated journal`.
   Checkpoints are judgment calls: a durable decision made, a significant step
   completed, tests or builds run with their results, a blocker or change of
   direction, or a long autonomous stretch that would otherwise leave the note

@@ -135,17 +135,26 @@ only when the hook proves the session has no repository identity; it is never
 an error fallback. Existing version 1/2 global users are not auto-migrated, so
 their non-Git memory keeps working.
 
+Version 5 is the structured writer. Plugin 0.28 offers it as an explicit
+**Structured Project activity** setup choice only when the live Recall catalog
+passes the complete schema gate and the user selects one exact write-ready
+default Recall Project. Its sessions and human-scale checkpoints appear in
+**Today -> Now activity**. Switching from a legacy v1/v2 config requires a
+separate confirmation that global and filesystem-path routing will not carry
+over; existing journal notes remain untouched archive.
+
 The plugin supports multiple skills in its `skills/` directory. In addition to
 the direct note workflow, the journal skill
 (`$recall:recall-journal` in Codex,
-`/recall:recall-journal` in Claude Code, and `/recall-journal` in Cursor) configures a per-agent
-`recall-journal.json` with a global destination and/or absolute-path filesystem
-project destinations. Each selects a Recall workspace and optional Recall
-Project. A bundled per-prompt hook detects that valid opt-in config, reminds
+`/recall:recall-journal` in Claude Code, and `/recall-journal` in Cursor)
+configures a per-agent `recall-journal.json` in one of two complete modes: v5
+Structured Project activity, or a v2 legacy global/filesystem-path journal
+destination selecting a Recall workspace and optional Recall Project. A bundled
+per-prompt hook detects that valid opt-in config, reminds
 the agent to search prior journal notes for
 relevant context when a task relates to earlier work, and reminds it to
-journal meaningful work live in that write-ready workspace. Each chat thread
-keeps exactly one journal note — a dateless topic-phrase title, a short
+journal meaningful work live in that write-ready workspace. In legacy mode,
+each chat thread keeps exactly one journal note — a dateless topic-phrase title, a short
 always-visible intro, and one collapsible toggle entry per checkpoint whose
 summary line stays human-readable while agent detail and hidden bookkeeping
 live inside the collapsed details — so an interrupted session leaves a

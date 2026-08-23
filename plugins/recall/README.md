@@ -25,12 +25,23 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
+Plugin `0.28.0` graduates version 5 Structured Project activity into the
+explicit journal setup and migration flow. It is offered only when the live
+Recall catalog exposes the complete session/checkpoint/close schema, requires
+an exact write-ready default Recall Project, and explains before confirmation
+that legacy global and filesystem-path routing cannot be translated
+losslessly. Existing v1/v2 configs are never changed from lifecycle context.
+Structured sessions, checkpoints, and app-owned summaries are user-facing in
+**Today -> Now activity**, so the skills now favor concise intent, useful
+checkpoint titles, standard entry types, session attachment, and a human-scale
+checkpoint cadence. Note-write `changeSummary` text gets the same plain-language
+treatment because Recall can show it in Now and note History.
+
 Plugin `0.27.0` adds a separate native Cursor package, `sessionStart` hook,
 Cursor-owned journal config, and Cursor client label. Recall app releases with
 host attestation authorize and attribute Cursor independently even if Cursor
 imports an older Claude package. Plugin `0.26.0` releases version 5 structured
-journaling. A project opts in by hand-writing the version 5 config; the hook
-then routes that thread to
+journaling with a manual config opt-in; the hook then routes that thread to
 `open_session` carrying its lineage key, and the skill teaches the session
 protocol — `open_session` for the predecessor's conclusions, `append_entry`
 at checkpoints, and `close_session` with an optional `daySummary` whose
@@ -236,12 +247,15 @@ the hook:
 | v1/v2 | A matching filesystem-project destination wins; otherwise the global destination remains available. | The global destination remains available, so existing general-purpose and non-Git chats keep working. | Legacy named-note journal and optional Today summary. |
 | v3 | Repository-only structured lookup. No supported remote or no exact `resolve_project` match means no project memory. | No memory; v3 has no global or default fallback. | None; reader-only. |
 | v4 | Repository-first structured lookup, even when the repository has no usable remote. Never use the default after `none`, `ambiguous`, or `not_ready`. | Read the one explicitly configured default Recall Project directly, but only after the hook proves no repository identity exists. | None; reader-only in this release. |
+| v5 | Repository-first exact Project lookup and structured sessions. No supported remote or exact binding means no Project memory or journal for that repository; the default is never an error fallback. | Use the one explicitly configured exact default Recall Project only after the hook proves no repository identity exists. | App-owned sessions and human-scale checkpoints shown in Today -> Now activity, with an optional app-owned Today card at close. |
 
-Do not auto-migrate v1/v2 users to v3 or v4: doing so could silently remove
-their global, non-Git memory. The v4 default is not an error fallback, and
-structured modes never mix with legacy named-note writes. Direct, explicit
-Recall tool use remains available wherever the local MCP connection and skills
-are actually loaded.
+Do not auto-migrate v1/v2 users to a structured mode: doing so could silently
+remove their global, non-Git memory. Version 0.28 can replace a legacy config
+with v5 only after an explicit mode choice, a live whole-schema check, selection
+of one exact write-ready default Project, and confirmation of the routing
+change. Structured defaults are not error fallbacks, and structured modes never
+mix with legacy named-note writes. Direct, explicit Recall tool use remains
+available wherever the local MCP connection and skills are actually loaded.
 
 ### Troubleshooting Claude surfaces
 
@@ -416,15 +430,16 @@ under `skills/` that contains a `SKILL.md`. It currently includes:
   under the repo included — then journal to and recall from the project's
   workspace and optional Recall Project instead of the global destination.
 
-  The hook can also read the reserved version 3 and version 4 project-memory
-  activation shapes. Both modes are intentionally reader-only. Version 3 is
-  repository-only; version 4 is repository-first and may read one explicit
+  The hook can also read the version 3, version 4, and version 5 project-memory
+  shapes. Versions 3 and 4 are intentionally reader-only. Version 3 is
+  repository-only; versions 4 and 5 are repository-first and may use one exact
   default Recall Project only after proving that no repository identity exists.
-  Neither mode writes structured sessions or the legacy note/Today journal.
-  Current setup and reconfiguration continue to write version 2 only, and do
-  not auto-migrate existing global users. Both structured versions bypass the
-  legacy named-note capability probe, so one prompt can never enter both
-  protocols.
+  Version 5 is the structured writer: it opens one app-owned session, records a
+  handful of durable checkpoints, and closes with the outcome and optional
+  app-owned day summary. Those records appear in **Today -> Now activity**.
+  Explicit setup can write v2 Legacy journal note or capability-gated v5
+  Structured Project activity; it never auto-migrates an existing config, and
+  the modes bypass one another so one prompt cannot enter both protocols.
 
 In Codex, invoke skills as `$recall:recall` and
 `$recall:recall-journal`; in Claude Code, use

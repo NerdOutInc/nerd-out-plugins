@@ -23,7 +23,7 @@ Use only the current agent's global configuration directory:
 
 The file is `<config-dir>/recall-journal.json`.
 
-New writes use version 2:
+Legacy named-note writes use version 2:
 
 ```json
 {
@@ -84,7 +84,7 @@ filesystem-project path, which preserves automatic memory in general-purpose
 agent threads. Never auto-migrate a version 1 or 2 config to structured project
 memory: a silent migration could remove that global, non-repository behavior.
 
-## Reader-only structured project memory
+## Structured project memory
 
 The hook also recognizes this exact version 3 activation shape:
 
@@ -155,9 +155,51 @@ structured sessions instead of legacy notes — see "Structured journaling
 (version 5)" in the skill. It never writes a legacy journal note or a
 hand-built Today card.
 
-Do not write, migrate, reconfigure, or downgrade a v3, v4, or v5 config.
-Current setup and reconfiguration flows below continue to write version 2 only,
-so a user reaches version 5 only by writing the file themselves.
+```json
+{
+  "version": 5,
+  "projectMemory": {
+    "enabled": true,
+    "defaultProject": {
+      "workspace": { "id": "workspace-id", "name": "Workspace name" },
+      "recallProject": { "id": "project-id", "name": "Project name" }
+    }
+  }
+}
+```
+
+Version 5 setup is available only after the live MCP catalog passes the whole
+structured-surface check below. It always requires one exact, live, write-ready
+Recall Project as its no-repository default; a workspace root is invalid. Never
+write version 3 or version 4 during setup. They remain readable compatibility
+formats, and an explicit upgrade may replace either one with version 5.
+
+Never auto-migrate, downgrade, or change modes from lifecycle context. A mode
+change is a separate, explicit configuration action with its own consequence
+summary and confirmation. Older journal notes and Today cards remain untouched
+archive under every mode change.
+
+## Capability gate for version 5 setup
+
+Inspect the live MCP catalog and its exact input schemas; do not probe by making
+invalid calls. Offer **Structured Project activity** only when all of these are
+advertised:
+
+- `resolve_project` and `get_project_context`, with `projectUuid` accepted by
+  `get_project_context`;
+- `open_session`, accepting `workspaceId`, `projectUuid`, `sessionUuid`,
+  `idempotencyKey`, `intent`, `branch`, and `lineageKey`;
+- `append_entry`, accepting `workspaceId`, `projectUuid`, `entryUuid`,
+  `idempotencyKey`, `sessionUuid`, `entryType`, `title`, and `text`;
+- `close_session`, accepting `workspaceId`, `projectUuid`, `sessionUuid`,
+  `idempotencyKey`, `outcome`, `runningSummary`, `followUps`, and `daySummary`.
+
+If any part is absent, do not write version 5. During first setup, offer the
+legacy journal-note mode only and explain that Structured Project activity
+requires an updated and restarted Recall app. If a v5 config already exists,
+leave it unchanged; runtime follows the skill's all-or-nothing fallback. Re-check
+the whole gate immediately before every version 5 save; never infer support from
+a plugin or app version.
 
 ## Resolve the current filesystem project
 
@@ -180,10 +222,18 @@ destination.
 Run setup only on an explicit skill invocation. An implicit reminder with no
 valid effective destination stays silent.
 
-1. If no config exists, tell the user the current filesystem project's absolute
-   path and ask whether to configure journaling for this filesystem project or
-   for all Codex or Claude Code projects globally. Do not silently select a
-   scope.
+1. If no config exists, inspect the capability gate above. When it passes, ask
+   the user to choose one complete mode:
+   - **Structured Project activity** — recommended when the user wants agent
+     work to appear in **Today -> Now activity**. Recall owns durable sessions,
+     checkpoints, continuity, and optional day cards. Repository sessions route
+     by an exact non-local Git-remote binding; the configured default Project is
+     used only when the hook proves there is no repository identity.
+   - **Legacy journal note** — one named note per chat thread, with an optional
+     Today summary. It supports a global destination, filesystem-path routes,
+     and workspace-root destinations.
+   If the gate fails, offer only Legacy journal note and explain why. Do not
+   silently select or combine modes.
 2. Call `list_workspaces`. Offer only confirmed workspaces with both
    `roleWritable: true` and `writeReady: true`. Show name, id, role, and write
    status. If none qualify, stop and explain how to grant **Write** access or
@@ -191,22 +241,29 @@ valid effective destination stays silent.
 3. After the user selects a workspace, page through
    `list_projects({ workspaceId, limit: 100, offset })` until `hasMore` is false,
    never exceeding the advertised offset bound.
-4. If the workspace has no Projects, skip the Project question and configure
-   the workspace root. Otherwise ask whether named journal notes should use no
-   Recall Project or one exact Project from the returned catalog, shown by name
-   and id.
-5. Ask where the short day summary should go. If `create_today_note` is in the
+4. For Structured Project activity, require one exact Project from that catalog,
+   shown by name and id. If the workspace has no Projects, stop; never save a
+   workspace-root default. Explain that repository work may resolve to another
+   exactly bound Project and that this default is not used after any repository
+   routing failure. For Legacy journal note, if there are no Projects configure
+   the workspace root; otherwise offer the root or one exact Project.
+5. For Legacy journal note, first tell the user the current filesystem project's
+   absolute path and ask whether this destination applies to that filesystem
+   project or globally. Then ask where the short day summary should go. If
+   `create_today_note` is in the
    MCP tool catalog, offer **Today timeline** (recommended) and **no day
    summary**. If it is absent, offer only no day summary and explain that Today
    summaries require an updated/restarted Recall app; the user can reconfigure
    after updating. Never offer the retired legacy DailyNote, and never
    configure Today by assuming `create_note.placement` will work.
-6. Confirm the scope, absolute filesystem path when applicable, workspace,
-   optional Recall Project, and summary target. Immediately re-run
-   `list_workspaces`; if a Project
-   was selected, page `list_projects` again and require the exact id in the same
-   workspace.
-7. Only after confirmation and revalidation, write v2 atomically: create the
+6. Confirm the complete mode and its routing, plus the absolute filesystem path
+   and summary target for Legacy journal note or the exact default workspace and
+   Project for Structured Project activity. Immediately re-run `list_workspaces`
+   and page `list_projects` again; require the exact Project id in the same
+   workspace whenever a Project was selected. Re-check the full structured
+   capability gate before saving version 5.
+7. Only after confirmation and revalidation, atomically write the exact v2 or v5
+   shape: create the
    config directory if needed, write a temporary file in that directory, rename
    it over the target, then parse and validate the saved file. Keep it local and
    store no tokens, credentials, or note bodies.
@@ -220,21 +277,69 @@ back to another workspace.
 
 When the user explicitly asks to reconfigure where journaling goes:
 
-1. Ask whether to change the current filesystem-project destination or the
-   global destination. Show the current absolute project path when relevant.
-2. Ask whether to keep or change its workspace. If changing it, repeat the
+1. Show the current mode. Ask whether to keep that mode or explicitly switch
+   modes. Never treat ordinary reconfiguration language as permission to
+   migrate.
+2. For a Legacy journal-note reconfiguration, ask whether to change the current
+   filesystem-project destination or the global destination. Show the current
+   absolute project path when relevant.
+3. Ask whether to keep or change its workspace. If changing it, repeat the
    write-ready workspace selection.
-3. For the resulting workspace, list Projects. Offer the current valid Project
+4. For the resulting workspace, list Projects. Offer the current valid Project
    plus explicit choices to keep it, change it, or clear it to the workspace
    root. If there are no Projects, clearing a prior stale Project still requires
    confirmation.
-4. Ask whether to keep or change the summary target. Offer only Today — and
+5. Ask whether to keep or change the summary target. Offer only Today — and
    only when `create_today_note` is currently advertised — and no day summary;
    never offer the retired legacy DailyNote. When the saved target resolves to
    `dailyNote`, keeping it is not an option: run the migration below instead.
    Always write the canonical `summaryTarget` + `dailyNote` compatibility pair.
-5. Revalidate and atomically save only the selected destination and summary
+6. Revalidate and atomically save only the selected destination and summary
    setting. Preserve every other destination.
+
+For a version 5 reconfiguration, require the whole capability gate, then offer
+only exact live Projects from write-ready workspaces. Revalidate and atomically
+replace only `projectMemory.defaultProject`; never add legacy routing fields or
+use a workspace root.
+
+## Explicitly changing journal modes
+
+Only run a mode change when the user explicitly chooses it during setup or
+reconfiguration. Before converting v1 or v2 to version 5, explain and confirm
+all of these consequences together:
+
+- The old global and filesystem-path destinations cannot be translated
+  losslessly and will not carry into v5. Repository sessions use an exact
+  supported Git-remote binding; no remote, `none`, `ambiguous`, `not_ready`, or
+  unavailable routing means no structured journal for that repository.
+- The one selected default is an exact Recall Project and applies only when the
+  hook proves no filesystem repository identity exists. A workspace-root global
+  destination has no v5 equivalent.
+- Legacy named-note journals stop receiving updates. New sessions and
+  checkpoints are user-facing in **Today -> Now activity**, and Recall may
+  create one app-owned Today card when the agent supplies a meaningful
+  `daySummary` at close.
+- Version 5 has no persistent `summaryTarget: "none"` preference. If an
+  always-no-card preference is required, keep version 2.
+- Existing journal notes and Today cards remain readable and are never moved,
+  rewritten, or deleted.
+
+Then select and revalidate one exact write-ready default Project, re-check the
+whole structured capability gate, show the exact replacement v5 shape, and ask
+for final confirmation before the atomic save. Converting version 3 requires
+the same target selection and confirmation. Converting version 4 may retain its
+default only after live revalidation. Neither reader version upgrades
+implicitly.
+
+An explicit switch from v5 to Legacy journal note is also a whole-mode
+replacement, not a downgrade fallback. Explain that structured sessions remain
+readable archive but stop receiving automatic entries; then run the Legacy
+first-setup choices and confirm the complete replacement v2 shape.
+
+When disabling version 5, show its exact default workspace and Project, confirm
+that automatic structured sessions will stop while existing activity remains
+readable, and remove the config file. Never replace it with an inert or invalid
+v5 object.
 
 When asked to stop separate journaling for the current filesystem project,
 confirm the exact path and delete only that `projects` entry; sessions then use

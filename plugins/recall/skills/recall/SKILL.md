@@ -142,6 +142,11 @@ the app's Settings -> MCP Server per-workspace access policy.
   `</details>` so Markdown inside the toggle renders.
 - Use `update_note_content` with `mode: "append"` when adding a journal entry,
   update, or note section.
+- When a note-write schema advertises or requires `changeSummary`, describe the
+  accepted change in one short, specific plain-language sentence (for example,
+  `Clarified how repository routing chooses a Project`). Recall can show it in
+  Today -> Now activity and the note's History, so never put paths, hashes, ids,
+  raw payloads, or vague boilerplate such as `Updated note` there.
 - Use `update_note_content` with `mode: "replace"` only when the user explicitly
   wants to replace the whole note body. It never changes a note's title; use
   `rename_note` (`noteType: "NamedNote"`, uuid, and the new title — advertised
