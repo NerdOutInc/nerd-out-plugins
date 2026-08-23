@@ -108,6 +108,14 @@ test("the documented mode matrix preserves legacy non-Git memory", async () => {
     /^\| v5 \| Repository-first exact Project lookup[^\n]*Today -> Now activity[^\n]*\|$/m,
   );
   assert.match(readme, /Do not auto-migrate v1\/v2 users to a structured mode/);
+  assert.match(
+    readme,
+    /Structured sessions and checkpoints are user-facing in \*\*Today -> Now\s+activity\*\*, while app-owned day summaries land as Today timeline cards/,
+  );
+  assert.doesNotMatch(
+    readme,
+    /sessions, checkpoints, and app-owned summaries are user-facing in/,
+  );
   assert.match(configuration, /global, non-repository behavior/);
   assert.match(configuration, /Never auto-migrate a version 1 or 2 config/);
 });
@@ -200,12 +208,7 @@ test("v5 teaches the session tools and retires the hand-executed mechanics", asy
 
   // Every close-result state must be explained, including the two that are
   // easy to misreport as success or as failure.
-  for (const status of [
-    "created",
-    "already_exists",
-    "deferred",
-    "failed",
-  ]) {
+  for (const status of ["created", "already_exists", "deferred", "failed"]) {
     assert.match(skill, new RegExp(`\`${status}\``), status);
   }
 });
@@ -280,7 +283,10 @@ test("v5 setup and migration are explicit, exact, and capability-gated", async (
   );
   assert.match(configuration, /show the exact replacement v5 shape/);
   assert.match(configuration, /When disabling version 5/);
-  assert.match(configuration, /Older journal notes and Today cards remain untouched/);
+  assert.match(
+    configuration,
+    /Older journal notes and Today cards remain untouched/,
+  );
   assert.match(skill, /Lifecycle context never\s+changes a config version/);
 });
 
@@ -293,11 +299,18 @@ test("user-facing note activity gets a useful change summary", async () => {
   for (const skill of [recallSkill, journalSkill]) {
     assert.match(
       skill,
-      /Recall (?:can|may) show (?:this|it) in\s+Today -> Now activity and the note's History/,
+      /Recall (?:can|may) show (?:it|the summary) in\s+Today -> Now activity and\s+the note's History/,
     );
     assert.match(
       skill,
-      /never (?:put|use) (?:paths?|a path),? hash(?:es)?/i,
+      /expectedRevision`, `idempotencyKey`, and\s+`changeSummary`/,
     );
+    assert.match(skill, /partial bundle is rejected/);
+    assert.match(skill, /caller-minted UUID/);
+    assert.match(
+      skill,
+      /omit both `(?:changeSummary|idempotencyKey)` and `(?:idempotencyKey|changeSummary)`/,
+    );
+    assert.match(skill, /never (?:put|use) (?:paths?|a path),? hash(?:es)?/i);
   }
 });

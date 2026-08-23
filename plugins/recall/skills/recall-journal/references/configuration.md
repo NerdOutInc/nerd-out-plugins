@@ -20,6 +20,7 @@ Use only the current agent's global configuration directory:
 
 - Codex: `$CODEX_HOME`, falling back to `~/.codex`.
 - Claude Code: `$CLAUDE_CONFIG_DIR`, falling back to `~/.claude`.
+- Cursor: `$CURSOR_HOME`, falling back to `~/.cursor`.
 
 The file is `<config-dir>/recall-journal.json`.
 
@@ -256,12 +257,13 @@ valid effective destination stays silent.
    summaries require an updated/restarted Recall app; the user can reconfigure
    after updating. Never offer the retired legacy DailyNote, and never
    configure Today by assuming `create_note.placement` will work.
-6. Confirm the complete mode and its routing, plus the absolute filesystem path
-   and summary target for Legacy journal note or the exact default workspace and
-   Project for Structured Project activity. Immediately re-run `list_workspaces`
-   and page `list_projects` again; require the exact Project id in the same
-   workspace whenever a Project was selected. Re-check the full structured
-   capability gate before saving version 5.
+6. Confirm the complete mode and its routing. For Legacy journal note, also
+   confirm the scope, absolute filesystem path when applicable, workspace,
+   optional Recall Project, and summary target. For Structured Project activity,
+   confirm the exact default workspace and Project. Immediately re-run
+   `list_workspaces` and page `list_projects` again; require the exact Project id
+   in the same workspace whenever a Project was selected. Re-check the full
+   structured capability gate before saving version 5.
 7. Only after confirmation and revalidation, atomically write the exact v2 or v5
    shape: create the
    config directory if needed, write a temporary file in that directory, rename
@@ -279,28 +281,28 @@ When the user explicitly asks to reconfigure where journaling goes:
 
 1. Show the current mode. Ask whether to keep that mode or explicitly switch
    modes. Never treat ordinary reconfiguration language as permission to
-   migrate.
-2. For a Legacy journal-note reconfiguration, ask whether to change the current
-   filesystem-project destination or the global destination. Show the current
-   absolute project path when relevant.
-3. Ask whether to keep or change its workspace. If changing it, repeat the
-   write-ready workspace selection.
-4. For the resulting workspace, list Projects. Offer the current valid Project
-   plus explicit choices to keep it, change it, or clear it to the workspace
-   root. If there are no Projects, clearing a prior stale Project still requires
-   confirmation.
-5. Ask whether to keep or change the summary target. Offer only Today — and
-   only when `create_today_note` is currently advertised — and no day summary;
-   never offer the retired legacy DailyNote. When the saved target resolves to
-   `dailyNote`, keeping it is not an option: run the migration below instead.
-   Always write the canonical `summaryTarget` + `dailyNote` compatibility pair.
-6. Revalidate and atomically save only the selected destination and summary
-   setting. Preserve every other destination.
-
-For a version 5 reconfiguration, require the whole capability gate, then offer
-only exact live Projects from write-ready workspaces. Revalidate and atomically
-replace only `projectMemory.defaultProject`; never add legacy routing fields or
-use a workspace root.
+   migrate. A mode switch skips the same-mode steps below and follows
+   "Explicitly changing journal modes."
+2. When keeping Legacy journal-note mode:
+   - Ask whether to change the current filesystem-project destination or the
+     global destination. Show the current absolute project path when relevant.
+   - Ask whether to keep or change its workspace. If changing it, repeat the
+     write-ready workspace selection.
+   - For the resulting workspace, list Projects. Offer the current valid Project
+     plus explicit choices to keep it, change it, or clear it to the workspace
+     root. If there are no Projects, clearing a prior stale Project still
+     requires confirmation.
+   - Ask whether to keep or change the summary target. Offer only Today — and
+     only when `create_today_note` is currently advertised — and no day summary;
+     never offer the retired legacy DailyNote. When the saved target resolves to
+     `dailyNote`, keeping it is not an option: run the migration below instead.
+     Always write the canonical `summaryTarget` + `dailyNote` compatibility pair.
+   - Revalidate and atomically save only the selected destination and summary
+     setting. Preserve every other destination.
+3. When keeping version 5, require the whole capability gate, then offer only
+   exact live Projects from write-ready workspaces. Revalidate and atomically
+   replace only `projectMemory.defaultProject`; never add legacy routing fields,
+   ask about a summary target, or use a workspace root.
 
 ## Explicitly changing journal modes
 

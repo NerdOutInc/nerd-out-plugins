@@ -36,7 +36,9 @@
           "uuid": { "type": "string" },
           "text": { "type": "string" },
           "mode": { "type": "string", "enum": ["replace", "append"] },
-          "expectedRevision": { "type": "string" }
+          "expectedRevision": { "type": "string" },
+          "idempotencyKey": { "type": "string" },
+          "changeSummary": { "type": "string" }
         },
         "required": ["noteType", "uuid", "text", "mode"]
       }

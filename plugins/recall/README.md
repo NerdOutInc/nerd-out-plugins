@@ -31,11 +31,12 @@ Recall catalog exposes the complete session/checkpoint/close schema, requires
 an exact write-ready default Recall Project, and explains before confirmation
 that legacy global and filesystem-path routing cannot be translated
 losslessly. Existing v1/v2 configs are never changed from lifecycle context.
-Structured sessions, checkpoints, and app-owned summaries are user-facing in
-**Today -> Now activity**, so the skills now favor concise intent, useful
-checkpoint titles, standard entry types, session attachment, and a human-scale
-checkpoint cadence. Note-write `changeSummary` text gets the same plain-language
-treatment because Recall can show it in Now and note History.
+Structured sessions and checkpoints are user-facing in **Today -> Now
+activity**, while app-owned day summaries land as Today timeline cards. The
+skills now favor concise intent, useful checkpoint titles, standard entry
+types, session attachment, and a human-scale checkpoint cadence. Note-write
+`changeSummary` text gets the same plain-language treatment because Recall can
+show it in Now and note History.
 
 Plugin `0.27.0` adds a separate native Cursor package, `sessionStart` hook,
 Cursor-owned journal config, and Cursor client label. Recall app releases with
@@ -436,7 +437,9 @@ under `skills/` that contains a `SKILL.md`. It currently includes:
   default Recall Project only after proving that no repository identity exists.
   Version 5 is the structured writer: it opens one app-owned session, records a
   handful of durable checkpoints, and closes with the outcome and optional
-  app-owned day summary. Those records appear in **Today -> Now activity**.
+  app-owned day summary. The session and checkpoints appear in **Today -> Now
+  activity**; the optional day summary lands as an app-owned Today timeline
+  card.
   Explicit setup can write v2 Legacy journal note or capability-gated v5
   Structured Project activity; it never auto-migrates an existing config, and
   the modes bypass one another so one prompt cannot enter both protocols.

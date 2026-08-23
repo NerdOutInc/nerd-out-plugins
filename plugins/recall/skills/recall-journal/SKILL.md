@@ -149,6 +149,10 @@ invalid calls.
   `"markdown"` in its `format` enum **and** `update_note_content` advertises
   `expectedRevision`. Both conditions are required; otherwise keep the entire
   legacy HTML/readback path and omit both enhanced inputs.
+- User-facing activity detail on `update_note_content` is a separate strict
+  capability. Use it only when that same input schema advertises all three
+  fields: `expectedRevision`, `idempotencyKey`, and `changeSummary`. Treat them
+  as one NamedNote-only bundle; a partial bundle is rejected.
 
 Cache the decision only for this thread. If the native catalog advertises an
 enhanced input but dispatch reports an unknown tool or argument, stop that
@@ -504,10 +508,14 @@ details body.
   `mode: "append"`. On the revision-safe path, read canonical Markdown before
   the first update, pass its `revision` as `expectedRevision`, and carry each
   successful update's returned revision into the next update in the sequence.
-  When the live schema requests `changeSummary`, use one short, specific
-  plain-language sentence describing the accepted change. Recall may show it in
+  When the complete strict bundle is advertised, also mint a caller-minted UUID
+  `idempotencyKey` for this NamedNote update and supply a short, specific
+  plain-language `changeSummary`. Reuse that UUID only for an identical retry;
+  mint a new one for a newly computed update. Recall may show the summary in
   Today -> Now activity and the note's History; never use a path, hash, id, raw
-  payload, or generic text such as `Updated journal`.
+  payload, or generic text such as `Updated journal`. When the strict bundle is
+  incomplete, omit both `idempotencyKey` and `changeSummary`; the
+  `expectedRevision` may still ride alone on the revision-safe path.
   Checkpoints are judgment calls: a durable decision made, a significant step
   completed, tests or builds run with their results, a blocker or change of
   direction, or a long autonomous stretch that would otherwise leave the note
