@@ -377,6 +377,14 @@ test("uses repository-first v4 routing without exposing the default Project", ()
   assert.match(context, /resolve_project/);
   assert.match(context, /get_project_context/);
   assert.match(context, /none, ambiguous, or not_ready/);
+  assert.match(
+    context,
+    /Lifecycle context never writes, migrates, or downgrades/,
+  );
+  assert.match(
+    context,
+    /explicit upgrade runs only through the recall-journal skill/,
+  );
   assert.equal(context.includes("default-workspace-id"), false);
   assert.equal(context.includes("default-project-id"), false);
   assert.equal(context.includes("General Memory"), false);
@@ -538,7 +546,7 @@ test("rejects malformed or mixed v4 configs instead of choosing a memory protoco
   }
 });
 
-test("documents v3 and v4 as reader-only while keeping v1/v2 as the sole writer", () => {
+test("keeps v3/v4 reader-only while gating explicit v5 setup", () => {
   const [skill, configuration] = [
     "plugins/recall/skills/recall-journal/SKILL.md",
     "plugins/recall/skills/recall-journal/references/configuration.md",
@@ -556,11 +564,28 @@ test("documents v3 and v4 as reader-only while keeping v1/v2 as the sole writer"
   );
   assert.match(configuration, /"projectMemory": \{ "enabled": true \}/);
   assert.match(configuration, /"version": 4/);
+  assert.match(configuration, /"version": 5/);
   assert.match(
     configuration,
-    /Current setup and\s+reconfiguration flows below continue to write version 2 only/,
+    /Offer \*\*Structured Project activity\*\* only when all of these are\s+advertised/,
   );
   assert.match(configuration, /Never auto-migrate a version 1 or 2 config/);
+  assert.match(configuration, /cannot be translated\s+losslessly/);
+  assert.match(configuration, /Re-check\s+the whole gate immediately before/);
+  assert.match(
+    configuration,
+    /Cursor: `\$CURSOR_HOME`, falling back to `~\/\.cursor`/,
+  );
+  assert.match(
+    configuration,
+    /For Legacy journal note, also\s+confirm the scope, absolute filesystem path when applicable, workspace,\s+optional Recall Project, and summary target/,
+  );
+  assert.match(configuration, /When keeping Legacy journal-note mode/);
+  assert.match(configuration, /When keeping version 5/);
+  assert.match(
+    configuration,
+    /never add legacy routing fields,\s+ask about a summary target, or use a workspace root/,
+  );
 });
 
 test("accepts a v2 global destination without a Recall Project", () => {
@@ -1683,6 +1708,14 @@ test("v5 names the session tools and never the retired card recipe", () => {
   assert.match(context, /append_entry/);
   assert.match(context, /close_session/);
   assert.match(context, /daySummary/);
+  assert.match(context, /Today -> Now activity/);
+  assert.match(context, /concise plain-language intent/);
+  assert.match(context, /when a current branch exists, pass its exact name/);
+  assert.match(context, /useful title/);
+  assert.match(context, /decision, blocker, shipped, or progress/);
+  assert.match(context, /always attach sessionUuid/);
+  assert.match(context, /handful of durable checkpoints/);
+  assert.match(context, /rejoin Today's chronology after close/);
   // The mechanics this version exists to retire must never be recited again.
   assert.equal(context.includes("create_today_note"), false);
   assert.equal(context.includes("### Full journal entry"), false);

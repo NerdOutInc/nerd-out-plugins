@@ -103,7 +103,19 @@ test("the documented mode matrix preserves legacy non-Git memory", async () => {
     readme,
     /^\| v4 \| Repository-first structured lookup,[^\n]*\|$/m,
   );
-  assert.match(readme, /Do not auto-migrate v1\/v2 users to v3 or v4/);
+  assert.match(
+    readme,
+    /^\| v5 \| Repository-first exact Project lookup[^\n]*Today -> Now activity[^\n]*\|$/m,
+  );
+  assert.match(readme, /Do not auto-migrate v1\/v2 users to a structured mode/);
+  assert.match(
+    readme,
+    /Structured sessions and checkpoints are user-facing in \*\*Today -> Now\s+activity\*\*, while app-owned day summaries land as Today timeline cards/,
+  );
+  assert.doesNotMatch(
+    readme,
+    /sessions, checkpoints, and app-owned summaries are user-facing in/,
+  );
   assert.match(configuration, /global, non-repository behavior/);
   assert.match(configuration, /Never auto-migrate a version 1 or 2 config/);
 });
@@ -144,18 +156,18 @@ test("v4 is a strict reader-before-writer contract", async () => {
     skill,
     /never create or update a legacy journal note or Today summary/,
   );
-  // Version 5 writes structured sessions, so the old blanket "writes nothing
-  // structured" sentence is gone. What must survive is the narrower contract:
-  // v3/v4 stay readers, and no config version is ever written but v1/v2.
+  // Version 5 writes structured sessions. What must survive is the narrower
+  // contract: v3/v4 stay readers and can upgrade only through an explicit,
+  // confirmed whole-mode conversion.
   assert.match(
     skill,
     /create a\s+structured session under version 3 or version 4/,
   );
   assert.match(
     skill,
-    /never writes, migrates, or downgrades a version 3,\s+version 4, or version 5 config/,
+    /explicit, confirmed whole-mode upgrade may replace\s+v3 or v4 with v5/,
   );
-  assert.match(skill, /do not auto-migrate v1\/v2 global\s+users/);
+  assert.match(skill, /do not\s+auto-migrate v1\/v2 global users/);
 });
 
 test("v5 teaches the session tools and retires the hand-executed mechanics", async () => {
@@ -168,6 +180,18 @@ test("v5 teaches the session tools and retires the hand-executed mechanics", asy
   assert.match(skill, /`close_session`/);
   assert.match(skill, /`daySummary`/);
   assert.match(skill, /`previousSession`/);
+  assert.match(skill, /Today -> Now activity/);
+  assert.match(skill, /concise plain-language `intent`/);
+  assert.match(skill, /human-readable `title`/);
+  assert.match(
+    skill,
+    /Always point the entry at this ACTIVE\s+session with `sessionUuid`/,
+  );
+  assert.match(
+    skill,
+    /A normal task should produce only a handful of checkpoints/,
+  );
+  assert.match(skill, /rejoin the shared chronology after close/);
 
   // Continuity honesty: absence must never read as proof of no predecessor.
   assert.match(skill, /`sessionContinuityAvailable`/);
@@ -184,12 +208,7 @@ test("v5 teaches the session tools and retires the hand-executed mechanics", asy
 
   // Every close-result state must be explained, including the two that are
   // easy to misreport as success or as failure.
-  for (const status of [
-    "created",
-    "already_exists",
-    "deferred",
-    "failed",
-  ]) {
+  for (const status of ["created", "already_exists", "deferred", "failed"]) {
     assert.match(skill, new RegExp(`\`${status}\``), status);
   }
 });
@@ -225,4 +244,73 @@ test("v5 never invents continuity or rewrites the archive", async () => {
     skill,
     /Older journal notes stay readable archive[\s\S]*never migrated or rewritten/,
   );
+});
+
+test("v5 setup and migration are explicit, exact, and capability-gated", async () => {
+  const [skill, configuration] = await Promise.all([
+    read("plugins/recall/skills/recall-journal/SKILL.md"),
+    read("plugins/recall/skills/recall-journal/references/configuration.md"),
+  ]);
+
+  for (const tool of [
+    "resolve_project",
+    "get_project_context",
+    "open_session",
+    "append_entry",
+    "close_session",
+  ]) {
+    assert.match(configuration, new RegExp(`\`${tool}\``), tool);
+  }
+  for (const field of [
+    "lineageKey",
+    "sessionUuid",
+    "entryType",
+    "daySummary",
+  ]) {
+    assert.match(configuration, new RegExp(`\`${field}\``), field);
+  }
+
+  assert.match(configuration, /If any part is absent, do not write version 5/);
+  assert.match(
+    configuration,
+    /If a v5 config already exists,\s+leave it unchanged/,
+  );
+  assert.match(configuration, /workspace root is invalid/);
+  assert.match(configuration, /cannot be translated\s+losslessly/);
+  assert.match(
+    configuration,
+    /Version 5 has no persistent `summaryTarget: "none"` preference/,
+  );
+  assert.match(configuration, /show the exact replacement v5 shape/);
+  assert.match(configuration, /When disabling version 5/);
+  assert.match(
+    configuration,
+    /Older journal notes and Today cards remain untouched/,
+  );
+  assert.match(skill, /Lifecycle context never\s+changes a config version/);
+});
+
+test("user-facing note activity gets a useful change summary", async () => {
+  const [recallSkill, journalSkill] = await Promise.all([
+    read("plugins/recall/skills/recall/SKILL.md"),
+    read("plugins/recall/skills/recall-journal/SKILL.md"),
+  ]);
+
+  for (const skill of [recallSkill, journalSkill]) {
+    assert.match(
+      skill,
+      /Recall (?:can|may) show (?:it|the summary) in\s+Today -> Now activity and\s+the note's History/,
+    );
+    assert.match(
+      skill,
+      /expectedRevision`, `idempotencyKey`, and\s+`changeSummary`/,
+    );
+    assert.match(skill, /partial bundle is rejected/);
+    assert.match(skill, /caller-minted UUID/);
+    assert.match(
+      skill,
+      /omit both `(?:changeSummary|idempotencyKey)` and `(?:idempotencyKey|changeSummary)`/,
+    );
+    assert.match(skill, /never (?:put|use) (?:paths?|a path),? hash(?:es)?/i);
+  }
 });

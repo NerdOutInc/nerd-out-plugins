@@ -269,7 +269,7 @@ test("Recall skills spell out the fail-closed activity contract", async () => {
     );
   }
 
-  assert.match(journalSkill, /do not auto-migrate v1\/v2 global\s+users/);
+  assert.match(journalSkill, /do not\s+auto-migrate v1\/v2 global users/);
   assert.match(journalSkill, /explicit default Recall Project/);
   assert.match(journalSkill, /Do not fill an activity gap with\s+`list_note_activity`/);
   assert.match(

@@ -60,6 +60,10 @@ independently:
   `read_note` advertises `"markdown"` in its `format` enum **and**
   `update_note_content` advertises the `expectedRevision` input. Require both;
   never mix one enhanced field with the legacy path.
+- User-facing activity detail on `update_note_content` is a separate strict
+  capability. Use it only for a `NamedNote` when that same input schema
+  advertises all three fields: `expectedRevision`, `idempotencyKey`, and
+  `changeSummary`. Treat them as one bundle; a partial bundle is rejected.
 
 Cache that decision only for the current thread. After an app/plugin update,
 start a new thread so the catalog is discovered again. An unknown-tool or
@@ -142,6 +146,17 @@ the app's Settings -> MCP Server per-workspace access policy.
   `</details>` so Markdown inside the toggle renders.
 - Use `update_note_content` with `mode: "append"` when adding a journal entry,
   update, or note section.
+- To record a user-facing `changeSummary` on `update_note_content`, send it only
+  on a `NamedNote` and only with the other two strict fields: the
+  `expectedRevision` from the matching Markdown read and a caller-minted UUID
+  `idempotencyKey`. Reuse that UUID only for an identical retry; mint a new one
+  for a newly computed update. Describe the accepted change in one short,
+  specific plain-language sentence (for example, `Clarified how repository
+  routing chooses a Project`). Recall can show it in Today -> Now activity and
+  the note's History, so never put paths, hashes, ids, raw payloads, or vague
+  boilerplate such as `Updated note` there. On a plain append, a DailyNote, or an
+  incomplete schema, omit both `changeSummary` and `idempotencyKey`;
+  `expectedRevision` may still ride alone on the revision-safe path.
 - Use `update_note_content` with `mode: "replace"` only when the user explicitly
   wants to replace the whole note body. It never changes a note's title; use
   `rename_note` (`noteType: "NamedNote"`, uuid, and the new title — advertised
@@ -292,6 +307,11 @@ sending it anyway. After a write, verify the echo: the result's projected
 content (or the next read) shows the recorded refs, and a response without
 them means an older hosted web app dropped the field — report that honestly
 instead of assuming the evidence was recorded.
+
+On `update_note_content`, `evidence` or `supersedes` also opts into the strict
+NamedNote contract. Include the complete `expectedRevision` + UUID
+`idempotencyKey` + `changeSummary` bundle above; never attach evidence to a
+plain legacy or DailyNote update.
 
 ### Writing evidence
 
