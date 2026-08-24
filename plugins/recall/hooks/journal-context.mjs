@@ -494,16 +494,18 @@ function buildV5ProjectMemoryHookOutput(
   if (repositoryIdentity === "present") {
     routing =
       "This working directory has filesystem repository identity, so use repository-first routing and do not use the configured default Project. " +
-      "Before substantive work, read the supported non-local Git origin; when it exists, call resolve_project with that remote URL and at most the repository-root basename. " +
+      "Before substantive work, read the supported non-local Git origin; when it exists, call resolve_project with that remote URL as remoteUrl and at most the repository-root basename as repoRootBasename. " +
       "Only an exact match may feed get_project_context and the session tools. " +
-      "If there is no supported remote, either tool is unavailable, resolution returns none, ambiguous, or not_ready, or project context is not ready, continue without project memory; never use the default Project as a recovery path. ";
+      "If there is no supported remote, either tool is unavailable, resolution returns none, ambiguous, or not_ready, or project context is not ready, continue without project memory; never use the default Project as a recovery path. " +
+      "A call rejected for invalid or unknown parameters is none of those outcomes: it is your own malformed call, so fix the parameters against the tool's advertised schema and retry once instead of giving up on project memory. ";
   } else if (repositoryIdentity === "absent") {
     routing =
       `No filesystem repository identity was found, so use the explicitly configured default ${destinationLabel(defaultProject)} for structured project memory. ` +
       `Before substantive work, require get_project_context and call it directly with projectUuid ${defaultProject.recallProject.id}; accept only a result whose project id and workspaceId match that saved target. ` +
       "Do not call resolve_project or fabricate repository identity on this route. " +
       "The default is valid only on this proved no-repository route; never use it after any resolve_project none, ambiguous, or not_ready result. " +
-      "If the tool is unavailable or reports a missing, blocked, mismatched, or not_ready target, continue without project memory and do not choose another Project. ";
+      "If the tool is unavailable or reports a missing, blocked, mismatched, or not_ready target, continue without project memory and do not choose another Project. " +
+      "A call rejected for invalid or unknown parameters is none of those outcomes: it is your own malformed call, so fix the parameters against the tool's advertised schema and retry once instead of giving up on project memory. ";
   } else {
     routing =
       "The hook could not prove whether filesystem repository identity exists. Continue without project memory: do not call resolve_project with fabricated metadata and do not use the configured default Project. ";

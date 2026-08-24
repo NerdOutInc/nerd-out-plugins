@@ -1631,6 +1631,9 @@ test("uses repository-first v5 routing without exposing the default Project", ()
   assert.equal(context, readFixture("v5", "repository-context.txt"));
   assert.match(context, /repository-first routing/);
   assert.match(context, /none, ambiguous, or not_ready/);
+  assert.match(context, /as remoteUrl/);
+  assert.match(context, /as repoRootBasename/);
+  assert.match(context, /fix the parameters .* and retry once/);
   assert.equal(context.includes("default-workspace-id"), false);
   assert.equal(context.includes("default-project-id"), false);
   assert.equal(context.includes("General Memory"), false);
@@ -1686,6 +1689,9 @@ test("withholds the v5 default when repository identity cannot be proved", () =>
   );
   assert.equal(context.includes("default-workspace-id"), false);
   assert.equal(context.includes("default-project-id"), false);
+  // No tool is called on this route, so the malformed-call retry rule that
+  // qualifies the other two routes' give-up lists must not appear here.
+  assert.equal(context.includes("retry once"), false);
 });
 
 test("v5 names the session tools and never the retired card recipe", () => {
