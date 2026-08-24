@@ -315,9 +315,13 @@ call — and try once more. Never classify your own malformed call as an
 unavailable tool, a failed resolution, or a reason to continue without project
 memory: those verdicts describe the environment, not a typo in the request.
 
-If the MCP server is unreachable, report that plainly — the Recall Mac app is
-not running or its MCP server is disabled — and skip journaling for the task.
-Never let journaling stall or abort the work itself.
+Degradation is never silent. Whenever structured journaling cannot start —
+the MCP server is unreachable (the Recall Mac app is not running or its MCP
+server is disabled), resolution fails, or the session cannot open — say so
+plainly in the first user-visible reply after the failure, name the reason,
+and then continue the task. A user watching the Now dashboard must learn from
+the chat that nothing will appear there, never from the absence itself. Never
+let journaling stall or abort the work itself.
 
 ### What version 5 never does
 
@@ -749,8 +753,8 @@ anymore.
   prompt instead.
 - If the MCP server is unreachable (unable to connect to `127.0.0.1:38473`),
   the Recall Mac app is not running or its MCP server is disabled —
-  report that plainly (a locked screen or closed windows never cause this)
-  and skip journaling for the task.
+  report that plainly in your first user-visible reply (a locked screen or
+  closed windows never cause this) and skip journaling for the task.
 - Never treat search hits as note identity: only literal
   `Journal marker: <marker>` (or `thread <thread-id>`) containment after
   `read_note` establishes which note belongs to this thread.

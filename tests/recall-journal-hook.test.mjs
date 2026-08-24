@@ -1634,6 +1634,7 @@ test("uses repository-first v5 routing without exposing the default Project", ()
   assert.match(context, /as remoteUrl/);
   assert.match(context, /as repoRootBasename/);
   assert.match(context, /fix the parameters .* and retry once/);
+  assert.match(context, /first user-visible reply instead of degrading silently/);
   assert.equal(context.includes("default-workspace-id"), false);
   assert.equal(context.includes("default-project-id"), false);
   assert.equal(context.includes("General Memory"), false);
