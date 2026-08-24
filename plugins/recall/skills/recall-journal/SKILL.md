@@ -307,6 +307,14 @@ idempotency keys make an exact retry safe, and a replay returns the original
 result rather than duplicating anything. There is no marker to re-search, no
 literal-containment check, and no "journal state unknown" verdict to reach for.
 
+An invalid-parameter rejection is the opposite case: the server recorded
+nothing, and replaying the identical payload can only fail identically. Fix
+the call instead — re-read the tool's advertised schema, correct the parameter
+names or shapes, mint fresh UUIDs and idempotency keys for what is now a new
+call — and try once more. Never classify your own malformed call as an
+unavailable tool, a failed resolution, or a reason to continue without project
+memory: those verdicts describe the environment, not a typo in the request.
+
 If the MCP server is unreachable, report that plainly — the Recall Mac app is
 not running or its MCP server is disabled — and skip journaling for the task.
 Never let journaling stall or abort the work itself.
@@ -733,6 +741,9 @@ anymore.
 - Never blind-retry a revision conflict: re-read canonical Markdown, reconcile
   against the fresh body, and use only the fresh revision for a newly computed
   update.
+- Never treat an invalid-parameter rejection as an unavailable tool or a failed
+  resolution: fix the call against the tool's advertised schema and retry once
+  before continuing without journal or project memory.
 - Never write or append a DailyNote summary: the server has retired DailyNote
   creation, and a config that still selects it gets the one-time migration
   prompt instead.
