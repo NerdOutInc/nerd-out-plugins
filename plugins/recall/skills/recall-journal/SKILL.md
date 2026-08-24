@@ -282,9 +282,12 @@ could follow, no paths, commands, hashes, ids, or test inventories. Good:
 the techy bits hide inside little dropdowns.`
 
 Recall derives the card's identity from the session's lineage and day, places
-it on the Today timeline, and links it back to the work. Do not compute an
+it on the Today timeline, and maintains the card's **Related Notes** section —
+links to the notes agents touched for the Project, refreshed on every same-day
+close of the same lineage. Do not compute an
 idempotency key, do not emit a heading, and do not attach a backlink — those
-are the app's now.
+are the app's now. Never hand-write a Related Notes section into any note; the
+app rebuilds that section from the heading down on the next close.
 
 ### Reading the close result honestly
 
@@ -292,12 +295,17 @@ are the app's now.
 card failure never means the session failed to close:
 
 - `created` — the day's card landed.
-- `already_exists` — this lineage already has a card for that day, including
-  after a retry. Correct and final; never force a second one.
+- `updated` — the card already existed and its Related Notes links were
+  refreshed. Normal for the second and later closes of a day.
+- `already_exists` — this lineage already has a card for that day and its
+  links were already current, including after a retry. Correct and final;
+  never force a second one. Older app versions report `already_exists`
+  wherever a newer one would report `updated`.
 - `deferred` — the close is queued, so there is no authoritative end time to
   date a card by yet. Not a failure.
-- `failed` — the session is closed and the card is missing. Say so in the final
-  response rather than implying the day was recorded.
+- `failed` — the session is closed and the card is missing (or was deleted by
+  the user — the app never resurrects one). Say so in the final response
+  rather than implying the day was recorded.
 
 ### Failure handling
 

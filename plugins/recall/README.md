@@ -25,6 +25,12 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
+Plugin `0.30.0` documents the app-owned **Related Notes** section: newer
+Recall builds end each day card with links to the notes agents touched for
+the Project, refreshed on every same-day close (`close_session` reports
+`updated` when a refresh changed the links; older apps keep reporting
+`already_exists`). Agents never hand-write that section.
+
 Plugin `0.29.0` hardens the version 5 protocol against silent journaling
 gaps. The hook context names `resolve_project`'s exact parameters, both
 tool-using routes now state that an invalid-parameter rejection means fixing
