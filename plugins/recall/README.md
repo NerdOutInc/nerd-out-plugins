@@ -25,6 +25,15 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
+Plugin `0.29.0` hardens the version 5 protocol against silent journaling
+gaps. The hook context names `resolve_project`'s exact parameters, both
+tool-using routes now state that an invalid-parameter rejection means fixing
+the call against the advertised schema and retrying once — never a reason to
+continue without project memory — and any journaling failure to start must be
+reported plainly in the first user-visible reply instead of degrading
+silently. A design doc (`docs/deterministic-session-lifecycle.md`) specs the
+follow-on hook-driven session lifecycle without changing behavior yet.
+
 Plugin `0.28.0` graduates version 5 Structured Project activity into the
 explicit journal setup and migration flow. It is offered only when the live
 Recall catalog exposes the complete session/checkpoint/close schema, requires

@@ -295,8 +295,10 @@ test("host manifests share the current plugin version", async () => {
   // preserving the same shared skills and bridge implementation.
   // 0.28.0 graduates v5 into explicit capability-gated setup and migration,
   // and makes the structured authoring guidance honest about its Now UI.
+  // 0.29.0 adds the malformed-call retry rule and the first-reply failure
+  // report, so journaling gaps surface loudly instead of silently.
   // All hosts must receive that behavior together.
-  assert.equal(codexPlugin.version, "0.28.0");
+  assert.equal(codexPlugin.version, "0.29.0");
   assert.equal(claudePlugin.version, codexPlugin.version);
   const desktop = await readJson("desktop-extensions/recall/manifest.json");
   assert.equal(desktop.version, "0.9.0");
