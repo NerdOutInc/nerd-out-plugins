@@ -1,5 +1,4 @@
 {
-  "description": "Activate opted-in Recall journaling — recall plus live progress entries — for meaningful tasks.",
   "hooks": {
     "UserPromptSubmit": [
       {

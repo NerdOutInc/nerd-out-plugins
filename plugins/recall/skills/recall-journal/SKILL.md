@@ -44,8 +44,14 @@ Handle the helper's `status` as follows:
   re-enable the Recall handler. Stop this invocation.
 - `missing`: explain that the Recall hook is not loaded. Ask the user to
   confirm that the plugin is installed and enabled, start a new thread, and
-  invoke this skill again. Include any non-empty `errors` or `warnings` from
-  the helper when they make the diagnosis more specific.
+  invoke this skill again. If `cause` is `hook_manifest_load_failed`, explain
+  that Codex found Recall but could not parse its hook manifest; report the
+  exact `codexExecutable` (and `codexExecutableSource`), `codexVersion`, and
+  `hookManifestDiagnostics` supplied by the helper instead of reducing the
+  failure to "hook missing." `codexUserAgent` is supporting evidence when the
+  version cannot be parsed.
+  Otherwise include any non-empty `errors` or `warnings` from the helper when
+  they make the diagnosis more specific.
 - `ambiguous`, `unknown`, or `unavailable`: do not guess. Ask the user to open
   `/hooks` and verify that exactly one enabled Recall `UserPromptSubmit` hook
   is listed and trusted, then invoke this skill again.
