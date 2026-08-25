@@ -208,9 +208,19 @@ test("v5 teaches the session tools and retires the hand-executed mechanics", asy
 
   // Every close-result state must be explained, including the two that are
   // easy to misreport as success or as failure.
-  for (const status of ["created", "already_exists", "deferred", "failed"]) {
+  for (const status of [
+    "created",
+    "updated",
+    "already_exists",
+    "deferred",
+    "failed",
+  ]) {
     assert.match(skill, new RegExp(`\`${status}\``), status);
   }
+
+  // The card's Related Notes section belongs to the app, never the agent.
+  assert.match(skill, /Related Notes/);
+  assert.match(skill, /Never hand-write a Related Notes section/);
 });
 
 test("v5 forbids a hybrid and keeps the legacy protocol as the whole fallback", async () => {
