@@ -79,6 +79,7 @@ test("the host matrix distinguishes skills, local MCP, and automatic hooks", asy
     server.args.some((argument) => /Cowork/i.test(argument)),
     false,
   );
+  assert.deepEqual(Object.keys(hooks), ["hooks"]);
   assert.deepEqual(Object.keys(hooks.hooks), ["UserPromptSubmit"]);
   assert.equal(hooks.hooks.UserPromptSubmit.length, 1);
   assert.equal(hooks.hooks.UserPromptSubmit[0].hooks.length, 1);

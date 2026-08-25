@@ -15,6 +15,9 @@ const hookScript = path.join(
   "plugins/recall/hooks/journal-context.mjs",
 );
 const pluginRoot = path.dirname(path.dirname(hookScript));
+const packagedHookCommand = JSON.parse(
+  fs.readFileSync(path.join(pluginRoot, "hooks/hooks.json"), "utf8"),
+).hooks.UserPromptSubmit[0].hooks[0].command;
 const fixtureRoot = path.join(
   repositoryRoot,
   "tests/fixtures/recall-journal-hook",
@@ -195,6 +198,19 @@ function runHook({
   });
 }
 
+function runPackagedHook({
+  cwd,
+  environment,
+  input = { hook_event_name: "UserPromptSubmit" },
+}) {
+  return spawnSync("/bin/sh", ["-c", packagedHookCommand], {
+    cwd,
+    encoding: "utf8",
+    env: environment,
+    input: typeof input === "string" ? input : JSON.stringify(input),
+  });
+}
+
 test("uses Cursor's native session hook, config, and stable conversation id", () => {
   const configDirectory = makeConfigDirectory();
   const projectDirectory = makeProjectDirectory("cursor-project");
@@ -259,6 +275,44 @@ test("injects the Codex journal skill when Codex config is valid", () => {
     output.hookSpecificOutput.additionalContext.includes(configDirectory),
     false,
   );
+});
+
+test("the packaged shared hook distinguishes Codex from Claude Code", () => {
+  const codexConfigDirectory = makeConfigDirectory();
+  const claudeConfigDirectory = makeConfigDirectory();
+  const codexResult = runPackagedHook({
+    environment: {
+      ...cleanEnvironment(),
+      CLAUDE_CONFIG_DIR: claudeConfigDirectory,
+      CLAUDE_PLUGIN_ROOT: pluginRoot,
+      CODEX_HOME: codexConfigDirectory,
+      PLUGIN_ROOT: pluginRoot,
+    },
+  });
+
+  assert.equal(codexResult.status, 0);
+  assert.equal(codexResult.stderr, "");
+  const codexContext = JSON.parse(codexResult.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(codexContext, /Codex/);
+  assert.match(codexContext, /\$recall:recall-journal/);
+  assert.doesNotMatch(codexContext, /Claude Code/);
+
+  const claudeResult = runPackagedHook({
+    environment: {
+      ...cleanEnvironment(),
+      CLAUDE_CONFIG_DIR: claudeConfigDirectory,
+      CLAUDE_PLUGIN_ROOT: pluginRoot,
+    },
+  });
+
+  assert.equal(claudeResult.status, 0);
+  assert.equal(claudeResult.stderr, "");
+  const claudeContext = JSON.parse(claudeResult.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(claudeContext, /Claude Code/);
+  assert.match(claudeContext, /\/recall:recall-journal/);
+  assert.doesNotMatch(claudeContext, /\$recall:recall-journal/);
 });
 
 test("keeps legacy v1 and v2 hook context byte-for-byte compatible", () => {

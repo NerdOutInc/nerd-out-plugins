@@ -72,6 +72,44 @@ function response(hooks, overrides = {}) {
   };
 }
 
+function writeFakeCodex(
+  directory,
+  {
+    hooksResponse = response([hook()]),
+    name = "codex",
+    userAgent = "Codex Desktop/0.142.5 (Mac OS; arm64)",
+  } = {},
+) {
+  const executable = path.join(directory, name);
+  fs.writeFileSync(
+    executable,
+    `#!${process.execPath}
+import readline from "node:readline";
+
+let initialized = false;
+const input = readline.createInterface({ input: process.stdin });
+const send = (message) => process.stdout.write(JSON.stringify(message) + "\\n");
+
+input.on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.method === "initialize") {
+    send({ id: message.id, result: { userAgent: ${JSON.stringify(userAgent)} } });
+  } else if (message.method === "initialized") {
+    initialized = true;
+  } else if (message.method === "hooks/list") {
+    if (!initialized) {
+      send({ id: message.id, error: { message: "Not initialized" } });
+    } else {
+      send({ id: message.id, result: ${JSON.stringify(hooksResponse)} });
+    }
+  }
+});
+`,
+  );
+  fs.chmodSync(executable, 0o755);
+  return executable;
+}
+
 test("classifies trusted and managed Recall hooks as ready", () => {
   for (const trustStatus of ["trusted", "managed"]) {
     const result = classifyRecallHook(response([hook({ trustStatus })]));
@@ -107,17 +145,34 @@ test("matches the hook bundled beside the skill, not another plugin hook", () =>
 });
 
 test("reports missing and ambiguous hook inventories with diagnostics", () => {
+  const parserDiagnostic =
+    `failed to parse plugin hooks config ${hookSourcePath}: ` +
+    "unknown field `description`, expected `hooks` at line 2 column 15";
   const missing = classifyRecallHook(
     response([], {
-      warnings: ["plugin warning"],
-      errors: [{ path: hookSourcePath, message: "plugin error" }],
+      warnings: ["another plugin warning", parserDiagnostic],
+      errors: [{ path: "/another/plugin/hooks.json", message: "plugin error" }],
     }),
   );
   assert.deepEqual(missing, {
     status: "missing",
-    warnings: ["plugin warning"],
+    cause: "hook_manifest_load_failed",
+    hookManifestDiagnostics: [parserDiagnostic],
+    warnings: ["another plugin warning", parserDiagnostic],
     errors: ["plugin error"],
   });
+
+  const otherPluginOnly = classifyRecallHook(
+    response([], {
+      warnings: [
+        "failed to parse plugin hooks config /another/plugin/hooks.json: " +
+          "unknown field `description`, expected `hooks`",
+      ],
+    }),
+  );
+  assert.equal(otherPluginOnly.status, "missing");
+  assert.equal(otherPluginOnly.cause, undefined);
+  assert.equal(otherPluginOnly.hookManifestDiagnostics, undefined);
 
   const ambiguous = classifyRecallHook(response([hook(), hook()]));
   assert.equal(ambiguous.status, "ambiguous");
@@ -126,36 +181,74 @@ test("reports missing and ambiguous hook inventories with diagnostics", () => {
 
 test("queries hooks/list only after the Codex handshake", () => {
   const binDirectory = makeTemporaryDirectory();
-  const fakeCodex = path.join(binDirectory, "codex");
   const fakeResponse = response([hook({ trustStatus: "modified" })]);
-  fs.writeFileSync(
-    fakeCodex,
-    `#!/usr/bin/env node
-import readline from "node:readline";
-
-let initialized = false;
-const input = readline.createInterface({ input: process.stdin });
-const send = (message) => process.stdout.write(JSON.stringify(message) + "\\n");
-
-input.on("line", (line) => {
-  const message = JSON.parse(line);
-  if (message.method === "initialize") {
-    send({ id: message.id, result: { userAgent: "fake" } });
-  } else if (message.method === "initialized") {
-    initialized = true;
-  } else if (message.method === "hooks/list") {
-    if (!initialized) {
-      send({ id: message.id, error: { message: "Not initialized" } });
-    } else {
-      send({ id: message.id, result: ${JSON.stringify(fakeResponse)} });
-    }
-  }
-});
-`,
-  );
-  fs.chmodSync(fakeCodex, 0o755);
+  const fakeCodex = writeFakeCodex(binDirectory, {
+    hooksResponse: fakeResponse,
+  });
+  const selectedCodex = path.join(binDirectory, "selected-codex");
+  fs.symlinkSync(fakeCodex, selectedCodex);
 
   const result = spawnSync(helperWrapper, [], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      CODEX_CLI_PATH: selectedCodex,
+    },
+    timeout: 10_000,
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, "");
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.status, "modified");
+  assert.equal(output.hook.trustStatus, "modified");
+  assert.equal(output.codexExecutable, fs.realpathSync(fakeCodex));
+  assert.equal(output.codexExecutableSource, "CODEX_CLI_PATH");
+  assert.equal(output.codexVersion, "0.142.5");
+  assert.match(output.codexUserAgent, /^Codex Desktop\/0\.142\.5/);
+});
+
+test("reports the Codex executable selected from PATH", () => {
+  const binDirectory = makeTemporaryDirectory();
+  const fakeCodex = writeFakeCodex(binDirectory, {
+    userAgent: "codex_cli_rs/0.143.0-dev.2 (test)",
+  });
+  const environment = {
+    ...process.env,
+    PATH: [
+      binDirectory,
+      path.dirname(process.execPath),
+      "/usr/bin",
+      "/bin",
+    ].join(path.delimiter),
+  };
+  delete environment.CODEX_CLI_PATH;
+
+  const result = spawnSync(process.execPath, [helperScript], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+    env: environment,
+    timeout: 10_000,
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, "");
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.status, "trusted");
+  assert.equal(output.codexExecutable, fs.realpathSync(fakeCodex));
+  assert.equal(output.codexExecutableSource, "PATH");
+  assert.equal(output.codexVersion, "0.143.0-dev.2");
+});
+
+test("does not mistake the preflight client version for Codex's version", () => {
+  const binDirectory = makeTemporaryDirectory();
+  const fakeCodex = writeFakeCodex(binDirectory, {
+    name: "codex-nightly",
+    userAgent: "Codex nightly build (recall_journal_hook_status/1.0.0)",
+  });
+
+  const result = spawnSync(process.execPath, [helperScript], {
     cwd: repositoryRoot,
     encoding: "utf8",
     env: {
@@ -168,8 +261,12 @@ input.on("line", (line) => {
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stderr, "");
   const output = JSON.parse(result.stdout);
-  assert.equal(output.status, "modified");
-  assert.equal(output.hook.trustStatus, "modified");
+  assert.equal(output.status, "trusted");
+  assert.equal(output.codexVersion, null);
+  assert.equal(
+    output.codexUserAgent,
+    "Codex nightly build (recall_journal_hook_status/1.0.0)",
+  );
 });
 
 test("returns structured guidance when the Codex executable is unavailable", () => {
@@ -188,4 +285,6 @@ test("returns structured guidance when the Codex executable is unavailable", () 
   const output = JSON.parse(result.stdout);
   assert.equal(output.status, "unavailable");
   assert.match(output.reason, /Could not start the Codex App Server/);
+  assert.equal(output.codexExecutable, null);
+  assert.equal(output.codexVersion, null);
 });

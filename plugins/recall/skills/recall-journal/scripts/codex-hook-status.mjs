@@ -35,6 +35,54 @@ function collectDiagnostics(entries, field) {
   });
 }
 
+function diagnosticMessage(diagnostic) {
+  if (typeof diagnostic === "string") return diagnostic;
+  return typeof diagnostic?.message === "string" ? diagnostic.message : null;
+}
+
+function diagnosticMatchesPath(diagnostic, expectedSourcePath) {
+  const normalizedExpectedSourcePath = normalizePath(expectedSourcePath);
+  const diagnosticPath =
+    typeof diagnostic?.path === "string"
+      ? diagnostic.path
+      : typeof diagnostic?.sourcePath === "string"
+        ? diagnostic.sourcePath
+        : null;
+  if (
+    diagnosticPath &&
+    normalizePath(diagnosticPath) === normalizedExpectedSourcePath
+  ) {
+    return true;
+  }
+
+  const message = diagnosticMessage(diagnostic);
+  return (
+    typeof message === "string" &&
+    [expectedSourcePath, normalizedExpectedSourcePath].some(
+      (candidate) => candidate && message.includes(candidate),
+    )
+  );
+}
+
+function collectHookManifestDiagnostics(entries, expectedSourcePath) {
+  const messages = new Set();
+  for (const entry of entries) {
+    for (const field of ["warnings", "errors"]) {
+      const diagnostics = Array.isArray(entry?.[field]) ? entry[field] : [];
+      for (const diagnostic of diagnostics) {
+        const message = diagnosticMessage(diagnostic);
+        if (
+          message &&
+          diagnosticMatchesPath(diagnostic, expectedSourcePath)
+        ) {
+          messages.add(message);
+        }
+      }
+    }
+  }
+  return [...messages];
+}
+
 function summarizeHook(hook) {
   return {
     key: hook.key,
@@ -66,7 +114,20 @@ export function classifyRecallHook(
   };
 
   if (matches.length === 0) {
-    return { status: "missing", ...diagnostics };
+    const hookManifestDiagnostics = collectHookManifestDiagnostics(
+      entries,
+      expectedSourcePath,
+    );
+    return {
+      status: "missing",
+      ...(hookManifestDiagnostics.length > 0
+        ? {
+            cause: "hook_manifest_load_failed",
+            hookManifestDiagnostics,
+          }
+        : {}),
+      ...diagnostics,
+    };
   }
   if (matches.length > 1) {
     return { status: "ambiguous", matchCount: matches.length, ...diagnostics };
@@ -94,6 +155,46 @@ function compactProtocolError(error) {
   return message?.replace(/\s+/g, " ").trim().slice(0, 300) || null;
 }
 
+function executableCandidates(command, { cwd, env }) {
+  if (path.isAbsolute(command) || command.includes(path.sep)) {
+    return [path.resolve(cwd, command)];
+  }
+
+  const pathValue = env.PATH || env.Path || "";
+  const extensions =
+    process.platform === "win32"
+      ? (env.PATHEXT || ".EXE;.CMD;.BAT;.COM").split(";")
+      : [""];
+  return pathValue.split(path.delimiter).flatMap((directory) => {
+    const base = path.join(directory || cwd, command);
+    return extensions.map((extension) => `${base}${extension}`);
+  });
+}
+
+function resolveExecutable(command, { cwd, env }) {
+  for (const candidate of executableCandidates(command, { cwd, env })) {
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      if (fs.statSync(candidate).isFile()) return normalizePath(candidate);
+    } catch {
+      // Keep looking through PATH.
+    }
+  }
+  return null;
+}
+
+function compactUserAgent(value) {
+  if (typeof value !== "string") return null;
+  return value.replace(/\s+/g, " ").trim().slice(0, 300) || null;
+}
+
+function codexVersionFromUserAgent(userAgent) {
+  const compact = compactUserAgent(userAgent);
+  return compact?.match(
+    /^[A-Za-z][A-Za-z0-9 ._-]{0,79}\/([0-9]+(?:\.[0-9]+){1,3}(?:[-+][0-9A-Za-z.-]+)?)/,
+  )?.[1] ?? null;
+}
+
 export function inspectCodexHook({
   cwd = process.cwd(),
   env = process.env,
@@ -101,7 +202,22 @@ export function inspectCodexHook({
   return new Promise((resolve) => {
     let settled = false;
     let child;
+    let codexUserAgent = null;
     let output;
+
+    const resolvedCwd = path.resolve(cwd);
+    const executableSelector = env.CODEX_CLI_PATH || "codex";
+    const codexExecutable = resolveExecutable(executableSelector, {
+      cwd: resolvedCwd,
+      env,
+    });
+
+    const codexMetadata = () => ({
+      codexExecutable,
+      codexExecutableSource: env.CODEX_CLI_PATH ? "CODEX_CLI_PATH" : "PATH",
+      codexVersion: codexVersionFromUserAgent(codexUserAgent),
+      codexUserAgent,
+    });
 
     const finish = (result) => {
       if (settled) return;
@@ -110,7 +226,7 @@ export function inspectCodexHook({
       output?.close();
       child?.stdin.end();
       child?.kill("SIGTERM");
-      resolve(result);
+      resolve({ ...result, ...codexMetadata() });
     };
 
     const unavailable = (reason, error = null) =>
@@ -128,8 +244,8 @@ export function inspectCodexHook({
     );
 
     try {
-      child = spawn(env.CODEX_CLI_PATH || "codex", ["app-server"], {
-        cwd: path.resolve(cwd),
+      child = spawn(codexExecutable || executableSelector, ["app-server"], {
+        cwd: resolvedCwd,
         env,
         stdio: ["pipe", "pipe", "ignore"],
       });
@@ -175,11 +291,12 @@ export function inspectCodexHook({
           );
           return;
         }
+        codexUserAgent = compactUserAgent(message.result?.userAgent);
         send({ method: "initialized", params: {} });
         send({
           method: "hooks/list",
           id: HOOKS_LIST_REQUEST_ID,
-          params: { cwds: [path.resolve(cwd)] },
+          params: { cwds: [resolvedCwd] },
         });
         return;
       }
