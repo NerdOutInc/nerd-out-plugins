@@ -25,6 +25,12 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
+Plugin `0.30.1` restores the shared Claude/Codex journal hook's host detection.
+Codex now follows its native `PLUGIN_ROOT` signal to read the Codex-owned
+journal config and emit Codex skill syntax. The shared command still uses
+`CLAUDE_PLUGIN_ROOT`: Claude Code provides it natively, and Codex supplies it as
+a compatibility alias for shared plugin packages.
+
 Plugin `0.30.0` documents the app-owned **Related Notes** section: newer
 Recall builds end each day card with links to the notes agents touched for
 the Project, refreshed on every same-day close (`close_session` reports

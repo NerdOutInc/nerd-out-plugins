@@ -299,8 +299,9 @@ test("host manifests share the current plugin version", async () => {
   // report, so journaling gaps surface loudly instead of silently.
   // 0.30.0 documents the app-owned Related Notes section on the day card and
   // the `updated` close-result status.
+  // 0.30.1 restores Codex host detection in the shared Claude/Codex hook.
   // All hosts must receive that behavior together.
-  assert.equal(codexPlugin.version, "0.30.0");
+  assert.equal(codexPlugin.version, "0.30.1");
   assert.equal(claudePlugin.version, codexPlugin.version);
   const desktop = await readJson("desktop-extensions/recall/manifest.json");
   assert.equal(desktop.version, "0.9.0");

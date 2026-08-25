@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/bin/sh \"${CLAUDE_PLUGIN_ROOT}/bridge/recall-node\" \"${CLAUDE_PLUGIN_ROOT}/hooks/journal-context.mjs\" --host claude-code",
+            "command": "/bin/sh \"${CLAUDE_PLUGIN_ROOT}/bridge/recall-node\" \"${CLAUDE_PLUGIN_ROOT}/hooks/journal-context.mjs\"",
             "timeout": 5
           }
         ]
