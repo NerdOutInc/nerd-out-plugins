@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { chmod, copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -94,7 +102,9 @@ test("an explicit RECALL_BRIDGE_NODE override wins", async (t) => {
 
   assert.equal(result.code, 0);
   const report = JSON.parse(result.stdout);
-  assert.equal(report.execPath, override);
+  // Compare real paths: macOS tmpdir sits behind the /var -> /private/var
+  // symlink and Node reports the resolved execPath.
+  assert.equal(await realpath(report.execPath), await realpath(override));
 });
 
 test("a broken RECALL_BRIDGE_NODE errors loudly instead of falling back", async (t) => {
@@ -168,6 +178,9 @@ test(
     );
 
     assert.equal(result.code, 0);
-    assert.equal(JSON.parse(result.stdout).execPath, bundled);
+    assert.equal(
+      await realpath(JSON.parse(result.stdout).execPath),
+      await realpath(bundled)
+    );
   }
 );
