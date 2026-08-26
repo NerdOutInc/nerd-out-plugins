@@ -40,3 +40,23 @@ jobs:
 
       - name: Run repository integration tests
         run: node --test tests/*.test.mjs
+
+  # The launcher and manifest surfaces are the parts that must work on
+  # Windows (the bridge launches via `node` + bridge/launch.mjs there). The
+  # rest of the suite exercises POSIX-only machinery (sh-script fixtures,
+  # symlinks, signal semantics) and stays macOS-scoped above.
+  validate-windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run the cross-platform launcher and manifest tests
+        run: node --test tests/bridge-launcher.test.mjs tests/mcp-client-identity.test.mjs tests/cursor-plugin-package.test.mjs

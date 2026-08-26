@@ -1,10 +1,9 @@
 {
   "mcpServers": {
     "recall": {
-      "command": "/bin/sh",
+      "command": "node",
       "args": [
-        "./bridge/recall-node",
-        "./bridge/index.mjs",
+        "./bridge/launch.mjs",
         "--client-name",
         "Cursor"
       ],

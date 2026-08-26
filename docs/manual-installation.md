@@ -1,15 +1,27 @@
 # Install Recall manually for Cursor, Claude Code, or Codex
 
-Recall for Mac can start every supported setup from **Settings →
-Integrations**. That is the preferred route. It installs Claude Code and Codex
-directly; Cursor remains a guided install because Cursor owns its plugin UI.
-Use this guide when you have the sandboxed App Store build, want a terminal
-workflow, or need to maintain an older setup.
+Recall for Mac and Recall for Windows can start every supported setup from
+**Settings → Integrations**. That is the preferred route. It installs Claude
+Code and Codex directly; Cursor remains a guided install because Cursor owns
+its plugin UI. Use this guide when you have the sandboxed App Store build,
+want a terminal workflow, or need to maintain an older setup.
 
 These commands still work with the current Claude Code and Codex plugin CLIs.
-After installing, open Recall for Mac and enable **Settings → MCP Server**.
-Choose **Block**, **Read**, or **Write** for each workspace before starting a
-new agent thread.
+After installing, open Recall and enable **Settings → MCP Server**. Choose
+**Block**, **Read**, or **Write** for each workspace before starting a new
+agent thread.
+
+## Windows notes
+
+The plugin's MCP bridge launches through `node`, so **Node.js 18 or newer
+must be on `PATH`**. The Claude Code commands below work unchanged in
+PowerShell or cmd. For Cursor, replace the `ln -s` example with a directory
+junction (`mklink /J "%USERPROFILE%\.cursor\plugins\local\recall"
+C:\path\to\recall-plugins\plugins\recall`) or simply copy the
+`plugins\recall` folder there. The Windows `codex` CLI does not yet expose
+plugin management, so Codex installs are not available on Windows. With no
+signed local-socket helper on Windows, the first connection opens a browser
+sign-in (the OAuth path) instead of Recall's native approval prompt.
 
 ## Cursor
 

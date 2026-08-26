@@ -119,12 +119,22 @@ Claude (`.mcp.json`), Codex (`.codex-plugin/mcp.json`), and Cursor
 (`mcp.json`) register the same bridge implementation but pass
 their own diagnostic client names. Current Recall builds authenticate the
 outermost signed host, so that label cannot grant access or control attribution.
-When Recall's one-click installer has prepared the integration, the bridge and
-journal hook use
+The MCP configs launch through `node` and the cross-platform
+`bridge/launch.mjs`, so one manifest serves macOS and Windows (no host
+supports platform-conditional MCP config, and `/bin/sh` does not exist on
+Windows); Node.js 18+ on `PATH` is the one requirement. When Recall's
+one-click installer has prepared the integration, the launcher and the
+journal hook prefer
 Recall's pinned private Node runtime after verifying that it launches a
-supported Node version. Otherwise they fall back to Node.js 18+ from `PATH`,
+supported Node version — `~/Library/Application Support/Recall/AgentRuntime`
+on macOS, `%LOCALAPPDATA%\NerdOut\Recall\AgentRuntime` on Windows. Otherwise
+they fall back to the Node.js 18+ already running from `PATH`,
 which keeps manual and non-Recall installs working if the private runtime is
-missing or damaged.
+missing or damaged. The hook surfaces still run `bridge/recall-node` under a
+POSIX shell (Claude Code executes hooks through sh/Git Bash on every
+platform); both launchers must keep selecting runtimes the same way. On
+Windows there is no signed local-socket helper, so every session uses the
+OAuth fallback against the app's loopback listener.
 
 Every surface using the shared Claude plugin passes the same advisory client
 name, `Claude`. That self-reported label is useful session context in Recall but

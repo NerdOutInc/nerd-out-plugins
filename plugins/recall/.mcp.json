@@ -2,10 +2,9 @@
   "mcpServers": {
     "recall": {
       "type": "stdio",
-      "command": "/bin/sh",
+      "command": "node",
       "args": [
-        "${CLAUDE_PLUGIN_ROOT}/bridge/recall-node",
-        "${CLAUDE_PLUGIN_ROOT}/bridge/index.mjs",
+        "${CLAUDE_PLUGIN_ROOT}/bridge/launch.mjs",
         "--client-name",
         "Claude"
       ]
