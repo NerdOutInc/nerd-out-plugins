@@ -14,12 +14,14 @@ agent thread.
 ## Windows notes
 
 The plugin's MCP bridge launches through `node`, so **Node.js 18 or newer
-must be on `PATH`**. The Claude Code commands below work unchanged in
-PowerShell or cmd. For Cursor, replace the `ln -s` example with a directory
+must be on `PATH`**. The Claude Code and Codex commands below work unchanged
+in PowerShell or cmd — for Codex use a recent CLI (`codex plugin --help`
+should list `add`, `list`, `marketplace`, and `remove`; older builds predate
+plugin management, so upgrade with `npm install -g @openai/codex` if that
+command fails). For Cursor, replace the `ln -s` example with a directory
 junction (`mklink /J "%USERPROFILE%\.cursor\plugins\local\recall"
 C:\path\to\recall-plugins\plugins\recall`) or simply copy the
-`plugins\recall` folder there. The Windows `codex` CLI does not yet expose
-plugin management, so Codex installs are not available on Windows. With no
+`plugins\recall` folder there. With no
 signed local-socket helper on Windows, the first connection opens a browser
 sign-in (the OAuth path) instead of Recall's native approval prompt.
 
