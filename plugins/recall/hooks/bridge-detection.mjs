@@ -1,72 +1,52 @@
-// Detects whether the current agent session's host process actually started
-// the Recall MCP bridge.
-//
-// A host can load this plugin's hooks and skills yet silently skip its MCP
-// server for one session (observed 2026-08-27 in Claude Code desktop
-// local-agent mode: every other plugin's server started, the Recall bridge
-// was never launched, and no connection attempt was logged). The hooks still
-// fire in such a session, so the hook process itself is the one place the
-// omission is visible: the session's host process simply has no bridge child.
-//
-// The walk is deliberately scoped to the session's own host process rather
-// than the whole machine. Concurrent sessions each run their own bridge, so a
-// machine-wide scan would find a sibling session's healthy bridge and mask
-// the broken session — exactly the incident this module exists to catch.
-//
-// Host support: the ancestor walk is generic, but the verdict requires the
-// presumed host process to be recognized (Claude Code today). Other hosts can
-// adopt detection by supplying their own host-command pattern once their
-// process shapes are mapped; until then unrecognized hosts stay "unknown",
-// which callers treat as "assume the bridge is fine".
+// A fresh process snapshot can suggest that a per-session CLI omitted Recall.
+// It cannot prove tool availability, host identity, authorization, or recording.
+// Shared desktop/app-server trees cannot identify one conversation's connector.
+// Never persist argv: process commands can contain private prompts and paths.
 
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 const PS_TIMEOUT_MS = 1_500;
+const MAX_PROCESS_ROWS = 16_384;
+const MAX_COMMAND_LENGTH = 16_384;
+const MAX_PROCESS_TABLE_BYTES = 8 * 1024 * 1024;
 const MAX_ANCESTOR_HOPS = 8;
 const MAX_APP_ANCESTOR_HOPS = 3;
 const MAX_DESCENDANTS_SCANNED = 4_096;
+const HOSTS = new Set(["claude-code", "codex", "cursor"]);
 
-// The bridge appears in the process table either as recall-node exec'd onto
-// bridge/index.mjs (any host's --client-name) or as the Recall-signed
-// recall-mcp-bridge helper that index.mjs hands off to. The hook's own
-// process runs hooks/journal-context.mjs and matches neither.
-export const BRIDGE_COMMAND_PATTERN = /recall-mcp-bridge|bridge\/index\.mjs/;
+function verdict(status, details = {}) {
+  return { status, source: "process_snapshot", ...details };
+}
 
-// The Claude Code session process: the lowercase `claude` CLI binary (native
-// install, Homebrew, or the desktop app's bundled
-// .../claude.app/Contents/MacOS/claude) or a node invocation of the npm CLI.
-// Deliberately case-sensitive so the desktop app binary (MacOS/Claude) and
-// its helper processes are never mistaken for a session host.
-export const CLAUDE_HOST_COMMAND_PATTERN =
-  /(?:^|[\s/])claude(?:\s|$)|claude-code\/cli\.js/;
-
-// Shell layers a host may leave between itself and the hook process (hook
-// commands run through a shell, and recall-node execs node). These are
-// skipped while walking up; the first non-shell ancestor is presumed to be
-// the process that spawned the hook — the session's host. Shells match at
-// any path (observed live: /opt/homebrew/bin/bash) and as login-shell argv0
-// (-zsh); recall-node covers the case where a shell did not exec it away.
-const WRAPPER_COMMAND_PATTERN =
-  /(?:^|\/)-?(?:sh|bash|zsh|dash|fish)(?:\s|$)|recall-node/;
-
-// The hook re-sanitizes the session id before trusting it as a filename
-// component, even though callers already validate it.
-const SESSION_TOKEN_PATTERN = /^[\w.:-]{1,128}$/;
+function validRow(row) {
+  return (
+    Number.isSafeInteger(row?.pid) &&
+    row.pid > 0 &&
+    Number.isSafeInteger(row?.ppid) &&
+    row.ppid >= 0 &&
+    typeof row?.command === "string" &&
+    row.command.length > 0 &&
+    row.command.length <= MAX_COMMAND_LENGTH &&
+    !/[\u0000-\u001f\u007f]/.test(row.command)
+  );
+}
 
 export function parseProcessTable(text) {
-  if (typeof text !== "string") return null;
+  if (typeof text !== "string" || text.length > MAX_PROCESS_TABLE_BYTES)
+    return null;
   const rows = [];
   for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
     const match = line.match(/^\s*(\d+)\s+(\d+)\s+(.+)$/);
-    if (!match) continue;
-    rows.push({
+    // A partial table cannot establish absence.
+    if (!match || rows.length >= MAX_PROCESS_ROWS) return null;
+    const row = {
       pid: Number(match[1]),
       ppid: Number(match[2]),
       command: match[3],
-    });
+    };
+    if (!validRow(row)) return null;
+    rows.push(row);
   }
   return rows.length > 0 ? rows : null;
 }
@@ -74,32 +54,138 @@ export function parseProcessTable(text) {
 export function readProcessTable(spawn = spawnSync) {
   const result = spawn("ps", ["-axww", "-o", "pid=,ppid=,command="], {
     encoding: "utf8",
-    maxBuffer: 8 * 1024 * 1024,
+    maxBuffer: MAX_PROCESS_TABLE_BYTES,
     stdio: ["ignore", "pipe", "ignore"],
     timeout: PS_TIMEOUT_MS,
     windowsHide: true,
   });
-  if (result.error || result.status !== 0 || typeof result.stdout !== "string") {
+  if (result.error || result.status !== 0 || typeof result.stdout !== "string")
     return null;
-  }
   return parseProcessTable(result.stdout);
+}
+
+// ps does not escape argv consistently. Recognize an executable/script only
+// at its command position, never a host name occurring inside a prompt or a
+// shell command. Unrecognized paths (including ambiguous spaces) stay unknown.
+function firstArgument(command) {
+  const match = command.match(/^(?:"([^"\n]+)"|'([^'\n]+)'|(\S+))(?:\s+|$)/);
+  return match
+    ? {
+        value: match[1] ?? match[2] ?? match[3],
+        rest: command.slice(match[0].length),
+      }
+    : null;
+}
+
+function executable(command) {
+  // Claude desktop's per-session CLI has this known, unquoted space in ps.
+  const bundledClaude = command.match(
+    /^\/(?:[^\s/]+\/)*Library\/Application Support\/Claude\/claude-code\/[^\s/]+\/claude\.app\/Contents\/MacOS\/claude(?:\s+|$)/,
+  );
+  if (bundledClaude)
+    return { value: "claude", rest: command.slice(bundledClaude[0].length) };
+  return firstArgument(command);
+}
+
+function basename(value) {
+  return value.slice(value.lastIndexOf("/") + 1);
+}
+
+function hostProcess(command) {
+  const process = executable(command);
+  if (!process) return null;
+  const name = basename(process.value);
+  if (name === "claude") return { host: "claude-code", scope: "session" };
+  if (name === "codex")
+    return {
+      host: "codex",
+      // TUI and app-server can retain multiple conversations/subagents.
+      // A mode name alone cannot establish isolated connector ownership.
+      scope: /(?:^|\s)(?:exec|e)(?:\s|$)/.test(process.rest)
+        ? "unverified"
+        : "shared",
+    };
+  if (name === "node") {
+    const script = firstArgument(process.rest)?.value;
+    if (
+      script &&
+      (basename(script) === "claude" ||
+        /(?:^|\/)@anthropic-ai\/claude-code\/cli\.js$/.test(script))
+    )
+      return { host: "claude-code", scope: "session" };
+  }
+  // The official installer uses this branded path. Its current per-session
+  // ownership has not been exercised, so recognition supplies guidance only.
+  // A generic `agent` is not Cursor evidence (other products use that name).
+  if (
+    /\/(?:\.local\/share\/)?cursor-agent\/versions\/[^/]+\/cursor-agent$/.test(
+      process.value,
+    )
+  )
+    return { host: "cursor", scope: "unverified" };
+  if (name === "Claude") return { host: "claude-code", scope: "shared" };
+  if (name === "Codex") return { host: "codex", scope: "shared" };
+  if (name === "Cursor" || /\/Cursor\.app\/Contents\//.test(process.value))
+    return { host: "cursor", scope: "shared" };
+  return null;
+}
+
+function isShellWrapper(command) {
+  const process = executable(command);
+  return (
+    process && /^-?(?:sh|bash|zsh|dash|fish)$/.test(basename(process.value))
+  );
+}
+
+function recallScript(command) {
+  const process = executable(command);
+  if (!process || basename(process.value) !== "node") return null;
+  const script = firstArgument(process.rest)?.value;
+  // Match Recall's source/cache layouts, not another plugin's bridge/index.
+  return typeof script === "string"
+    ? (script.match(
+        /(?:^|\/)recall\/(?:[^/]+\/){0,2}bridge\/(index|session-adapter)\.mjs$/,
+      )?.[1] ?? null)
+    : null;
+}
+
+function isBridge(command) {
+  const process = executable(command);
+  return (
+    process &&
+    (basename(process.value) === "recall-mcp-bridge" ||
+      recallScript(command) === "index")
+  );
+}
+
+function isBridgeWrapper(command) {
+  if (isShellWrapper(command) || recallScript(command) === "session-adapter")
+    return true;
+  // A known desktop launch wrapper does not own a separate agent session.
+  const process = executable(command);
+  return (
+    process &&
+    /\/Claude\.app\/Contents\/Helpers\/disclaimer$/.test(process.value)
+  );
 }
 
 export function classifyBridgePresence(
   rows,
   startPid,
-  {
-    bridgeCommandPattern = BRIDGE_COMMAND_PATTERN,
-    hostCommandPattern = CLAUDE_HOST_COMMAND_PATTERN,
-  } = {},
+  { host = "claude-code" } = {},
 ) {
-  if (!Array.isArray(rows) || rows.length === 0) {
-    return { status: "unknown", reason: "no_process_table" };
-  }
+  if (!HOSTS.has(host))
+    return verdict("unknown", { reason: "unsupported_host" });
+  if (!Array.isArray(rows) || rows.length === 0)
+    return verdict("unknown", { reason: "no_process_table" });
+  if (rows.length > MAX_PROCESS_ROWS)
+    return verdict("unknown", { reason: "process_scan_limit" });
 
   const rowsByPid = new Map();
   const childrenByPpid = new Map();
   for (const row of rows) {
+    if (!validRow(row) || rowsByPid.has(row.pid))
+      return verdict("unknown", { reason: "invalid_process_table" });
     rowsByPid.set(row.pid, row);
     const siblings = childrenByPpid.get(row.ppid);
     if (siblings) siblings.push(row);
@@ -107,138 +193,127 @@ export function classifyBridgePresence(
   }
 
   let current = rowsByPid.get(startPid);
-  if (!current) return { status: "unknown", reason: "start_process_not_listed" };
-
-  let host = null;
+  if (!current)
+    return verdict("unknown", { reason: "start_process_not_listed" });
+  const ownAncestors = new Set([startPid]);
+  let session = null;
   for (let hop = 0; hop < MAX_ANCESTOR_HOPS; hop += 1) {
     const parent = rowsByPid.get(current.ppid);
-    if (!parent || parent.pid === current.pid || parent.pid <= 1) break;
-    if (!WRAPPER_COMMAND_PATTERN.test(parent.command)) {
-      host = parent;
+    if (!parent || parent.pid <= 1) break;
+    if (ownAncestors.has(parent.pid))
+      return verdict("unknown", { reason: "invalid_process_table" });
+    if (!isShellWrapper(parent.command)) {
+      session = parent;
       break;
     }
+    ownAncestors.add(parent.pid);
     current = parent;
   }
-  if (!host) return { status: "unknown", reason: "no_host_ancestor" };
-  if (!hostCommandPattern.test(host.command)) {
-    return {
-      status: "unknown",
+  if (!session) return verdict("unknown", { reason: "no_host_ancestor" });
+  const identity = hostProcess(session.command);
+  if (identity?.host !== host)
+    return verdict("unknown", {
       reason: "host_not_recognized",
-      hostPid: host.pid,
-      hostCommand: host.command,
-    };
-  }
+      hostPid: session.pid,
+    });
+  if (identity.scope !== "session")
+    return verdict("unknown", {
+      reason:
+        identity.scope === "shared"
+          ? "shared_host_process"
+          : "unverified_cli_boundary",
+      hostPid: session.pid,
+    });
 
-  // BFS over a subtree for a bridge-looking command. The start process's own
-  // subtree is skipped (it holds only this detection's helpers, like the ps
-  // call itself), and pruned subtrees — other sessions' host processes — are
-  // not descended into.
-  const findBridgeDescendant = (rootPid, prunePattern = null) => {
-    const queue = [rootPid];
+  // Prune every known host boundary, including nested and other-agent runs.
+  // Finding one of their bridges says nothing about the requested session.
+  const findBridgeDescendant = (rootPid) => {
+    const queue = [{ pid: rootPid, attributed: true }];
+    const visited = new Set([rootPid]);
     let scanned = 0;
-    while (queue.length > 0 && scanned < MAX_DESCENDANTS_SCANNED) {
-      const children = childrenByPpid.get(queue.shift()) ?? [];
-      for (const child of children) {
-        scanned += 1;
-        if (child.pid === startPid) continue;
-        if (bridgeCommandPattern.test(child.command)) return child;
-        if (prunePattern?.test(child.command)) continue;
-        queue.push(child.pid);
+    let unattributedBridge;
+    for (let index = 0; index < queue.length; index += 1) {
+      const current = queue[index];
+      for (const child of childrenByPpid.get(current.pid) ?? []) {
+        if (++scanned > MAX_DESCENDANTS_SCANNED)
+          return { reason: "process_scan_limit" };
+        if (visited.has(child.pid)) return { reason: "invalid_process_table" };
+        visited.add(child.pid);
+        if (ownAncestors.has(child.pid) || hostProcess(child.command)) continue;
+        if (isBridge(child.command)) {
+          if (current.attributed) return { bridge: child };
+          unattributedBridge ??= child;
+          continue;
+        }
+        // An unknown owner may be another agent, even when its executable is
+        // merely called `agent` or `node`. Its bridge cannot prove this run's
+        // connector. Keep looking for an independently attributable bridge.
+        queue.push({
+          pid: child.pid,
+          attributed: current.attributed && isBridgeWrapper(child.command),
+        });
       }
     }
-    return null;
+    return { unattributedBridge };
   };
 
-  const bridge = findBridgeDescendant(host.pid);
-  if (bridge) {
-    return {
-      status: "present",
-      hostPid: host.pid,
-      hostCommand: host.command,
-      bridgePid: bridge.pid,
-      bridgeCommand: bridge.command,
-    };
-  }
+  const found = findBridgeDescendant(session.pid);
+  if (found.reason)
+    return verdict("unknown", { reason: found.reason, hostPid: session.pid });
+  if (found.bridge)
+    return verdict("present", {
+      hostPid: session.pid,
+      bridgePid: found.bridge.pid,
+    });
+  if (found.unattributedBridge)
+    return verdict("unknown", {
+      reason: "unattributed_descendant_bridge",
+      hostPid: session.pid,
+      bridgePid: found.unattributedBridge.pid,
+    });
 
-  // A desktop host can also attach a session's server to an app-level
-  // ancestor instead of the session process (observed live: a disclaimer-
-  // wrapped bridge as a direct child of Claude.app while sessions' own
-  // bridges were children of their claude CLI processes). An app-level
-  // bridge cannot be attributed to one session from the tree alone, so its
-  // presence softens "absent" to "unknown". Sibling sessions' bridges never
-  // mute detection: any ancestor subtree rooted at a process matching the
-  // host pattern — another session, or a wrapper around one — is pruned.
-  let ancestor = host;
+  // Some desktop clients attach a bridge above the session CLI. Such a bridge
+  // is unattributable, not proof of current-session presence or absence.
+  let ancestor = session;
+  const visitedAncestors = new Set([session.pid]);
   for (let hop = 0; hop < MAX_APP_ANCESTOR_HOPS; hop += 1) {
     const parent = rowsByPid.get(ancestor.ppid);
-    if (!parent || parent.pid === ancestor.pid || parent.pid <= 1) break;
-    const appLevelBridge = findBridgeDescendant(parent.pid, hostCommandPattern);
-    if (appLevelBridge) {
-      return {
-        status: "unknown",
+    if (!parent || parent.pid <= 1) break;
+    if (visitedAncestors.has(parent.pid))
+      return verdict("unknown", {
+        reason: "invalid_process_table",
+        hostPid: session.pid,
+      });
+    visitedAncestors.add(parent.pid);
+    const appLevel = findBridgeDescendant(parent.pid);
+    if (appLevel.reason)
+      return verdict("unknown", {
+        reason: appLevel.reason,
+        hostPid: session.pid,
+      });
+    const bridge = appLevel.bridge ?? appLevel.unattributedBridge;
+    if (bridge)
+      return verdict("unknown", {
         reason: "unattributed_app_level_bridge",
-        hostPid: host.pid,
-        hostCommand: host.command,
-        bridgePid: appLevelBridge.pid,
-        bridgeCommand: appLevelBridge.command,
-      };
-    }
+        hostPid: session.pid,
+        bridgePid: bridge.pid,
+      });
     ancestor = parent;
   }
-
-  return { status: "absent", hostPid: host.pid, hostCommand: host.command };
+  return verdict("absent", { hostPid: session.pid });
 }
 
-export function bridgeStatusCachePath(
-  sessionId,
-  temporaryDirectory = os.tmpdir(),
-) {
-  if (typeof sessionId !== "string" || !SESSION_TOKEN_PATTERN.test(sessionId)) {
-    return null;
-  }
-  return path.join(temporaryDirectory, `recall-bridge-status-${sessionId}.json`);
-}
-
-// Only a positive verdict is cached: a bridge observed once stays valid for
-// the session, so healthy sessions pay for one process walk total. Absence is
-// re-walked on every call because a host could in principle start the server
-// after the first prompt, and a pinned false "absent" would nag forever; the
-// broken session that keeps re-walking is the rare case, and one ps scan per
-// prompt is well inside the hook budget. "unknown" is never cached.
+// No positive cache: a bridge can exit or restart during the same thread.
+// Each result is fresh, bounded, advisory evidence; no argv or session IDs
+// are written to disk, and old recall-bridge-status files are never read.
 export function detectBridgeStatus({
-  sessionId = null,
+  host = "claude-code",
   startPid = process.pid,
   readTable = readProcessTable,
-  temporaryDirectory = os.tmpdir(),
-  bridgeCommandPattern,
-  hostCommandPattern,
 } = {}) {
-  const cachePath = bridgeStatusCachePath(sessionId, temporaryDirectory);
-  if (cachePath) {
-    try {
-      const cached = JSON.parse(fs.readFileSync(cachePath, "utf8"));
-      if (cached?.status === "present") return cached;
-    } catch {
-      // No usable cache; fall through to a fresh walk.
-    }
-  }
-
-  let verdict;
   try {
-    verdict = classifyBridgePresence(readTable(), startPid, {
-      ...(bridgeCommandPattern ? { bridgeCommandPattern } : {}),
-      ...(hostCommandPattern ? { hostCommandPattern } : {}),
-    });
+    return classifyBridgePresence(readTable(), startPid, { host });
   } catch {
-    verdict = { status: "unknown", reason: "process_walk_failed" };
+    return verdict("unknown", { reason: "process_walk_failed" });
   }
-
-  if (cachePath && verdict.status === "present") {
-    try {
-      fs.writeFileSync(cachePath, JSON.stringify(verdict));
-    } catch {
-      // Caching is an optimization; detection still succeeded.
-    }
-  }
-  return verdict;
 }

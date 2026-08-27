@@ -1,7 +1,8 @@
 # Conversation-segment recording pilot
 
 **Status: implemented behind explicit v6 opt-in; actual host certification is
-still required.** Default v1–v5 behavior and hook registrations stay unchanged.
+still required.** Existing v1–v5 journaling protocols and hook registrations
+stay unchanged; connection diagnostics also cover Codex and Cursor.
 No installed cache, user config, hook trust, or production sessions are modified
 by this implementation.
 
@@ -73,6 +74,44 @@ app mutation. Official contracts:
 [Claude hooks](https://code.claude.com/docs/en/hooks),
 [Codex hooks](https://learn.chatgpt.com/docs/hooks), and
 [Codex plugin hooks](https://developers.openai.com/plugins/build/plugins#bundled-mcp-servers-and-lifecycle-hooks).
+
+### Connector diagnostics are a separate host capability
+
+Version 0.32.0 builds on the merged missing-connector work in
+[PR #52](https://github.com/NerdOutInc/recall-plugins/pull/52). The normal journal
+hooks and doctor now select Claude Code, Codex, or Cursor explicitly. A fresh,
+bounded process snapshot supplies advisory evidence only; positive results
+are never cached and raw argv is neither returned nor persisted.
+
+| Host boundary | Process verdict | Required next evidence |
+| --- | --- | --- |
+| Recognized Claude Code session CLI | Present or absent in that snapshot | This conversation's Recall read tools and actual call outcome |
+| Shared Claude app ancestor | Unknown | This conversation's tools |
+| Codex app-server, terminal UI, resume, fork | Unknown: shared process | This conversation's tools |
+| Other Codex CLI modes, including exec | Unknown: ownership unverified | A demonstrated conversation boundary and current tools |
+| Cursor IDE | Unknown: shared process | This conversation's tools |
+| Branded Cursor CLI | Unknown: ownership unverified | Actual runtime boundary proof and current tools |
+
+The inspected [Codex 0.149.1 terminal UI source](https://github.com/openai/codex/blob/rust-v0.149.1/codex-rs/tui/src/app.rs#L596)
+retains multiple thread listeners and side threads in one app session. A CLI
+mode name therefore cannot prove connector ownership. Cursor's installed MCP
+extension operates at workspace scope. Its
+[official CLI installer](https://cursor.com/install) identifies a branded binary
+path, but that alone does not establish per-conversation ownership. Generic
+`agent` or `node` executable names are not Cursor identity. These are evidence
+snapshots, not host version gates.
+
+For Codex and Cursor, an unknown process verdict adds a current-tool check to
+the existing journal context. It does not silently assume connection health,
+change journal modes, or authorize automatic recording. Version 6 retains its
+adapter context even when the bridge is missing or unknown.
+
+Doctor is passive unless the user authorizes `--probe`; a fresh initialize can
+trigger consent or OAuth and proves only that new connection. Optional
+`--session-tools available|missing|unknown` reports the caller's current **read**
+tool inventory. It is not attestation, a successful call, write permission, or
+recording status. Missing write tools alone can reflect policy or capability.
+Cursor diagnostics do not enable a Cursor recording profile.
 
 ## Local tools and routing
 
@@ -173,8 +212,11 @@ Unknown owners and interrupted reaper claims remain busy. Age never grants
 permission to steal a lock. Corrupt, symlinked, extra-key, or scope-substituted
 state fails closed without replay.
 
-Host frames are capped at 64 KiB, native frames at 4 MiB, outstanding requests
-at 128, and simultaneous local calls at 16. Client request IDs are remapped to
+Host frames are capped at 64 KiB, adapter-owned replies at 4 MiB, outstanding
+requests at 128, and simultaneous local calls at 16. Ordinary native replies
+retain the existing transport's size behavior, including large full-note reads
+with the pilot off or on. An oversized adapter-owned reply rejects that call
+without disconnecting ordinary traffic. Client request IDs are remapped to
 avoid internal collisions; late internal replies are consumed locally. A hook
 processes at most four queued events within a 4-second call budget (1 second
 on Claude clear). Transport uncertainty gets at most one identical retry;

@@ -79,6 +79,16 @@ message telling the agent to open Recall. A denied or revoked grant is
 remembered so a restarting agent cannot re-prompt in a loop; clear it with
 **Allow again** under Settings → MCP Server → Local bridge access.
 
+For missing tools, use the **doctor** skill in Claude Code, Codex, or Cursor.
+It is passive by default and distinguishes host process evidence from the
+current conversation's tool inventory. Codex and Cursor can share processes
+across conversations, so a running bridge does not establish that this chat
+has Recall available. Their journal hooks request a current-tool check and
+report missing coverage without silently switching journal modes. Doctor's
+optional `--probe` needs explicit user permission and tests a new connection,
+not the conversation's existing connector. Neither a read tool nor a healthy
+connection proves a work session is being recorded.
+
 Each session names the transport it used in the host's MCP log
 (`[recall] transport: local-socket` or `transport: oauth-http`) — the fastest
 way to tell which path a connection took.

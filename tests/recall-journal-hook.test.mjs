@@ -1688,7 +1688,10 @@ test("uses repository-first v5 routing without exposing the default Project", ()
   assert.match(context, /as remoteUrl/);
   assert.match(context, /as repoRootBasename/);
   assert.match(context, /fix the parameters .* and retry once/);
-  assert.match(context, /first user-visible reply instead of degrading silently/);
+  assert.match(
+    context,
+    /first user-visible reply instead of degrading silently/,
+  );
   assert.equal(context.includes("default-workspace-id"), false);
   assert.equal(context.includes("default-project-id"), false);
   assert.equal(context.includes("General Memory"), false);
@@ -1896,10 +1899,13 @@ const claudeV5Input = {
   session_id: v5ThreadId,
 };
 
-function claudeAdjustedV5Fixture(filename) {
-  return readFixture("v5", filename)
+function claudeAdjustedV5Fixture(filename, bridgePresent = false) {
+  const fixture = readFixture("v5", filename)
     .replace("Codex", "Claude Code")
     .replace("$recall:recall-journal", "/recall:recall-journal");
+  return bridgePresent
+    ? fixture.split(" Current-session Recall connector presence is unknown")[0]
+    : fixture;
 }
 
 test("v5 warns instead of reciting the protocol when the session has no bridge", () => {
@@ -1921,7 +1927,12 @@ test("v5 warns instead of reciting the protocol when the session has no bridge",
   assert.match(context, /Verify instead of trusting this hint/);
   assert.match(context, /resolve_project, open_session/);
   assert.match(context, /say so plainly in your first user-visible reply/);
-  assert.match(context, /starting a new session/);
+  assert.match(context, /Starting a new session/);
+  assert.match(context, /may help/);
+  assert.match(
+    context,
+    /not tool availability, authorization, or recording proof/,
+  );
   assert.match(context, /\/recall:doctor/);
   assert.match(context, /never create a legacy journal note/);
   // The full protocol recital is withheld: no session opens in this state.
@@ -1948,7 +1959,7 @@ test("v5 keeps the standard instructions when the session bridge is present", ()
       .additionalContext;
     assert.equal(
       context,
-      claudeAdjustedV5Fixture("repository-context.txt"),
+      claudeAdjustedV5Fixture("repository-context.txt", true),
       bridgeCommand,
     );
   }
@@ -1980,14 +1991,17 @@ test("v5 keeps the standard instructions when detection cannot decide", () => {
   }
 });
 
-test("v5 bridge detection runs only for Claude Code", () => {
+test("v5 checks Codex with its requested host and reports current-tool uncertainty", () => {
   const markerPath = path.join(makeTemporaryDirectory(), "ps-invocations");
   const result = runHook({
     environment: {
       ...cleanEnvironment(),
       CODEX_HOME: path.join(fixtureRoot, "v5"),
       PLUGIN_ROOT: pluginRoot,
-      PATH: makeFakePsDirectory({ markerPath }),
+      PATH: makeFakePsDirectory({
+        markerPath,
+        hostCommand: "codex app-server",
+      }),
     },
     input: claudeV5Input,
   });
@@ -1996,10 +2010,12 @@ test("v5 bridge detection runs only for Claude Code", () => {
   const context = JSON.parse(result.stdout).hookSpecificOutput
     .additionalContext;
   assert.equal(context, readFixture("v5", "repository-context.txt"));
-  assert.equal(fs.existsSync(markerPath), false);
+  assert.match(context, /Current-session Recall connector presence is unknown/);
+  assert.match(context, /Verify the current conversation's tools/);
+  assert.equal(fs.readFileSync(markerPath, "utf8"), ".");
 });
 
-test("v5 caches a present bridge verdict per session", () => {
+test("v5 checks a previously present bridge again on every prompt", () => {
   const markerPath = path.join(makeTemporaryDirectory(), "ps-invocations");
   const environment = claudeV5Environment({
     psDirectory: makeFakePsDirectory({
@@ -2016,9 +2032,9 @@ test("v5 caches a present bridge verdict per session", () => {
   assert.equal(second.status, 0);
   assert.equal(
     JSON.parse(second.stdout).hookSpecificOutput.additionalContext,
-    claudeAdjustedV5Fixture("repository-context.txt"),
+    claudeAdjustedV5Fixture("repository-context.txt", true),
   );
-  assert.equal(fs.readFileSync(markerPath, "utf8"), ".");
+  assert.equal(fs.readFileSync(markerPath, "utf8"), "..");
 });
 
 test("v5 re-checks an absent bridge on every prompt", () => {
@@ -2056,4 +2072,247 @@ test("rejects a v5 config with no default Project", () => {
 
   assert.equal(result.status, 0);
   assert.equal(result.stdout.trim(), "");
+});
+
+test("v5 Cursor checks shared and unverified hosts without adopting a neighboring bridge", () => {
+  for (const hostCommand of [
+    "/Applications/Cursor.app/Contents/MacOS/Cursor",
+    "/Users/x/.local/share/cursor-agent/versions/example/cursor-agent",
+    "/Users/x/.grok/bin/agent",
+  ]) {
+    const markerPath = path.join(makeTemporaryDirectory(), "ps-invocations");
+    const result = runHook({
+      args: ["--host", "cursor"],
+      environment: {
+        ...cleanEnvironment(),
+        CURSOR_HOME: path.join(fixtureRoot, "v5"),
+        PATH: makeFakePsDirectory({
+          hostCommand,
+          bridgeCommand:
+            "node /plugins/recall/bridge/index.mjs --client-name Cursor",
+          markerPath,
+        }),
+      },
+      input: {
+        hook_event_name: "sessionStart",
+        workspace_roots: [repositoryRoot],
+        conversation_id: v5ThreadId,
+      },
+    });
+    assert.equal(result.status, 0);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.hookSpecificOutput, undefined);
+    assert.match(output.additional_context, /enabled for Cursor/);
+    assert.match(
+      output.additional_context,
+      /Current-session Recall connector presence is unknown/,
+    );
+    assert.match(
+      output.additional_context,
+      /Verify the current conversation's tools/,
+    );
+    assert.match(output.additional_context, /Load \/recall-journal/);
+    assert.doesNotMatch(
+      output.additional_context,
+      /no Recall bridge child|connector simply started late/,
+    );
+    assert.equal(fs.readFileSync(markerPath, "utf8"), ".");
+  }
+});
+
+test("v5 Codex and Cursor never adopt a Claude process as their own host", () => {
+  for (const host of ["codex", "cursor"]) {
+    const result = runHook({
+      args: ["--host", host],
+      environment: {
+        ...cleanEnvironment(),
+        CODEX_HOME: path.join(fixtureRoot, "v5"),
+        CURSOR_HOME: path.join(fixtureRoot, "v5"),
+        PATH: makeFakePsDirectory(),
+      },
+      input: {
+        hook_event_name:
+          host === "cursor" ? "sessionStart" : "UserPromptSubmit",
+        cwd: repositoryRoot,
+        session_id: v5ThreadId,
+      },
+    });
+    const output = JSON.parse(result.stdout);
+    const context =
+      output.additional_context ?? output.hookSpecificOutput.additionalContext;
+    assert.match(
+      context,
+      /Current-session Recall connector presence is unknown/,
+    );
+    assert.doesNotMatch(context, /no Recall bridge child/);
+  }
+});
+
+test("v5 notices a previously present connector exiting despite an old cache file", () => {
+  const temporaryDirectory = makeTemporaryDirectory();
+  const markerPath = path.join(makeTemporaryDirectory(), "ps-invocations");
+  const first = runHook({
+    environment: claudeV5Environment({
+      psDirectory: makeFakePsDirectory({
+        markerPath,
+        bridgeCommand:
+          "node /plugins/recall/bridge/index.mjs --client-name Claude",
+      }),
+      temporaryDirectory,
+    }),
+    input: claudeV5Input,
+  });
+  assert.match(
+    JSON.parse(first.stdout).hookSpecificOutput.additionalContext,
+    /Version 5 is the structured writer/,
+  );
+  const cachePath = path.join(
+    temporaryDirectory,
+    "recall-bridge-status-" + v5ThreadId + ".json",
+  );
+  fs.writeFileSync(
+    cachePath,
+    JSON.stringify({ status: "present", hostPid: 500, bridgePid: 502 }),
+  );
+  const second = runHook({
+    environment: claudeV5Environment({
+      psDirectory: makeFakePsDirectory({ markerPath }),
+      temporaryDirectory,
+    }),
+    input: claudeV5Input,
+  });
+  assert.equal(
+    JSON.parse(second.stdout).hookSpecificOutput.additionalContext,
+    readFixture("v5", "bridge-missing-context.txt"),
+  );
+  assert.equal(fs.readFileSync(markerPath, "utf8"), "..");
+  assert.deepEqual(fs.readdirSync(temporaryDirectory), [
+    path.basename(cachePath),
+  ]);
+});
+
+test("v1 through v4 do not run connector detection or alter their legacy contracts", () => {
+  for (const version of [1, 2, 3, 4]) {
+    const markerPath = path.join(makeTemporaryDirectory(), "ps-invocations");
+    const result = runHook({
+      environment: {
+        ...cleanEnvironment(),
+        CLAUDE_CONFIG_DIR: path.join(fixtureRoot, "v" + version),
+        PATH: makeFakePsDirectory({ markerPath }),
+      },
+      input: claudeV5Input,
+    });
+    assert.equal(result.status, 0);
+    assert.ok(result.stdout.trim());
+    assert.equal(fs.existsSync(markerPath), false);
+  }
+});
+
+function v6ConfigDirectory() {
+  return makeConfigDirectory({
+    version: 6,
+    projectMemory: {
+      enabled: true,
+      defaultProject: {
+        workspace: { id: "test-workspace", name: "Workspace" },
+        recallProject: { id: "test-project", name: "Project" },
+      },
+    },
+    sessionLifecycle: { enabled: true },
+  });
+}
+
+test("v6 missing and unknown connector hints preserve adapter status and no-downgrade rules", () => {
+  for (const [host, hostCommand, bridgeCommand, hint] of [
+    ["claude-code", "claude", null, /no Recall bridge child/],
+    ["codex", "codex app-server", null, /connector presence is unknown/],
+    [
+      "codex",
+      "codex app-server",
+      "node /plugins/recall/bridge/index.mjs --client-name Codex",
+      /connector presence is unknown/,
+    ],
+    ["codex", "codex exec --json", null, /connector presence is unknown/],
+  ]) {
+    const directory = v6ConfigDirectory();
+    const originalConfig = fs.readFileSync(
+      path.join(directory, "recall-journal.json"),
+      "utf8",
+    );
+    const markerPath = path.join(makeTemporaryDirectory(), "ps-invocations");
+    const result = runHook({
+      args: ["--host", host],
+      environment: {
+        ...cleanEnvironment(),
+        CLAUDE_CONFIG_DIR: directory,
+        CODEX_HOME: directory,
+        PATH: makeFakePsDirectory({ hostCommand, bridgeCommand, markerPath }),
+      },
+      input: { ...claudeV5Input, agent_id: "test-participant" },
+    });
+    assert.equal(result.status, 0);
+    const context = JSON.parse(result.stdout).hookSpecificOutput
+      .additionalContext;
+    assert.match(context, /opt-in version 6 conversation-segment adapter/);
+    assert.match(context, hint);
+    assert.match(
+      context,
+      /Check whether begin_session_recording and get_session_recording_status are callable/,
+    );
+    assert.match(
+      context,
+      /Only an authoritative adapter result with a supported participant identity/,
+    );
+    assert.match(
+      context,
+      /Never downgrade version 6, call open_session, or create a legacy journal as a fallback/,
+    );
+    assert.match(context, /doctor/);
+    assert.doesNotMatch(
+      context,
+      /journal normally under version 5|Version 5 is the structured writer/,
+    );
+    assert.equal(fs.readFileSync(markerPath, "utf8"), ".");
+    assert.equal(
+      fs.readFileSync(path.join(directory, "recall-journal.json"), "utf8"),
+      originalConfig,
+    );
+    assert.deepEqual(fs.readdirSync(directory), ["recall-journal.json"]);
+  }
+});
+
+test("v6 unsupported participant and Cursor remain unavailable rather than opening a v5 session", () => {
+  const directory = v6ConfigDirectory();
+  const result = runHook({
+    args: ["--host", "codex"],
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: directory,
+      PATH: makeFakePsDirectory({ hostCommand: "codex app-server" }),
+    },
+    input: { ...claudeV5Input, agent_id: "bad identity" },
+  });
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(context, /does not establish a supported participant identity/);
+  assert.match(context, /Never substitute the parent or guess main/);
+  assert.match(context, /connector presence is unknown/);
+  assert.doesNotMatch(context, /Local tool identity:/);
+
+  const markerPath = path.join(makeTemporaryDirectory(), "ps-invocations");
+  const cursor = runHook({
+    args: ["--host", "cursor"],
+    environment: {
+      ...cleanEnvironment(),
+      CURSOR_HOME: directory,
+      PATH: makeFakePsDirectory({
+        hostCommand: "/Applications/Cursor.app/Contents/MacOS/Cursor",
+        markerPath,
+      }),
+    },
+    input: { hook_event_name: "sessionStart", conversation_id: v5ThreadId },
+  });
+  assert.equal(cursor.status, 0);
+  assert.equal(cursor.stdout, "");
+  assert.equal(fs.existsSync(markerPath), false);
 });
