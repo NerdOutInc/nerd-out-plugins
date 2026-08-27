@@ -188,11 +188,18 @@ finish it. After local state loss, an eligible begin with the reserved UUID and
 advances an unmaterialized generation. Status alone never materializes it.
 
 Local output adds authorized exact `scope` for checkpoint/close calls,
-`unresolvedLifecycleEvents`, `pendingDeliveriesAvailable`, and
+optional `unresolvedLifecycleEvents`, `pendingDeliveriesAvailable`, and
 `eventOrigin: "client_reported"`. Omitted delivery
 counts mean unknown, not zero. A recording successor never hides pending
 predecessor deliveries. Recording acknowledgement does not claim that prose or
 a Today card was saved.
+
+`unresolvedLifecycleEvents` is present only after a fresh account handshake and
+a successful read of that account's run queue. Omission means unread or
+unavailable coverage; zero means a known empty queue. The durable diagnostic
+uses `retryState: "unknown"` when that coverage is unavailable, preserving the
+account's pending request bytes until authenticated recovery. Checkpoint and
+close delivery coverage remains separate in `pendingDeliveries`.
 
 ## Durability, races, and limits
 
