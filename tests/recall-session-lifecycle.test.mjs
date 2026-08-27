@@ -3,8 +3,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import test from "node:test";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { createInterface } from "node:readline";
+import { PassThrough } from "node:stream";
 import {
   APP_LIFECYCLE_TOOL,
   LOCAL_HOOK_TOOL,
@@ -26,8 +29,10 @@ import {
 } from "../plugins/recall/bridge/session-lifecycle-routing.mjs";
 import {
   JsonLineReader,
+  MAX_LIFECYCLE_RESPONSE_BYTES,
   SessionRpcInterposer,
 } from "../plugins/recall/bridge/session-rpc.mjs";
+import { startSessionAdapter } from "../plugins/recall/bridge/session-adapter.mjs";
 import { lifecycleContext } from "../plugins/recall/hooks/session-lifecycle-context.mjs";
 import { lifecycleHookProfile } from "../plugins/recall/hooks/session-lifecycle-profiles.mjs";
 
@@ -1304,20 +1309,221 @@ test("repository routing never adopts an origin supplied only by global Git conf
 
 test("NDJSON framing handles split Unicode and fails closed on oversized or malformed frames", () => {
   const seen = [];
+  const sizes = [];
   let failed = 0;
   const reader = new JsonLineReader(
     100,
-    (value) => seen.push(value),
+    (value, bytes) => {
+      seen.push(value);
+      sizes.push(bytes);
+    },
     () => failed++,
   );
   const frame = Buffer.from('{"text":"café"}\n');
   for (const byte of frame) reader.push(Buffer.from([byte]));
   assert.deepEqual(seen, [{ text: "café" }]);
+  reader.push(Buffer.from('{"next":'));
+  reader.push(Buffer.from('"line"}\n\n{}\n'));
+  assert.deepEqual(seen, [{ text: "café" }, { next: "line" }, {}]);
+  assert.deepEqual(sizes, [frame.length - 1, 15, 2]);
   reader.push(Buffer.alloc(101, 65));
   reader.push(Buffer.from("{}\n"));
   assert.equal(failed, 1);
-  assert.equal(seen.length, 1);
+  assert.equal(seen.length, 3);
 });
+
+async function transportRig(t, host, journalConfig) {
+  const directory = await fs.mkdtemp(
+    path.join(os.tmpdir(), "recall-session-transport-"),
+  );
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  await fs.writeFile(
+    path.join(directory, "recall-journal.json"),
+    JSON.stringify(journalConfig),
+  );
+  const input = new PassThrough();
+  const output = new PassThrough();
+  const child = new EventEmitter();
+  child.stdin = new PassThrough();
+  child.stdout = new PassThrough();
+  const kills = [];
+  child.kill = (signal) => {
+    kills.push(signal);
+    child.emit("exit", null, signal);
+    return true;
+  };
+  const messages = (stream) => {
+    const lines = createInterface({ input: stream, crlfDelay: Infinity });
+    const iterator = lines[Symbol.asyncIterator]();
+    t.after(() => lines.close());
+    return async () => {
+      const next = await iterator.next();
+      assert.equal(next.done, false);
+      return JSON.parse(next.value);
+    };
+  };
+  const nextHost = messages(output);
+  const nextPeer = messages(child.stdin);
+  const { rpc } = startSessionAdapter({
+    argv: ["--host", host],
+    input,
+    output,
+    env: { CLAUDE_CONFIG_DIR: directory, CODEX_HOME: directory },
+    spawnProcess: () => child,
+  });
+  t.after(() => {
+    rpc.close();
+    for (const stream of [input, output, child.stdin, child.stdout])
+      stream.destroy();
+  });
+  const sendHost = (value) => input.write(`${JSON.stringify(value)}\n`);
+  const sendPeer = (value, suffix = "") => {
+    const bytes = Buffer.from(`${JSON.stringify(value)}${suffix}\n`);
+    for (let offset = 0; offset < bytes.length; offset += 65521)
+      child.stdout.write(bytes.subarray(offset, offset + 65521));
+    return bytes.length;
+  };
+  return { kills, nextHost, nextPeer, rpc, sendHost, sendPeer };
+}
+
+for (const host of ["claude-code", "codex"]) {
+  for (const [mode, journalConfig, enabled] of [
+    [
+      "legacy v5",
+      { version: 5, projectMemory: version6Config.projectMemory },
+      false,
+    ],
+    [
+      "v6 disabled",
+      { ...version6Config, sessionLifecycle: { enabled: false } },
+      false,
+    ],
+    ["v6 enabled", version6Config, true],
+  ]) {
+    test(
+      `large full-note replies preserve the connection for ${host}, ${mode}`,
+      { timeout: 5000 },
+      async (t) => {
+        const transport = await transportRig(t, host, journalConfig);
+        transport.sendHost({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+        const listRequest = await transport.nextPeer();
+        transport.sendPeer({
+          jsonrpc: "2.0",
+          id: listRequest.id,
+          result: { tools: catalog },
+        });
+        const listed = await transport.nextHost();
+        assert.equal(
+          listed.result.tools.some((tool) => tool.name === LOCAL_BEGIN_TOOL),
+          enabled,
+        );
+
+        const request = {
+          jsonrpc: "2.0",
+          id: "full-note-read",
+          method: "tools/call",
+          params: {
+            name: "read_note",
+            arguments: {
+              noteType: "NamedNote",
+              uuid: "large-note",
+              format: "both",
+            },
+          },
+        };
+        transport.sendHost(request);
+        const forwarded = await transport.nextPeer();
+        assert.deepEqual(forwarded.params, request.params);
+        const text = "Review notes. ".repeat(200_000) + '\ncafé "quoted" 📝';
+        const result = jsonResult({
+          noteType: "NamedNote",
+          uuid: "large-note",
+          title: "A large review note",
+          href: "https://recall.example/notes/large-note",
+          revision: "fixture-revision",
+          text,
+          html: `<p>${text}</p>`,
+          tags: [],
+          createdAt: 1,
+          updatedAt: 1,
+          workspace: { id: "workspace-one", name: "Workspace" },
+        });
+        const bytes = transport.sendPeer({
+          jsonrpc: "2.0",
+          id: forwarded.id,
+          result,
+        });
+        assert.ok(bytes > MAX_LIFECYCLE_RESPONSE_BYTES);
+        const received = await transport.nextHost();
+        assert.equal(received.id, request.id);
+        const digest = (value) =>
+          createHash("sha256").update(JSON.stringify(value)).digest("hex");
+        assert.equal(digest(received.result), digest(result));
+
+        const notification = {
+          jsonrpc: "2.0",
+          method: "notifications/tools/list_changed",
+        };
+        transport.sendPeer(notification);
+        assert.deepEqual(await transport.nextHost(), notification);
+        transport.sendHost({ jsonrpc: "2.0", id: 2, method: "ping" });
+        const ping = await transport.nextPeer();
+        transport.sendPeer({ jsonrpc: "2.0", id: ping.id, result: {} });
+        assert.deepEqual(await transport.nextHost(), {
+          jsonrpc: "2.0",
+          id: 2,
+          result: {},
+        });
+        assert.deepEqual(transport.kills, []);
+        assert.equal(transport.rpc.closed, false);
+      },
+    );
+  }
+}
+
+test(
+  "an oversized adapter-owned reply fails only its call and preserves the shared connection",
+  { timeout: 5000 },
+  async (t) => {
+    const transport = await transportRig(t, "claude-code", version6Config);
+    const rejected = assert.rejects(
+      transport.rpc.call(APP_LIFECYCLE_TOOL, { operation: "status" }),
+      /protocol_mismatch/,
+    );
+    const request = await transport.nextPeer();
+    // JSON whitespace counts toward the wire budget even though parsing drops it.
+    transport.sendPeer(
+      {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: jsonResult({ status: "not_started" }),
+      },
+      " ".repeat(MAX_LIFECYCLE_RESPONSE_BYTES),
+    );
+    await rejected;
+    transport.sendHost({
+      jsonrpc: "2.0",
+      id: "still-connected",
+      method: "ping",
+    });
+    const ping = await transport.nextPeer();
+    transport.sendPeer({ jsonrpc: "2.0", id: ping.id, result: {} });
+    assert.deepEqual(await transport.nextHost(), {
+      jsonrpc: "2.0",
+      id: "still-connected",
+      result: {},
+    });
+    const status = transport.rpc.call(APP_LIFECYCLE_TOOL, {
+      operation: "status",
+    });
+    const retry = await transport.nextPeer();
+    const result = jsonResult({ status: "not_started" });
+    transport.sendPeer({ jsonrpc: "2.0", id: retry.id, result });
+    assert.deepEqual(await status, result);
+    assert.deepEqual(transport.kills, []);
+    assert.equal(transport.rpc.closed, false);
+  },
+);
 
 test("same-stream multiplexing cannot confuse client IDs and internal IDs", async () => {
   const peer = [];

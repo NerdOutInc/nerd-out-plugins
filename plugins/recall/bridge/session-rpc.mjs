@@ -7,7 +7,7 @@ import {
 } from "./session-lifecycle-contract.mjs";
 
 export const MAX_REQUEST_BYTES = 64 * 1024;
-export const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
+export const MAX_LIFECYCLE_RESPONSE_BYTES = 4 * 1024 * 1024;
 const MAX_REQUESTS = 128;
 const LOCAL_NAMES = new Set([
   LOCAL_BEGIN_TOOL,
@@ -20,18 +20,32 @@ export class JsonLineReader {
     this.limit = limit;
     this.receive = receive;
     this.fail = fail;
-    this.buffer = Buffer.alloc(0);
+    this.chunks = [];
+    this.bufferedBytes = 0;
     this.failed = false;
   }
   push(chunk) {
     if (this.failed) return;
-    this.buffer = Buffer.concat([this.buffer, Buffer.from(chunk)]);
-    while (true) {
-      const index = this.buffer.indexOf(10);
-      if (index < 0) break;
-      if (index > this.limit) return this.reject();
-      const line = this.buffer.subarray(0, index);
-      this.buffer = this.buffer.subarray(index + 1);
+    const bytes = Buffer.from(chunk);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const index = bytes.indexOf(10, offset);
+      const part = bytes.subarray(offset, index < 0 ? bytes.length : index);
+      const length = this.bufferedBytes + part.length;
+      if (length > this.limit) return this.reject();
+      if (index < 0) {
+        this.chunks.push(part);
+        this.bufferedBytes = length;
+        return;
+      }
+      // Full note replies have no transport-wide size cap. Collect their
+      // chunks once instead of repeatedly copying the growing frame.
+      const line = this.chunks.length
+        ? Buffer.concat([...this.chunks, part], length)
+        : part;
+      this.chunks = [];
+      this.bufferedBytes = 0;
+      offset = index + 1;
       if (line.length === 0) continue;
       let value;
       try {
@@ -41,17 +55,17 @@ export class JsonLineReader {
       }
       if (value === null || typeof value !== "object" || Array.isArray(value))
         return this.reject();
-      this.receive(value);
+      this.receive(value, line.length);
     }
-    if (this.buffer.length > this.limit) this.reject();
   }
   end() {
-    if (this.buffer.length) this.reject();
+    if (this.bufferedBytes) this.reject();
   }
   reject() {
     if (this.failed) return;
     this.failed = true;
-    this.buffer = Buffer.alloc(0);
+    this.chunks = [];
+    this.bufferedBytes = 0;
     this.fail(new LifecycleError("protocol_mismatch"));
   }
 }
@@ -172,7 +186,7 @@ export class SessionRpcInterposer {
         });
     }
   }
-  async fromPeer(message) {
+  async fromPeer(message, frameBytes) {
     const pending = this.requests.get(message.id);
     if (!pending || typeof message.method === "string") {
       // A timed-out internal response must not leak an unknown response ID into
@@ -189,7 +203,15 @@ export class SessionRpcInterposer {
     this.requests.delete(message.id);
     if (pending.internal) {
       clearTimeout(pending.timer);
-      if (message.error)
+      // Only adapter-owned replies carry the lifecycle budget. Ordinary
+      // read_note results may be larger, and a bad internal reply must not
+      // disconnect unrelated host requests sharing this transport.
+      if (
+        (frameBytes ?? Buffer.byteLength(JSON.stringify(message))) >
+        MAX_LIFECYCLE_RESPONSE_BYTES
+      )
+        pending.reject(new LifecycleError("protocol_mismatch"));
+      else if (message.error)
         pending.reject(new LifecycleError("scope_unavailable"));
       else pending.resolve(message.result);
       return;

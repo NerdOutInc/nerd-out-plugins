@@ -9,7 +9,6 @@ import {
   JsonLineReader,
   SessionRpcInterposer,
   MAX_REQUEST_BYTES,
-  MAX_RESPONSE_BYTES,
 } from "./session-rpc.mjs";
 
 export function startSessionAdapter({
@@ -59,10 +58,14 @@ export function startSessionAdapter({
     },
     fail,
   );
+  // The existing helper/HTTP paths return complete note content without a
+  // peer-wide response cap. Apply the lifecycle budget only after RPC has
+  // identified an adapter-owned reply; ordinary traffic keeps this behavior
+  // with the pilot either disabled or enabled.
   const peerLines = new JsonLineReader(
-    MAX_RESPONSE_BYTES,
-    (value) => {
-      void rpc.fromPeer(value).catch(fail);
+    Infinity,
+    (value, frameBytes) => {
+      void rpc.fromPeer(value, frameBytes).catch(fail);
     },
     fail,
   );
