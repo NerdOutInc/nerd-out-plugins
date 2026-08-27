@@ -301,8 +301,12 @@ test("host manifests share the current plugin version", async () => {
   // the `updated` close-result status.
   // 0.30.1 restores Codex host detection, preserves the hooks-only legacy
   // parser shape, and reports the selected Codex parser during preflight.
+  // 0.31.0 detects a session whose host never started the Recall bridge:
+  // the hook walks its process ancestry to the session's claude process,
+  // swaps the v5 protocol for an honest warning when the bridge is absent,
+  // and a new doctor skill diagnoses the whole connection chain.
   // All hosts must receive the compatible hook behavior together.
-  assert.equal(codexPlugin.version, "0.30.1");
+  assert.equal(codexPlugin.version, "0.31.0");
   assert.equal(claudePlugin.version, codexPlugin.version);
   const desktop = await readJson("desktop-extensions/recall/manifest.json");
   assert.equal(desktop.version, "0.9.0");

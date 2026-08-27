@@ -25,6 +25,25 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
+Plugin `0.31.0` detects the silently missing connector. A host can load this
+plugin's hooks and skills yet skip its MCP server for one session (observed
+2026-08-27 in Claude Code desktop local-agent mode: every other plugin's
+server started, the Recall bridge never launched, and journaling failed
+silently until tools were missed mid-task). The journal hook now walks its
+own process ancestry to the session's `claude` process and checks for a
+Recall bridge child; when the plugin is enabled but the bridge is absent, the
+version 5 context is replaced with a soft warning — verify with tool search,
+tell the user plainly that journaling is unavailable and a new session fixes
+it — instead of protocol instructions the session cannot follow. Positive
+verdicts are cached per session; unrecognized hosts and unattributable
+app-level bridges fail safe to the normal instructions. A new **doctor**
+skill (`/recall:doctor` in Claude Code) automates the whole diagnosis chain —
+app process, loopback listener (38473/38474), app-group socket, this
+session's bridge child, a JSON-RPC `initialize` probe of the bridge, and the
+newest per-directory connection log — and names the first broken link with
+its fix. Detection is wired for Claude Code first; the shared module takes
+per-host process patterns so Codex and Cursor can adopt it.
+
 Plugin `0.30.1` restores the shared Claude/Codex journal hook's host detection
 and keeps its manifest compatible with the hooks-only parser in Codex `0.142.5`.
 Codex now follows its native `PLUGIN_ROOT` signal to read the Codex-owned
@@ -422,6 +441,15 @@ This plugin can ship multiple skills; both agents discover every subdirectory
 under `skills/` that contains a `SKILL.md`. It currently includes:
 
 - `recall` for direct note, search, and MCP workflows.
+- `doctor` for diagnosing a session where Recall tools or journaling are
+  unavailable. It runs a read-only helper (`scripts/recall-doctor`) that walks
+  the whole connection chain — the Recall.app process, the loopback MCP
+  listener (38473 release / 38474 debug), the app-group socket, this session's
+  own bridge process, a JSON-RPC `initialize` probe of a freshly launched
+  bridge, and the newest per-directory connection log — and names the first
+  broken link with its fix. The signature it exists for: everything healthy
+  except `session-bridge`, which means the host never attached the Recall
+  connector to this session and a new session is the fix.
 - `recall-journal` for a Project-aware journal: on first use it shows the
   current filesystem project's absolute path and asks whether to configure that
   project or a global default. It then asks for a confirmed, write-ready Recall
@@ -469,9 +497,11 @@ under `skills/` that contains a `SKILL.md`. It currently includes:
   Structured Project activity; it never auto-migrates an existing config, and
   the modes bypass one another so one prompt cannot enter both protocols.
 
-In Codex, invoke skills as `$recall:recall` and
+In Codex, invoke skills as `$recall:recall`,
+`$recall:doctor`, and
 `$recall:recall-journal`; in Claude Code, use
-`/recall:recall` and
+`/recall:recall`,
+`/recall:doctor`, and
 `/recall:recall-journal`.
 
 The journal skill is summary-first and never stores credentials or full

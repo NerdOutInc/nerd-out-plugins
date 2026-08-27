@@ -3,6 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { detectBridgeStatus } from "./bridge-detection.mjs";
+
 const GIT_RESOLUTION_TIMEOUT_MS = 2_000;
 
 function requestedHost(args = process.argv.slice(2)) {
@@ -29,6 +31,12 @@ function resolveJournalContext(env = process.env, explicitHost = null) {
     agentName:
       host === "cursor" ? "Cursor" : host === "codex" ? "Codex" : "Claude Code",
     configPath: path.join(configDirectory, "recall-journal.json"),
+    doctorSkillName:
+      host === "cursor"
+        ? "/doctor"
+        : host === "codex"
+          ? "$recall:doctor"
+          : "/recall:doctor",
     host,
     skillName:
       host === "cursor"
@@ -536,6 +544,26 @@ function buildV5ProjectMemoryHookOutput(
   };
 }
 
+// Injected instead of the full version 5 protocol when the session's host
+// process has no Recall bridge child, so agents stop chasing tools that were
+// never started and the user hears about the gap instead of silence. The
+// wording stays soft — a host could in principle start the server late — and
+// hands the agent a verification step before it draws any conclusion.
+function buildV5BridgeMissingHookOutput(context) {
+  return {
+    hookSpecificOutput: {
+      hookEventName: "UserPromptSubmit",
+      additionalContext:
+        `Automatic Recall structured project memory version 5 is enabled for ${context.agentName} by a valid per-agent config, but the Recall MCP connector appears to be unavailable in this session: the host process has no Recall bridge child, so the host likely never started the Recall MCP server for this chat even though its hooks and skills loaded. ` +
+        "Verify instead of trusting this hint: check whether the Recall MCP tools (resolve_project, open_session) are actually callable, for example through tool search. " +
+        `If they are available after all, the connector simply started late; ignore this warning, load ${context.skillName} when substantive work begins, and journal normally under version 5. ` +
+        "If they are missing, structured journaling is unavailable: say so plainly in your first user-visible reply — Recall journaling is skipped because the host did not start the Recall connector, and starting a new session (or re-enabling the Recall connector for this chat) fixes it — then continue the task without journaling. " +
+        `${context.doctorSkillName} diagnoses the whole connection chain when the user wants specifics. ` +
+        "Do not keep searching for the missing tools, and never create a legacy journal note or hand-built Today card as a fallback. Skip trivial acknowledgements.",
+    },
+  };
+}
+
 function buildHookOutput(input, env = process.env, explicitHost = null) {
   const context = resolveJournalContext(env, explicitHost);
   const expectedEvent =
@@ -574,6 +602,17 @@ function buildHookOutput(input, env = process.env, explicitHost = null) {
     );
   }
   if (config.projectMemory?.version === 5) {
+    // Bridge detection is wired for Claude Code only; other hosts keep the
+    // standard instructions until their process shapes are mapped. "unknown"
+    // deliberately falls through to normal output: only a recognized host
+    // with a provably missing bridge changes what the agent is told.
+    const bridgeStatus =
+      context.host === "claude-code"
+        ? detectBridgeStatus({ sessionId: threadId }).status
+        : "unknown";
+    if (bridgeStatus === "absent") {
+      return buildV5BridgeMissingHookOutput(context);
+    }
     return buildV5ProjectMemoryHookOutput(
       context,
       config.projectMemory.defaultProject,
