@@ -1857,6 +1857,188 @@ test("rejects a v5 config carrying an unknown key", () => {
   assert.equal(result.stdout.trim(), "");
 });
 
+// Fabricates the process table the hook's bridge detection walks: a Claude
+// host (pid 500) with one unrelated plugin server, optionally a bridge child,
+// and the hook itself. $PPID inside the fake ps expands to the pid of the
+// process that spawned it — the hook — so the walk starts from a real row.
+function makeFakePsDirectory({
+  bridgeCommand = null,
+  hostCommand = "/Users/x/Library/Application Support/Claude/claude-code/2.1.246/claude.app/Contents/MacOS/claude --output-format stream-json",
+  markerPath = null,
+} = {}) {
+  const directory = makeTemporaryDirectory();
+  const script = [
+    "#!/bin/sh",
+    markerPath ? `printf . >> ${JSON.stringify(markerPath)}` : ":",
+    `echo "  500 1 ${hostCommand}"`,
+    'echo "  501 500 node /plugins/other-plugin/server.mjs"',
+    bridgeCommand ? `echo "  502 500 ${bridgeCommand}"` : ":",
+    'echo "  $PPID 500 node /plugins/recall/hooks/journal-context.mjs"',
+    "",
+  ].join("\n");
+  fs.writeFileSync(path.join(directory, "ps"), script, { mode: 0o755 });
+  return directory;
+}
+
+function claudeV5Environment({ psDirectory, temporaryDirectory }) {
+  return {
+    ...cleanEnvironment(),
+    CLAUDE_CONFIG_DIR: path.join(fixtureRoot, "v5"),
+    CLAUDE_PLUGIN_ROOT: pluginRoot,
+    PATH: psDirectory,
+    TMPDIR: temporaryDirectory,
+  };
+}
+
+const claudeV5Input = {
+  hook_event_name: "UserPromptSubmit",
+  cwd: repositoryRoot,
+  session_id: v5ThreadId,
+};
+
+function claudeAdjustedV5Fixture(filename) {
+  return readFixture("v5", filename)
+    .replace("Codex", "Claude Code")
+    .replace("$recall:recall-journal", "/recall:recall-journal");
+}
+
+test("v5 warns instead of reciting the protocol when the session has no bridge", () => {
+  const result = runHook({
+    environment: claudeV5Environment({
+      psDirectory: makeFakePsDirectory(),
+      temporaryDirectory: makeTemporaryDirectory(),
+    }),
+    input: claudeV5Input,
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.equal(context, readFixture("v5", "bridge-missing-context.txt"));
+  assert.match(context, /appears to be unavailable/);
+  assert.match(context, /no Recall bridge child/);
+  assert.match(context, /Verify instead of trusting this hint/);
+  assert.match(context, /resolve_project, open_session/);
+  assert.match(context, /say so plainly in your first user-visible reply/);
+  assert.match(context, /starting a new session/);
+  assert.match(context, /\/recall:doctor/);
+  assert.match(context, /never create a legacy journal note/);
+  // The full protocol recital is withheld: no session opens in this state.
+  assert.equal(context.includes("lineageKey"), false);
+  assert.equal(context.includes("close_session"), false);
+});
+
+test("v5 keeps the standard instructions when the session bridge is present", () => {
+  for (const bridgeCommand of [
+    "node /Users/x/plugins/recall/bridge/index.mjs --client-name Claude",
+    "/Applications/Recall.app/Contents/Helpers/recall-mcp-bridge --client-name Claude",
+  ]) {
+    const result = runHook({
+      environment: claudeV5Environment({
+        psDirectory: makeFakePsDirectory({ bridgeCommand }),
+        temporaryDirectory: makeTemporaryDirectory(),
+      }),
+      input: claudeV5Input,
+    });
+
+    assert.equal(result.status, 0, bridgeCommand);
+    assert.equal(result.stderr, "", bridgeCommand);
+    const context = JSON.parse(result.stdout).hookSpecificOutput
+      .additionalContext;
+    assert.equal(
+      context,
+      claudeAdjustedV5Fixture("repository-context.txt"),
+      bridgeCommand,
+    );
+  }
+});
+
+test("v5 keeps the standard instructions when detection cannot decide", () => {
+  // An unrecognized host process and a missing ps are both "unknown", and
+  // unknown never changes what the agent is told.
+  const environments = [
+    claudeV5Environment({
+      psDirectory: makeFakePsDirectory({
+        hostCommand: "node /repo/tests/run-everything.mjs",
+      }),
+      temporaryDirectory: makeTemporaryDirectory(),
+    }),
+    claudeV5Environment({
+      psDirectory: makeTemporaryDirectory(),
+      temporaryDirectory: makeTemporaryDirectory(),
+    }),
+  ];
+
+  for (const environment of environments) {
+    const result = runHook({ environment, input: claudeV5Input });
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, "");
+    const context = JSON.parse(result.stdout).hookSpecificOutput
+      .additionalContext;
+    assert.equal(context, claudeAdjustedV5Fixture("repository-context.txt"));
+  }
+});
+
+test("v5 bridge detection runs only for Claude Code", () => {
+  const markerPath = path.join(makeTemporaryDirectory(), "ps-invocations");
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: path.join(fixtureRoot, "v5"),
+      PLUGIN_ROOT: pluginRoot,
+      PATH: makeFakePsDirectory({ markerPath }),
+    },
+    input: claudeV5Input,
+  });
+
+  assert.equal(result.status, 0);
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.equal(context, readFixture("v5", "repository-context.txt"));
+  assert.equal(fs.existsSync(markerPath), false);
+});
+
+test("v5 caches a present bridge verdict per session", () => {
+  const markerPath = path.join(makeTemporaryDirectory(), "ps-invocations");
+  const environment = claudeV5Environment({
+    psDirectory: makeFakePsDirectory({
+      bridgeCommand:
+        "node /Users/x/plugins/recall/bridge/index.mjs --client-name Claude",
+      markerPath,
+    }),
+    temporaryDirectory: makeTemporaryDirectory(),
+  });
+
+  runHook({ environment, input: claudeV5Input });
+  const second = runHook({ environment, input: claudeV5Input });
+
+  assert.equal(second.status, 0);
+  assert.equal(
+    JSON.parse(second.stdout).hookSpecificOutput.additionalContext,
+    claudeAdjustedV5Fixture("repository-context.txt"),
+  );
+  assert.equal(fs.readFileSync(markerPath, "utf8"), ".");
+});
+
+test("v5 re-checks an absent bridge on every prompt", () => {
+  const markerPath = path.join(makeTemporaryDirectory(), "ps-invocations");
+  const environment = claudeV5Environment({
+    psDirectory: makeFakePsDirectory({ markerPath }),
+    temporaryDirectory: makeTemporaryDirectory(),
+  });
+
+  runHook({ environment, input: claudeV5Input });
+  const second = runHook({ environment, input: claudeV5Input });
+
+  assert.equal(second.status, 0);
+  assert.equal(
+    JSON.parse(second.stdout).hookSpecificOutput.additionalContext,
+    readFixture("v5", "bridge-missing-context.txt"),
+  );
+  assert.equal(fs.readFileSync(markerPath, "utf8"), "..");
+});
+
 test("rejects a v5 config with no default Project", () => {
   const home = makeTemporaryDirectory();
   fs.writeFileSync(
