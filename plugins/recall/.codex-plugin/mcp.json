@@ -3,7 +3,7 @@
     "recall": {
       "type": "stdio",
       "command": "/bin/sh",
-      "args": ["./bridge/recall-node", "./bridge/index.mjs", "--client-name", "Codex"],
+      "args": ["./bridge/recall-node", "./bridge/session-adapter.mjs", "--host", "codex", "--client-name", "Codex"],
       "cwd": "."
     }
   }

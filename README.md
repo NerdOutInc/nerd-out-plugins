@@ -143,6 +143,15 @@ default Recall Project. Its sessions and human-scale checkpoints appear in
 separate confirmation that global and filesystem-path routing will not carry
 over; existing journal notes remain untouched archive.
 
+A separate **version 6 session-recording pilot** adds deterministic edit-boundary
+opening, explicit begin/status controls for reviews and shell work, same-connection
+delivery, and visible pending state. It is off by default; its host profiles are
+not automatically registered, and real host certification remains a release
+gate. Stop is only a yield, and conversation segments survive steering,
+compaction, reconnect, and resume. Existing modes are unchanged. See
+[the pilot contract and verification gate](docs/deterministic-session-lifecycle.md)
+before opting in.
+
 The plugin supports multiple skills in its `skills/` directory. In addition to
 the direct note workflow, the journal skill
 (`$recall:recall-journal` in Codex,

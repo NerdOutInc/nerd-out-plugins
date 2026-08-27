@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { lifecycleContext } from "./session-lifecycle-context.mjs";
 
 import { detectBridgeStatus } from "./bridge-detection.mjs";
 
@@ -674,7 +675,8 @@ async function main() {
     let rawInput = "";
     for await (const chunk of process.stdin) rawInput += chunk;
     const host = requestedHost();
-    const output = buildHookOutput(JSON.parse(rawInput), process.env, host);
+    const input = JSON.parse(rawInput);
+    const output = buildHookOutput(input, process.env, host) ?? await lifecycleContext(input, resolveJournalContext(process.env, host).host);
     if (output) {
       process.stdout.write(
         JSON.stringify(
