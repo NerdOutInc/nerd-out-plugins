@@ -5,7 +5,9 @@
       "command": "/bin/sh",
       "args": [
         "${CLAUDE_PLUGIN_ROOT}/bridge/recall-node",
-        "${CLAUDE_PLUGIN_ROOT}/bridge/index.mjs",
+        "${CLAUDE_PLUGIN_ROOT}/bridge/session-adapter.mjs",
+        "--host",
+        "claude-code",
         "--client-name",
         "Claude"
       ]

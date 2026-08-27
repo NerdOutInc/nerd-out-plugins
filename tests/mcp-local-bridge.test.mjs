@@ -37,9 +37,10 @@ async function writeFakeHelper(directory, exitCode, stderrLine = "") {
  * fallback intentionally polls for the app for a minute, so a test that only
  * needs to observe the handoff watches stderr instead of waiting it out.
  */
-function runBridge(helperPath, { waitForStderr, timeoutMs = 15_000 } = {}) {
+function runBridge(helperPath, { waitForStderr, timeoutMs = 15_000, adapterHost } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [bridgePath, "--client-name", "Rig"], {
+    const entry = adapterHost ? [new URL("plugins/recall/bridge/session-adapter.mjs", repoRoot).pathname, "--host", adapterHost] : [bridgePath];
+    const child = spawn(process.execPath, [...entry, "--client-name", "Rig"], {
       env: {
         ...process.env,
         // Point at the stub; an absent/non-executable path makes the bridge
@@ -51,6 +52,8 @@ function runBridge(helperPath, { waitForStderr, timeoutMs = 15_000 } = {}) {
         // bridge at the transport marker, before it spawns the proxy, but the
         // redirect keeps that guarantee from depending on timing.
         MCP_REMOTE_CONFIG_DIR: path.join(path.dirname(helperPath), "mcp-auth"),
+        CLAUDE_CONFIG_DIR: path.join(path.dirname(helperPath), "claude-config"),
+        CODEX_HOME: path.join(path.dirname(helperPath), "codex-config"),
       },
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -88,6 +91,19 @@ test("a clean helper session propagates its exit code", async (t) => {
   const result = await runBridge(helper);
 
   assert.equal(result.code, 0);
+});
+
+test("the lifecycle wrapper preserves clean exits and fail-closed helper refusals", async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "recall-adapter-bridge-"));
+  t.after(() => rm(directory, { force: true, recursive: true }));
+  for (const adapterHost of ["claude-code", "codex"]) {
+    for (const exitCode of [HELPER_EXIT.cleanEOF, HELPER_EXIT.refused, HELPER_EXIT.protocolError]) {
+      const helper = await writeFakeHelper(directory, exitCode);
+      const result = await runBridge(helper, { adapterHost });
+      assert.equal(result.code, exitCode);
+      assert.doesNotMatch(result.stderr, /using OAuth/);
+    }
+  }
 });
 
 test("a refused handshake surfaces the refusal and never falls back to OAuth", async (t) => {

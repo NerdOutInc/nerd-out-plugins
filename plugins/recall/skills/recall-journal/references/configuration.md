@@ -202,6 +202,75 @@ leave it unchanged; runtime follows the skill's all-or-nothing fallback. Re-chec
 the whole gate immediately before every version 5 save; never infer support from
 a plugin or app version.
 
+## Version 6 session-recording pilot
+
+This is a separate, explicit whole-mode opt-in for Claude Code or Codex. It is
+off by default and is not automatically substituted for versions 1–5. Cursor
+and the desktop extension are not certified for this adapter. Keep the user's
+existing mode unless they choose the pilot after its consequences are clear.
+
+```json
+{
+  "version": 6,
+  "projectMemory": {
+    "enabled": true,
+    "defaultProject": {
+      "workspace": { "id": "workspace-id", "name": "Workspace name" },
+      "recallProject": { "id": "project-id", "name": "Project name" }
+    }
+  },
+  "sessionLifecycle": { "enabled": true }
+}
+```
+
+The shape is exact; no legacy keys are permitted. The default requires the
+same live write-ready workspace and exact Project selection as version 5 and
+is used only after proving no repository exists. Repository failures never
+fall back to it. `sessionLifecycle.enabled: false` disables this mode without
+entering an older writer. Disabling preserves pending delivery state.
+
+Before enabling, require the installed host to accept `mcp_tool` hooks and the
+current connected Recall catalog to advertise the complete version-1
+`record_session_lifecycle` schema, including `expectedPrincipalDigest` and
+`expectedSessionUuid`. Checkpoint/close tools must also meet the v5 schema
+gate. Parser acceptance, a connection count, and a synthetic hook input are
+not actual host event proof. Per-host certification must demonstrate real
+edit, prompt, Stop, resume, compaction, and participant behavior on the exact
+installed runtime, with missing connection/denial cases remaining unavailable.
+
+Codex may additionally carry `sessionLifecycle.codexParticipantVerified: true`
+**only after** actual ordinary tool events prove that absent participant ID
+means main, and that subagents cannot report the parent's tuple. Otherwise
+events lacking a participant ID are unsupported. Do not set this field on the
+basis of CLI version, generated schema, hook inventory, or a fixture. Claude's
+documented absent `agent_id` convention is main; malformed values still fail.
+
+The plugin packages a read-only profile emitter. Resolve it relative to the
+installed plugin root and run:
+
+```sh
+node hooks/session-lifecycle-profiles.mjs --host claude-code
+node hooks/session-lifecycle-profiles.mjs --host codex
+```
+
+Use only the command for the current host. Merge the emitted entries through
+the host's supported hook settings workflow, preserving unrelated hooks and
+the existing Recall `UserPromptSubmit` context hook. Do not install duplicate
+entries. These profiles are deliberately not included in the default plugin
+manifest. After saving the v6 config with explicit confirmation, refresh the
+host's plugin/MCP configuration through its supported interface and review the
+resulting hooks. Codex trust remains an explicit user action in `/hooks`;
+never edit trust state, copy hashes, or bypass review. No installed cache file
+may be edited to activate this pilot.
+
+The setup emits configuration only. It does not prove the currently running
+conversation received the new tool catalog or handlers. Finish with this
+run's local `get_session_recording_status`; use `begin_session_recording` only
+for authorized substantive work. An unavailable or queued result is not
+successful activation. Do not silently downgrade after a failure. For the
+runtime proof matrix and limits, see the repository's
+`docs/deterministic-session-lifecycle.md`.
+
 ## Resolve the current filesystem project
 
 Show the user the resolved absolute path before saving a filesystem-project

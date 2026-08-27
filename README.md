@@ -79,6 +79,16 @@ message telling the agent to open Recall. A denied or revoked grant is
 remembered so a restarting agent cannot re-prompt in a loop; clear it with
 **Allow again** under Settings → MCP Server → Local bridge access.
 
+For missing tools, use the **doctor** skill in Claude Code, Codex, or Cursor.
+It is passive by default and distinguishes host process evidence from the
+current conversation's tool inventory. Codex and Cursor can share processes
+across conversations, so a running bridge does not establish that this chat
+has Recall available. Their journal hooks request a current-tool check and
+report missing coverage without silently switching journal modes. Doctor's
+optional `--probe` needs explicit user permission and tests a new connection,
+not the conversation's existing connector. Neither a read tool nor a healthy
+connection proves a work session is being recorded.
+
 Each session names the transport it used in the host's MCP log
 (`[recall] transport: local-socket` or `transport: oauth-http`) — the fastest
 way to tell which path a connection took.
@@ -142,6 +152,15 @@ default Recall Project. Its sessions and human-scale checkpoints appear in
 **Today -> Now activity**. Switching from a legacy v1/v2 config requires a
 separate confirmation that global and filesystem-path routing will not carry
 over; existing journal notes remain untouched archive.
+
+A separate **version 6 session-recording pilot** adds deterministic edit-boundary
+opening, explicit begin/status controls for reviews and shell work, same-connection
+delivery, and visible pending state. It is off by default; its host profiles are
+not automatically registered, and real host certification remains a release
+gate. Stop is only a yield, and conversation segments survive steering,
+compaction, reconnect, and resume. Existing modes are unchanged. See
+[the pilot contract and verification gate](docs/deterministic-session-lifecycle.md)
+before opting in.
 
 The plugin supports multiple skills in its `skills/` directory. In addition to
 the direct note workflow, the journal skill

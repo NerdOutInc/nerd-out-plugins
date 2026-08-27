@@ -25,24 +25,31 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
-Plugin `0.31.0` detects the silently missing connector. A host can load this
-plugin's hooks and skills yet skip its MCP server for one session (observed
-2026-08-27 in Claude Code desktop local-agent mode: every other plugin's
-server started, the Recall bridge never launched, and journaling failed
-silently until tools were missed mid-task). The journal hook now walks its
-own process ancestry to the session's `claude` process and checks for a
-Recall bridge child; when the plugin is enabled but the bridge is absent, the
-version 5 context is replaced with a soft warning — verify with tool search,
-tell the user plainly that journaling is unavailable and a new session fixes
-it — instead of protocol instructions the session cannot follow. Positive
-verdicts are cached per session; unrecognized hosts and unattributable
-app-level bridges fail safe to the normal instructions. A new **doctor**
-skill (`/recall:doctor` in Claude Code) automates the whole diagnosis chain —
-app process, loopback listener (38473/38474), app-group socket, this
-session's bridge child, a JSON-RPC `initialize` probe of the bridge, and the
-newest per-directory connection log — and names the first broken link with
-its fix. Detection is wired for Claude Code first; the shared module takes
-per-host process patterns so Codex and Cursor can adopt it.
+Plugin `0.32.0` adds the explicit version 6 conversation-segment recording
+pilot and extends missing-connector diagnostics to Claude Code, Codex, and
+Cursor. Their journal hooks and doctor use an explicit host identity and
+host-specific guidance. Process checks use a fresh bounded snapshot, never a
+cached positive verdict. Shared Codex and Cursor processes cannot prove that
+the current conversation has Recall tools, so their process verdict remains
+`unknown`; the agent must check its current tool inventory. A sibling bridge,
+a generic executable named `agent`, or an unverified CLI boundary is not
+evidence of a connected conversation. Read-tool availability, write permission,
+and session recording are reported separately.
+
+Doctor is passive by default. A fresh connection probe requires explicit
+`--probe` and user permission because it can launch a helper, approval prompt,
+or OAuth flow. Its result describes that new connection, never the current
+conversation. The version 6 pilot is off by default, keeps ordinary MCP traffic
+on the existing transport, and requires actual host certification before
+activation. Cursor diagnostics are included; automatic Cursor recording is
+not enabled by this release. See the
+[pilot contract](../../docs/deterministic-session-lifecycle.md).
+
+Plugin `0.31.0` introduced missing-connector detection for Claude Code and the
+doctor skill. It addressed a host loading hooks and skills while skipping the
+Recall MCP server for one conversation (observed on 2026-08-27 in Claude Code
+desktop local-agent mode). Version `0.32.0` replaces its positive-process cache
+and automatic doctor probe with the explicit evidence boundaries above.
 
 Plugin `0.30.1` restores the shared Claude/Codex journal hook's host detection
 and keeps its manifest compatible with the hooks-only parser in Codex `0.142.5`.
@@ -441,15 +448,14 @@ This plugin can ship multiple skills; both agents discover every subdirectory
 under `skills/` that contains a `SKILL.md`. It currently includes:
 
 - `recall` for direct note, search, and MCP workflows.
-- `doctor` for diagnosing a session where Recall tools or journaling are
-  unavailable. It runs a read-only helper (`scripts/recall-doctor`) that walks
-  the whole connection chain — the Recall.app process, the loopback MCP
-  listener (38473 release / 38474 debug), the app-group socket, this session's
-  own bridge process, a JSON-RPC `initialize` probe of a freshly launched
-  bridge, and the newest per-directory connection log — and names the first
-  broken link with its fix. The signature it exists for: everything healthy
-  except `session-bridge`, which means the host never attached the Recall
-  connector to this session and a new session is the fix.
+- `doctor` for diagnosing a conversation where Recall tools or journaling are
+  unavailable in Claude Code, Codex, or Cursor. The helper
+  (`scripts/recall-doctor`) passively inspects the Recall.app process, local
+  socket, host ancestry, and supported diagnostic log metadata. Shared
+  or unverified host boundaries stay `unknown`. The optional current read-tool
+  inventory verdict is caller-reported, not process attestation or recording
+  status. Only an explicitly authorized `--probe` starts a new connection;
+  success there cannot certify the conversation that requested diagnosis.
 - `recall-journal` for a Project-aware journal: on first use it shows the
   current filesystem project's absolute path and asks whether to configure that
   project or a global default. It then asks for a confirmed, write-ready Recall
