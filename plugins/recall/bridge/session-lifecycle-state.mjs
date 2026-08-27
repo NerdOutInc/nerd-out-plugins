@@ -125,7 +125,7 @@ function validateState(value, identity) {
       (diagnostic.reasonCode !== null &&
         !REASON_CODES.includes(diagnostic.reasonCode)) ||
       !isSafeTime(diagnostic.observedAtMs) ||
-      !["pending", "none"].includes(diagnostic.retryState) ||
+      !["pending", "none", "unknown"].includes(diagnostic.retryState) ||
       !["acknowledged", "unavailable"].includes(diagnostic.stage)
     )
       throw new LifecycleError("state_unavailable");

@@ -299,8 +299,10 @@ Inspect delivery results independently. The adapter's optional
 `pendingDeliveries` counts checkpoints and closes for this run **on this
 device**, including predecessors; omission means unavailable, not zero.
 Recording a successor never clears earlier uncertainty. `unresolvedLifecycleEvents`
-is a separate local lifecycle queue count. Acknowledged recording does not
-mean checkpoint prose, a close, or a Today card was saved. The v5 day-card
+is an optional, separate local lifecycle queue count, present only after a
+fresh account handshake and a successful read of that account's run queue.
+Omission means unknown; zero means a known empty queue. Acknowledged recording
+does not mean checkpoint prose, a close, or a Today card was saved. The v5 day-card
 result meanings still apply when a model close requests one.
 
 ## Structured journaling (version 5)

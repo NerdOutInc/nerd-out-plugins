@@ -259,7 +259,11 @@ substitute for a live Recall account test; the matrix marks routes that are not
 yet live-certified instead of claiming them as verified. The current support
 boundary is:
 
-| Surface | Recall tools and skills | Automatic journal or project memory |
+The journal column describes existing **v1–v5 assisted journaling**, not a
+certified v6 recording pilot. Claude Code and Codex still require actual host
+certification before v6 activation; Cursor has no v6 recording profile.
+
+| Surface | Recall tools and skills | Assisted journal or project memory (v1–v5) |
 | --- | --- | --- |
 | Codex app and Codex CLI | Supported through the local bridge after plugin trust and native approval. | Supported. The bundled Codex `UserPromptSubmit` hook reads this agent's config. |
 | Claude Code | Supported through the local bridge after plugin installation and native approval. | Supported. The bundled Claude Code `UserPromptSubmit` hook reads this agent's config. |

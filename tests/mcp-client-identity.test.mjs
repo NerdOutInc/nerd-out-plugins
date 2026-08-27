@@ -304,7 +304,9 @@ test("host manifests share the current plugin version", async () => {
   // 0.32.0 adds scoped connector diagnostics and the opt-in session adapter.
   // Shared Codex/Cursor processes remain unknown; the current conversation's
   // tools determine availability. All hosts receive the compatible release.
-  assert.equal(codexPlugin.version, "0.32.0");
+  // 0.32.1 keeps unread lifecycle retry coverage unknown after a failed
+  // authenticated handshake instead of reporting a known-empty queue.
+  assert.equal(codexPlugin.version, "0.32.1");
   assert.equal(claudePlugin.version, codexPlugin.version);
   const desktop = await readJson("desktop-extensions/recall/manifest.json");
   assert.equal(desktop.version, "0.9.0");

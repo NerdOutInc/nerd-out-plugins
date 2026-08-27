@@ -123,6 +123,7 @@ function fakeApp() {
   const receipts = new Map();
   let principalDigest = "a".repeat(64);
   let failAfterApply = 0;
+  let statusUnavailable = false;
   let reserveNextBegin = false;
   let pendingDeliveries;
   let resolution = {
@@ -162,7 +163,10 @@ function fakeApp() {
     assert.equal(tool, APP_LIFECYCLE_TOOL);
     const key = keyFor(input);
     let root = roots.get(key);
-    if (input.operation === "status") return jsonResult(status(root));
+    if (input.operation === "status") {
+      if (statusUnavailable) throw new LifecycleError("transport_unavailable");
+      return jsonResult(status(root));
+    }
     if (input.expectedPrincipalDigest !== principalDigest)
       return jsonResult({
         ...status(root),
@@ -240,6 +244,9 @@ function fakeApp() {
     },
     failAfterApply: (count) => {
       failAfterApply = count;
+    },
+    setStatusUnavailable: (value) => {
+      statusUnavailable = value;
     },
     setResolution: (value) => {
       resolution = value;
@@ -729,6 +736,167 @@ test("a changed principal never receives an old account's frozen outbox", async 
     newMutations.every((call) => call.input.expectedSessionUuid === undefined),
   );
 });
+
+for (const recoveryAccount of ["same", "different"]) {
+  test(`unread retry coverage stays unknown before ${recoveryAccount}-account recovery`, async (t) => {
+    const stateAccesses = [];
+    const { adapter, app, directory, makeAdapter } = await rig(t, {
+      adapterOptions: {
+        storeFactory: (stateDirectory) => {
+          const store = new LifecycleStateStore(stateDirectory);
+          return {
+            withState(identity, callback) {
+              stateAccesses.push(identity);
+              return store.withState(identity, callback);
+            },
+          };
+        },
+      },
+    });
+    const begin = event({
+      eventName: "ExplicitBegin",
+      requestId: "queued-begin",
+      toolName: null,
+      toolUseId: null,
+    });
+    const statusEvent = event({
+      eventName: "Status",
+      toolName: null,
+      toolUseId: null,
+    });
+    app.failAfterApply(2);
+    const queued = decode(await adapter.handle(LOCAL_BEGIN_TOOL, begin));
+    assert.equal(queued.status, "queued");
+    assert.equal(queued.unresolvedLifecycleEvents, 1);
+
+    const [runIdentity, diagnosticIdentity] = stateAccesses;
+    const stateDirectory = path.join(
+      directory,
+      "recall-session-recording",
+      "v1",
+    );
+    const runFile = path.join(stateDirectory, `${runIdentity}.json`);
+    const diagnosticFile = path.join(
+      stateDirectory,
+      `${diagnosticIdentity}.json`,
+    );
+    const originalBytes = await fs.readFile(runFile);
+    const originalRequest = JSON.parse(originalBytes).pending[0];
+    const originalSessionUuid = [...app.roots.values()][0].sessionUuid;
+    assert.equal(
+      JSON.parse(await fs.readFile(diagnosticFile, "utf8")).diagnostic
+        .retryState,
+      "pending",
+    );
+
+    // A restarted adapter must authenticate before reading any account's queue.
+    const restarted = makeAdapter();
+    await restarted.catalog(catalog);
+    const principal = (recoveryAccount === "same" ? "a" : "b").repeat(64);
+    app.setPrincipal(principal);
+    app.setStatusUnavailable(true);
+    stateAccesses.length = 0;
+    const beforeFailure = app.calls.length;
+    const unavailable = decode(
+      await restarted.handle(LOCAL_STATUS_TOOL, statusEvent),
+    );
+    assert.ok(
+      app.calls
+        .slice(beforeFailure)
+        .every((call) => call.input.operation === "status"),
+    );
+    assert.deepEqual(stateAccesses, [diagnosticIdentity]);
+    assert.deepEqual(await fs.readFile(runFile), originalBytes);
+    assert.deepEqual(
+      {
+        status: unavailable.status,
+        reasonCode: unavailable.reasonCode,
+        hasQueueCount: Object.hasOwn(unavailable, "unresolvedLifecycleEvents"),
+        retryState: JSON.parse(await fs.readFile(diagnosticFile, "utf8"))
+          .diagnostic.retryState,
+      },
+      {
+        status: "unavailable",
+        reasonCode: "transport_unavailable",
+        hasQueueCount: false,
+        retryState: "unknown",
+      },
+    );
+
+    app.setStatusUnavailable(false);
+    stateAccesses.length = 0;
+    const beforeStatus = app.calls.length;
+    const recovered = decode(
+      await restarted.handle(LOCAL_STATUS_TOOL, statusEvent),
+    );
+    assert.equal(recovered.principalDigest, principal);
+    assert.equal(
+      recovered.unresolvedLifecycleEvents,
+      recoveryAccount === "same" ? 1 : 0,
+    );
+    assert.equal(
+      stateAccesses.includes(runIdentity),
+      recoveryAccount === "same",
+    );
+    assert.ok(
+      app.calls
+        .slice(beforeStatus)
+        .every((call) => call.input.operation === "status"),
+    );
+    assert.deepEqual(await fs.readFile(runFile), originalBytes);
+    assert.equal(
+      JSON.parse(await fs.readFile(diagnosticFile, "utf8")).diagnostic
+        .retryState,
+      recoveryAccount === "same" ? "pending" : "none",
+    );
+
+    if (recoveryAccount === "different") {
+      stateAccesses.length = 0;
+      const beforeOtherAccount = app.calls.length;
+      const other = decode(
+        await restarted.handle(LOCAL_BEGIN_TOOL, {
+          ...begin,
+          requestId: "other-account-work",
+        }),
+      );
+      assert.equal(other.status, "recording");
+      assert.equal(other.unresolvedLifecycleEvents, 0);
+      assert.notEqual(other.sessionUuid, originalSessionUuid);
+      assert.equal(stateAccesses.includes(runIdentity), false);
+      assert.ok(
+        app.calls
+          .slice(beforeOtherAccount)
+          .filter((call) => call.input.operation !== "status")
+          .every((call) => call.input.expectedPrincipalDigest === principal),
+      );
+      assert.deepEqual(await fs.readFile(runFile), originalBytes);
+      app.setPrincipal("a".repeat(64));
+    }
+
+    // The original account can settle only its exact previously frozen request.
+    const beforeReplay = app.calls.length;
+    const settled = decode(await restarted.handle(LOCAL_BEGIN_TOOL, begin));
+    assert.equal(settled.status, "recording");
+    assert.equal(settled.sessionUuid, originalSessionUuid);
+    assert.equal(settled.unresolvedLifecycleEvents, 0);
+    assert.deepEqual(
+      app.calls
+        .slice(beforeReplay)
+        .filter((call) => call.input.operation !== "status")
+        .map((call) => call.input),
+      [originalRequest],
+    );
+    assert.equal(
+      JSON.parse(await fs.readFile(runFile, "utf8")).pending.length,
+      0,
+    );
+    assert.equal(
+      JSON.parse(await fs.readFile(diagnosticFile, "utf8")).diagnostic
+        .retryState,
+      "none",
+    );
+  });
+}
 
 test("an authorized queued reservation replays frozen bytes and is never an acknowledgement", async (t) => {
   const { adapter, app, makeAdapter } = await rig(t);

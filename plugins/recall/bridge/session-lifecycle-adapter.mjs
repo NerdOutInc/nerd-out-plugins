@@ -65,12 +65,13 @@ function eventOperation(event) {
   throw new LifecycleError("unsupported_event");
 }
 
-function publicStatus(result, pending = 0, scope) {
+function publicStatus(result, pending, scope) {
   return {
     ...result,
     ...(scope ? { scope } : {}),
     adapterVersion: 1,
-    unresolvedLifecycleEvents: pending,
+    // Only an authenticated run-state read can establish even an empty queue.
+    ...(pending !== undefined ? { unresolvedLifecycleEvents: pending } : {}),
     pendingDeliveriesAvailable: result.pendingDeliveries !== undefined,
     coverage: "mutating_tools_or_explicit_begin",
     eventOrigin: "client_reported",
@@ -253,7 +254,7 @@ export class SessionLifecycleAdapter {
         scope.workspaceId,
         scope.projectUuid,
       );
-      const visibleStatus = (reply, pending = 0) =>
+      const visibleStatus = (reply, pending) =>
         publicStatus(reply, pending, scope);
       const store = this.storeFactory(
         path.join(config.directory, "recall-session-recording", "v1"),
@@ -442,7 +443,12 @@ export class SessionLifecycleAdapter {
           status: result.status,
           reasonCode: result.reasonCode ?? null,
           observedAtMs: this.clock(),
-          retryState: result.unresolvedLifecycleEvents > 0 ? "pending" : "none",
+          retryState:
+            result.unresolvedLifecycleEvents === undefined
+              ? "unknown"
+              : result.unresolvedLifecycleEvents > 0
+                ? "pending"
+                : "none",
           stage: ["recording", "yielded", "ended"].includes(result.status)
             ? "acknowledged"
             : "unavailable",
