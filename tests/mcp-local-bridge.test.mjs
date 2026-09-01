@@ -554,3 +554,46 @@ test("the bridge source keeps the fallback classification explicit", async () =>
   assert.match(source, /unsupportedVersion[\s\S]{0,700}handOffToOAuth/);
   assert.match(source, /handOffToOAuth\(\) \{[\s\S]{0,1400}runOAuthFallback/);
 });
+
+test("the doctor extracts the last refusal from a connection log only via the allowlist", async (t) => {
+  const { readConnectionLogEvidence, parseDoctorArguments } = await import(
+    new URL("plugins/recall/skills/doctor/scripts/recall-doctor.mjs", repoRoot).href
+  );
+  const directory = await mkdtemp(path.join(os.tmpdir(), "recall-doctor-log-"));
+  t.after(() => rm(directory, { force: true, recursive: true }));
+  const logPath = path.join(directory, "log.jsonl");
+  const lines = [
+    JSON.stringify({
+      debug: "Starting connection with timeout of 30000ms",
+      timestamp: "2026-09-01T16:18:03.280Z",
+    }),
+    JSON.stringify({
+      error:
+        "Server stderr: [recall] transport: local-socket\n" +
+        'RECALL_BRIDGE_STATUS:{"message":"Sign in to Recall, then try again.","status":"signed_out","secret":"never-surfaced"}\n',
+      timestamp: "2026-09-01T16:18:03.462Z",
+    }),
+  ];
+  await writeFile(logPath, `${lines.join("\n")}\n`);
+
+  const evidence = readConnectionLogEvidence(logPath);
+  assert.equal(evidence.readable, true);
+  assert.equal(evidence.lastTransport, "local-socket");
+  assert.deepEqual(evidence.lastRefusal, {
+    status: "signed_out",
+    message: "Sign in to Recall, then try again.",
+  });
+  assert.equal(evidence.lastRefusalAt, "2026-09-01T16:18:03.462Z");
+  assert.equal(JSON.stringify(evidence).includes("never-surfaced"), false);
+
+  // The flag is opt-in and defaults off.
+  assert.equal(
+    parseDoctorArguments(["--host", "claude-code"]).readConnectionLog,
+    false
+  );
+  assert.equal(
+    parseDoctorArguments(["--host", "claude-code", "--read-connection-log"])
+      .readConnectionLog,
+    true
+  );
+});

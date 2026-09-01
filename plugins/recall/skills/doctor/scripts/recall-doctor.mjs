@@ -14,6 +14,8 @@
 //   current-session-tools — caller-reported Recall read-tool availability
 //   bridge-probe      — a NEW bridge answers initialize, only with --probe
 //   connection-logs   — Claude Code log metadata, unverified for other hosts
+//   last-refusal      — the newest log body’s last helper refusal, only with
+//                       --read-connection-log (consent-gated)
 
 import fs from "node:fs";
 import net from "node:net";
@@ -64,6 +66,7 @@ function resolveDoctorOptions({
   clientName,
   sessionTools = "unknown",
   probe = false,
+  readConnectionLog = false,
 } = {}) {
   if (host !== undefined && !Object.hasOwn(CLIENT_NAMES, host)) {
     throw new TypeError(
@@ -90,12 +93,89 @@ function resolveDoctorOptions({
   if (typeof probe !== "boolean") {
     throw new TypeError("Invalid probe option: expected a boolean.");
   }
+  if (typeof readConnectionLog !== "boolean") {
+    throw new TypeError(
+      "Invalid read-connection-log option: expected a boolean.",
+    );
+  }
   return {
     host: selectedHost,
     clientName: CLIENT_NAMES[selectedHost],
     sessionTools,
     probe,
+    readConnectionLog,
   };
+}
+
+// How much of the newest connection log the consent-gated evidence read
+// inspects (from the end — the incident's refusal is the newest event), and
+// the only fields a captured RECALL_BRIDGE_STATUS line may surface. The
+// allowlist mirrors docs/agent-collab/native-mcp-auth-diagnostics.md: adding
+// a field here is an explicit decision, never a widening to raw stderr.
+const CONNECTION_LOG_READ_BYTES = 256 * 1024;
+const STATUS_MARKER = "RECALL_BRIDGE_STATUS:";
+
+/**
+ * Read the tail of the newest Claude Code connection log (consent-gated) and
+ * extract the LAST helper status line and transport marker. Returns only
+ * allowlisted fields — status, message, the typed diagnostic — never raw log
+ * bodies, URLs, or credentials.
+ */
+export function readConnectionLogEvidence(newestFile, readFile = fs.readFileSync) {
+  let content;
+  try {
+    const raw = readFile(newestFile);
+    const bytes = raw.length > CONNECTION_LOG_READ_BYTES
+      ? raw.subarray(raw.length - CONNECTION_LOG_READ_BYTES)
+      : raw;
+    content = bytes.toString("utf8");
+  } catch {
+    return { readable: false };
+  }
+
+  const evidence = { readable: true };
+  for (const line of content.split("\n")) {
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!entry || typeof entry !== "object") continue;
+    const text = [entry.error, entry.debug]
+      .filter((value) => typeof value === "string")
+      .join("\n");
+    if (!text) continue;
+    const transport = text.match(/\[recall\] transport: (local-socket|oauth-http)/);
+    if (transport) {
+      evidence.lastTransport = transport[1];
+      evidence.lastTransportAt = typeof entry.timestamp === "string" ? entry.timestamp : undefined;
+    }
+    const statusIndex = text.lastIndexOf(STATUS_MARKER);
+    if (statusIndex >= 0) {
+      const jsonText = text.slice(statusIndex + STATUS_MARKER.length).split("\n")[0];
+      try {
+        const parsed = JSON.parse(jsonText);
+        if (parsed && typeof parsed.status === "string") {
+          const captured = { status: parsed.status };
+          if (typeof parsed.message === "string") captured.message = parsed.message;
+          const diagnostic = parsed.diagnostic;
+          if (diagnostic && typeof diagnostic === "object") {
+            const typed = {};
+            if (typeof diagnostic.reasonCode === "string") typed.reasonCode = diagnostic.reasonCode;
+            if (typeof diagnostic.connectionId === "string") typed.connectionId = diagnostic.connectionId;
+            if (Number.isInteger(diagnostic.errorCode)) typed.errorCode = diagnostic.errorCode;
+            if (Object.keys(typed).length > 0) captured.diagnostic = typed;
+          }
+          evidence.lastRefusal = captured;
+          evidence.lastRefusalAt = typeof entry.timestamp === "string" ? entry.timestamp : undefined;
+        }
+      } catch {
+        // A truncated or malformed status line stays unreported.
+      }
+    }
+  }
+  return evidence;
 }
 
 export function parseDoctorArguments(args) {
@@ -105,6 +185,7 @@ export function parseDoctorArguments(args) {
     "--client-name": "clientName",
     "--session-tools": "sessionTools",
     "--probe": "probe",
+    "--read-connection-log": "readConnectionLog",
   };
   for (let index = 0; index < args.length; index += 1) {
     const flag = args[index];
@@ -115,8 +196,8 @@ export function parseDoctorArguments(args) {
     if (Object.hasOwn(options, key)) {
       throw new TypeError(`Duplicate doctor option: ${flag}`);
     }
-    if (flag === "--probe") {
-      options.probe = true;
+    if (flag === "--probe" || flag === "--read-connection-log") {
+      options[key] = true;
       continue;
     }
     const value = args[++index];
@@ -482,6 +563,7 @@ export function buildReport({
   sessionBridge,
   probe,
   logs,
+  logEvidence,
 }) {
   const selected = resolveDoctorOptions({ host, clientName, sessionTools });
   const currentSessionTools = {
@@ -642,6 +724,38 @@ export function buildReport({
             : `Log directory exists but is empty: ${logs.directory}`
           : `No Claude Code connection log directory was found at ${logs.directory}. This does not prove a connection was never attempted; logs can be absent, moved, or removed.`,
     },
+    {
+      name: "last-refusal",
+      ok: logEvidence
+        ? logEvidence.readable
+          ? !logEvidence.lastRefusal
+          : null
+        : null,
+      status: !logEvidence
+        ? "skipped"
+        : !logEvidence.readable
+          ? "unreadable"
+          : logEvidence.lastRefusal
+            ? "refusal-recorded"
+            : "none-found",
+      source: "connection_log_body",
+      severity: logEvidence?.lastRefusal ? "warn" : "info",
+      detail: !logEvidence
+        ? "The connection log body was not read. Pass --read-connection-log only with the user's consent to surface the last recorded refusal status."
+        : !logEvidence.readable
+          ? "The newest connection log could not be read."
+          : logEvidence.lastRefusal
+            ? `Last recorded refusal: status "${logEvidence.lastRefusal.status}"${
+                logEvidence.lastRefusal.message ? ` — ${logEvidence.lastRefusal.message}` : ""
+              }${logEvidence.lastRefusalAt ? ` (${logEvidence.lastRefusalAt})` : ""}${
+                logEvidence.lastRefusal.diagnostic?.reasonCode
+                  ? ` [reason ${logEvidence.lastRefusal.diagnostic.reasonCode}]`
+                  : ""
+              }. A recorded refusal is historical evidence, not the current state; a resilient bridge retries these automatically.`
+            : `No RECALL_BRIDGE_STATUS refusal appears in the inspected tail${
+                logEvidence.lastTransport ? ` (last transport: ${logEvidence.lastTransport})` : ""
+              }.`,
+    },
   ];
 
   const firstBroken =
@@ -709,6 +823,15 @@ export async function runDoctor(
     });
   }
 
+  const logs = selected.host === "claude-code" ? readLogs() : { supported: false };
+  // Reading the log BODY (as opposed to filenames/timestamps) is consent-gated
+  // behind --read-connection-log, and even then surfaces only the allowlisted
+  // helper status fields.
+  const logEvidence =
+    selected.readConnectionLog && selected.host === "claude-code" && logs.newestFile
+      ? readConnectionLogEvidence(logs.newestFile)
+      : undefined;
+
   return buildReport({
     host: selected.host,
     clientName: selected.clientName,
@@ -719,7 +842,8 @@ export async function runDoctor(
     sockets: inspectSockets(),
     sessionBridge,
     probe,
-    logs: selected.host === "claude-code" ? readLogs() : { supported: false },
+    logs,
+    logEvidence,
   });
 }
 
@@ -732,7 +856,7 @@ if (invokedPath === import.meta.url) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } catch (error) {
     process.stderr.write(
-      `${error.message}\nUsage: recall-doctor --host claude-code|codex|cursor [--session-tools available|missing|unknown] [--probe]\n`,
+      `${error.message}\nUsage: recall-doctor --host claude-code|codex|cursor [--session-tools available|missing|unknown] [--probe] [--read-connection-log]\n`,
     );
     process.exitCode = 2;
   }

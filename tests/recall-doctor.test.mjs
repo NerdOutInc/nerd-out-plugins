@@ -64,6 +64,7 @@ function healthyReportInput(overrides = {}) {
       serverInfo: { name: "recall-local", version: "0.3.5" },
       protocolVersion: "2025-06-18",
     },
+    logEvidence: { readable: true },
     logs: {
       directory: "/logs",
       exists: true,
@@ -339,6 +340,7 @@ test("resolves explicit hosts and preserves legacy client-name selection", () =>
       clientName,
       sessionTools: "unknown",
       probe: false,
+      readConnectionLog: false,
     });
     assert.deepEqual(
       parseDoctorArguments(["--client-name", clientName]),
@@ -350,6 +352,7 @@ test("resolves explicit hosts and preserves legacy client-name selection", () =>
     clientName: "Claude",
     sessionTools: "unknown",
     probe: false,
+    readConnectionLog: false,
   });
   assert.deepEqual(
     parseDoctorArguments([
@@ -366,6 +369,7 @@ test("resolves explicit hosts and preserves legacy client-name selection", () =>
       clientName: "Codex",
       sessionTools: "missing",
       probe: true,
+      readConnectionLog: false,
     },
   );
 });

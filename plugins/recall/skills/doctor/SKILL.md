@@ -75,6 +75,16 @@ check was observed; unknown and skipped checks remain unverified.
 - `connection-logs` — Claude Code log metadata for this working directory.
   Missing logs are not proof that no connection was attempted. Codex/Cursor
   log layouts remain unavailable; do not substitute Claude logs.
+- `last-refusal` — skipped by default. With `--read-connection-log` (pass it
+  only when the user explicitly asks for a log-based diagnosis or agrees to
+  one), the newest Claude Code log's tail is scanned for the helper's last
+  `RECALL_BRIDGE_STATUS` line and transport marker; only the allowlisted
+  status/message/typed-diagnostic fields are surfaced, never raw log bodies.
+  A recorded refusal is historical evidence, not the current state — a
+  resilient bridge (plugin ≥ 0.33.0) retries refusals automatically, and
+  `starting` refusals in particular clear on their own once Recall finishes
+  launching or its webview recovers. `signed_out` from an app ≥ the `starting`
+  split means the webview CONFIRMED no session.
 
 ## Presenting the result
 
