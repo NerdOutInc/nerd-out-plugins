@@ -306,10 +306,13 @@ test("host manifests share the current plugin version", async () => {
   // tools determine availability. All hosts receive the compatible release.
   // 0.32.1 keeps unread lifecycle retry coverage unknown after a failed
   // authenticated handshake instead of reporting a known-empty queue.
-  assert.equal(codexPlugin.version, "0.32.1");
+  // 0.33.0 makes the local-socket bridge resilient: a refused hello or a
+  // dropped socket degrades the MCP session instead of killing it, and the
+  // bridge re-dials with backoff so tools recover in the same conversation.
+  assert.equal(codexPlugin.version, "0.33.0");
   assert.equal(claudePlugin.version, codexPlugin.version);
   const desktop = await readJson("desktop-extensions/recall/manifest.json");
-  assert.equal(desktop.version, "0.9.0");
+  assert.equal(desktop.version, "0.10.0");
 });
 
 test("Recall skills require full production note URLs in chat", async () => {
