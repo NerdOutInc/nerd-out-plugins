@@ -18,9 +18,12 @@ const UNKNOWN_BRIDGE_CONTEXT =
 const MALFORMED_CALL_RULE =
   "A call rejected for invalid or unknown parameters is none of those outcomes: it is your own malformed call, so fix the parameters against the tool's advertised schema and retry once instead of giving up on project memory. ";
 // The delta read is gated on the live get_project_context schema, never on a
-// version: an older app simply reads the full context without an anchor.
+// version: an older app simply reads the full context without an anchor. The
+// anchor also needs a predecessor that can bridge the gap: a CLOSED session
+// whose outcome prose arrived whole. The reader is optional to the writer, so
+// losing it never costs the session.
 const CONTEXT_SINCE_RULE =
-  "When open_session returns a previousSession and the live get_project_context input schema advertises sinceSessionUuid, pass previousSession.sessionUuid as sinceSessionUuid so the read covers only what happened after that session ended; when the schema does not advertise it, read the full context without an anchor, and never infer support from a plugin or app version. A context read that is unavailable or not ready after the session opened does not undo the session: keep journaling to it and work without that context. ";
+  "When open_session returns a CLOSED previousSession whose contentAvailable is true and contentTruncated is not true, and the live get_project_context input schema advertises sinceSessionUuid, pass previousSession.sessionUuid as sinceSessionUuid so the read covers only what happened after that session ended; when the predecessor's content is withheld or truncated, or the schema does not advertise the anchor, read the full context without one, and never infer support from a plugin or app version. If get_project_context is unavailable, or its read fails or is not ready after the session opened, that does not undo the session: keep journaling to it and work without that context. ";
 
 function requestedHost(args = process.argv.slice(2)) {
   const index = args.indexOf("--host");
@@ -477,7 +480,7 @@ function buildV5ProjectMemoryHookOutput(
       "This working directory has filesystem repository identity, so use repository-first routing and do not use the configured default Project. " +
       "Before substantive work, read the supported non-local Git origin; when it exists, call resolve_project with that remote URL as remoteUrl and at most the repository-root basename as repoRootBasename. " +
       "Only an exact match may feed get_project_context and the session tools. " +
-      "If there is no supported remote, either tool is unavailable, or resolution returns none, ambiguous, or not_ready, continue without project memory; never use the default Project as a recovery path. " +
+      "If there is no supported remote, resolve_project or the session tools are unavailable, or resolution returns none, ambiguous, or not_ready, continue without project memory; never use the default Project as a recovery path. " +
       MALFORMED_CALL_RULE;
   } else if (repositoryIdentity === "absent") {
     routing =
@@ -485,7 +488,7 @@ function buildV5ProjectMemoryHookOutput(
       `Use ${directDestinationUse(defaultProject, "target")}` +
       "Do not call resolve_project or fabricate repository identity on this route. " +
       "The default is valid only on this proved no-repository route; never use it after any resolve_project none, ambiguous, or not_ready result. " +
-      "If either tool is unavailable or the session fails to open, continue without project memory; if the context is missing, blocked, mismatched, or not ready, do not choose another Project. " +
+      "If the session tools are unavailable or the session fails to open, continue without project memory; if get_project_context is unavailable or its context is missing, blocked, mismatched, or not ready, keep the open session and do not choose another Project. " +
       MALFORMED_CALL_RULE;
   } else {
     routing =
@@ -545,7 +548,7 @@ function buildV7ProjectMemoryHookOutput(context, route, threadId) {
         ? "It takes precedence over this repository's Git remote binding: do not call resolve_project here. "
         : "Do not call resolve_project or fabricate repository identity on this route. ") +
       `Use ${directDestinationUse(route.destination, "destination")}` +
-      "The saved destination is final on this route: if either tool is unavailable or the session fails to open, continue without project memory; if the context is missing, blocked, mismatched, or not ready, do not choose the global destination or another Project. " +
+      "The saved destination is final on this route: if the session tools are unavailable or the session fails to open, continue without project memory; if get_project_context is unavailable or its context is missing, blocked, mismatched, or not ready, keep the open session and do not choose the global destination or another Project. " +
       MALFORMED_CALL_RULE;
   } else if (route.kind === "repository") {
     routing =
@@ -554,15 +557,15 @@ function buildV7ProjectMemoryHookOutput(context, route, threadId) {
       "Only an exact match may feed get_project_context and the session tools. " +
       (route.globalDestination
         ? `If there is no supported remote, or resolution returns none, ambiguous, or not_ready, fall back to the global ${destinationLabel(route.globalDestination)}: use ${directDestinationUse(route.globalDestination, "destination")}` +
-          "If either tool is unavailable or the chosen Project's session fails to open, continue without project memory; if its context is missing, blocked, mismatched, or not ready, do not choose another Project. "
-        : "No global destination is configured, so if there is no supported remote, either tool is unavailable, or resolution returns none, ambiguous, or not_ready, continue without project memory. ") +
+          "If resolve_project or the session tools are unavailable, or the chosen Project's session fails to open, continue without project memory; if get_project_context is unavailable or its context is missing, blocked, mismatched, or not ready, keep the open session and do not choose another Project. "
+        : "No global destination is configured, so if there is no supported remote, resolve_project or the session tools are unavailable, or resolution returns none, ambiguous, or not_ready, continue without project memory. ") +
       MALFORMED_CALL_RULE;
   } else if (route.kind === "global") {
     routing =
       `No saved filesystem-project destination covers this working directory and no filesystem repository identity was found, so use the global ${destinationLabel(route.destination)} for structured project memory. ` +
       `Use ${directDestinationUse(route.destination, "destination")}` +
       "Do not call resolve_project or fabricate repository identity on this route. " +
-      "If either tool is unavailable or the session fails to open, continue without project memory; if the context is missing, blocked, mismatched, or not ready, do not choose another Project. " +
+      "If the session tools are unavailable or the session fails to open, continue without project memory; if get_project_context is unavailable or its context is missing, blocked, mismatched, or not ready, keep the open session and do not choose another Project. " +
       MALFORMED_CALL_RULE;
   } else {
     return buildV7RouteUnavailableHookOutput(context);

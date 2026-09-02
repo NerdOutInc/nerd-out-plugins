@@ -2512,7 +2512,7 @@ test("v7 repository routing has no fallback without a global destination", () =>
   assert.match(context, /repository-first routing/);
   assert.match(
     context,
-    /No global destination is configured, so if there is no supported remote, either tool is unavailable, or resolution returns none, ambiguous, or not_ready, continue without project memory/,
+    /No global destination is configured, so if there is no supported remote, resolve_project or the session tools are unavailable, or resolution returns none, ambiguous, or not_ready, continue without project memory/,
   );
   assert.doesNotMatch(context, /fall back/);
   assert.equal(context.includes("path-project-id"), false);
@@ -3043,17 +3043,25 @@ test("v5 and v7 open the session before the context read and gate the delta read
     );
     assert.match(
       context,
-      /When open_session returns a previousSession and the live get_project_context input schema advertises sinceSessionUuid, pass previousSession\.sessionUuid as sinceSessionUuid/,
+      /When open_session returns a CLOSED previousSession whose contentAvailable is true and contentTruncated is not true, and the live get_project_context input schema advertises sinceSessionUuid, pass previousSession\.sessionUuid as sinceSessionUuid/,
       label,
     );
     assert.match(
       context,
-      /when the schema does not advertise it, read the full context without an anchor, and never infer support from a plugin or app version/,
+      /when the predecessor's content is withheld or truncated, or the schema does not advertise the anchor, read the full context without one, and never infer support from a plugin or app version/,
       label,
     );
+    // Losing the reader never costs the writer: only the session tools or a
+    // failed open stop journaling.
     assert.match(
       context,
-      /does not undo the session: keep journaling to it and work without that context/,
+      /If get_project_context is unavailable, or its read fails or is not ready after the session opened, that does not undo the session: keep journaling to it and work without that context/,
+      label,
+    );
+    assert.doesNotMatch(context, /either tool is unavailable/, label);
+    assert.match(
+      context,
+      /(?:resolve_project or )?the session tools are unavailable/,
       label,
     );
     // The old order — a context read before the session opened — is gone.
