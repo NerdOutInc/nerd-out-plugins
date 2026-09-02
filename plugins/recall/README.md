@@ -25,6 +25,18 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
+Plugin `0.35.0` reads Project context after the session opens. Under versions
+5 and 7, `open_session` now runs first, and the single `get_project_context`
+read passes the predecessor's `sessionUuid` as `sinceSessionUuid` whenever the
+live tool schema advertises it, so entries, closed sessions, and activity cover
+only what happened after that session ended; the response's `since` names the
+anchor, and `since.available: false` means nothing was filtered. Activity
+arrives as the app's summary by default, and the skill requests event rows with
+`activityLimit` only when a specific note event matters. The skill also reads
+the new `closedSessions` section and passes `entryLimit` only when advertised.
+An app whose schema lacks `sinceSessionUuid` is read in full, exactly as
+before; support comes from the live schema, never from a plugin or app version.
+
 Plugin `0.34.0` adds journal config version 7, which restores global and
 per-path destinations to structured journaling so a Git repository is no
 longer required to map agent work to a Recall Project. Version 7 routes in a

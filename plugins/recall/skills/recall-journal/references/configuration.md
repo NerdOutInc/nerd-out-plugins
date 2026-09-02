@@ -236,10 +236,11 @@ the same order when the pilot is enabled under version 7:
 
 1. **Saved filesystem-project destination.** The canonical working directory
    is inside a saved `paths` root. The hook names that workspace and Project;
-   the agent calls `get_project_context` directly with that `projectUuid` and
-   accepts only a result whose Project and workspace ids match. No
-   `resolve_project` call is made, even inside a Git repository with a bound
-   remote — the saved path wins. The saved path itself is never printed.
+   the agent opens its session there and calls `get_project_context` with
+   that `projectUuid`, accepting only a result whose Project and workspace ids
+   match. No `resolve_project` call is made, even inside a Git repository
+   with a bound remote — the saved path wins.
+   The saved path itself is never printed.
 2. **Repository binding.** No path matched and the directory has repository
    identity with a supported non-local remote: `resolve_project` as in
    version 5, exact match only.
@@ -250,9 +251,12 @@ the same order when the pilot is enabled under version 7:
    for version 7, because the hook now names the destination on every prompt.
    Without a global destination, continue without project memory.
 
-Once a rung has chosen a Project, a `get_project_context` result that is
-missing, blocked, mismatched, or not ready means continue without project
-memory; no later rung is tried. When the hook cannot classify the working
+Once a rung has chosen a Project, no later rung is tried: a session that
+fails to open means continue without project memory, and a
+`get_project_context` result that is missing, blocked, mismatched, or not
+ready never selects another Project. The session opens before the context
+read so the read can be anchored to the predecessor `open_session` returns;
+see the skill's session protocol. When the hook cannot classify the working
 directory at all (missing or inaccessible), it withholds every destination
 and the writer protocol with it, and the agent says so in its first reply.
 
@@ -290,6 +294,12 @@ if a v7 config already exists, leave it unchanged too. Runtime then follows
 the skill's all-or-nothing fallback. The version 5 gate is the version 7 gate.
 Re-check the whole gate immediately before every version 7 save; never infer
 support from a plugin or app version.
+
+The delta read is a runtime capability, not part of this gate:
+`sinceSessionUuid`, `entryLimit`, and `callerSessionUuid` on
+`get_project_context`, the `closedSessions` section, and the activity summary
+are discovered from the live input schema and each response at read time, and
+their absence never blocks a version 7 save or changes the saved file.
 
 ## Version 6 session-recording pilot
 
