@@ -390,6 +390,23 @@ test("v7 restores global and per-path destinations to the structured writer", as
   );
   assert.match(configuration, /`sessionLifecycle` is kept unchanged/);
   assert.match(configuration, /Lifecycle context never rewrites a file/);
+  assert.match(
+    configuration,
+    /is \*\*not\*\* scoped to its saved\s+paths alone/,
+  );
+  assert.match(configuration, /The file must stay under 64 KiB/);
+  assert.match(
+    configuration,
+    /routes every event through the\s+same three rungs as the hook/,
+  );
+  assert.match(
+    configuration,
+    /Converting such a file\s+therefore turns automatic journaling on/,
+  );
+  assert.match(
+    configuration,
+    /A version 4 file is reader-only; the version 7 file that replaces it is a\s+writer/,
+  );
   assert.match(configuration, /When disabling version 7/);
   assert.match(
     configuration,

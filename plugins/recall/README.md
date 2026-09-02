@@ -34,9 +34,10 @@ even inside a repository with a bound remote; otherwise repository identity
 resolves the exact Git-remote binding, with the global destination as the
 fallback for unbound, unsupported, or unresolved remotes; otherwise the global
 destination alone. Every destination names a Project, and an optional
-`sessionLifecycle` block carries the version 6 pilot unchanged. Versions 5 and
-6 stay readable; explicit setup now writes version 7, and the upgrade from
-either is a confirmed whole-file replacement, never automatic.
+`sessionLifecycle` block carries the version 6 pilot, whose adapter now routes
+through the same three rungs. Versions 5 and 6 stay readable; explicit setup
+now writes version 7, and the upgrade from either is a confirmed whole-file
+replacement, never automatic.
 
 Plugin `0.33.0` made the local-socket bridge self-healing: a refused hello or a
 dropped socket degrades the MCP session instead of ending it, and the bridge

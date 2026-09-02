@@ -10,6 +10,12 @@ import {
   isToken,
   parseToolResult,
 } from "./session-lifecycle-contract.mjs";
+import {
+  JOURNAL_CONFIG_MAX_BYTES,
+  canonicalProjectRoot,
+  matchProjectDestination,
+  resolveCanonicalWorkingDirectory,
+} from "./journal-destinations.mjs";
 
 const run = promisify(execFile);
 const onlyKeys = (value, keys) =>
@@ -29,16 +35,17 @@ export async function readLifecycleConfig(host, env = process.env) {
   try {
     const file = path.join(directory, "recall-journal.json");
     const stat = await fs.stat(file);
-    if (stat.size > 16 * 1024) throw new LifecycleError("config_invalid");
+    if (stat.size > JOURNAL_CONFIG_MAX_BYTES)
+      throw new LifecycleError("config_invalid");
     value = JSON.parse(await fs.readFile(file, "utf8"));
   } catch (error) {
     if (error.code === "ENOENT") return { enabled: false, directory };
     throw new LifecycleError("config_invalid");
   }
   // Version 6 carries the pilot beside one default Project. Version 7 carries
-  // the same `sessionLifecycle` block, optional this time, beside the global
-  // and per-path destinations; its global destination is the adapter's
-  // no-repository default, and a file without one has no such default.
+  // the same `sessionLifecycle` block, optional this time, beside global and
+  // per-path destinations that the adapter routes exactly as the prompt hook
+  // does: saved path, then exact remote binding, then the global destination.
   if (value?.version !== 6 && value?.version !== 7)
     return { enabled: false, directory };
   const version7 = value.version === 7;
@@ -79,21 +86,21 @@ export async function readLifecycleConfig(host, env = process.env) {
     };
   };
   let defaultProject;
+  const paths = [];
   if (version7) {
-    const { global: globalValue, paths } = value.projectMemory;
+    const { global: globalValue, paths: pathsValue } = value.projectMemory;
     defaultProject = globalValue === undefined ? null : scopeOf(globalValue);
-    if (paths !== undefined && !isObject(paths))
+    if (pathsValue !== undefined && !isObject(pathsValue))
       throw new LifecycleError("config_invalid");
-    const roots = paths === undefined ? [] : Object.keys(paths);
-    for (const root of roots) {
-      if (
-        !path.isAbsolute(root) ||
-        path.resolve(root) === path.parse(path.resolve(root)).root
-      )
+    const seenRoots = new Set();
+    for (const [root, destination] of Object.entries(pathsValue ?? {})) {
+      const canonicalRoot = canonicalProjectRoot(root);
+      if (!canonicalRoot || seenRoots.has(canonicalRoot))
         throw new LifecycleError("config_invalid");
-      scopeOf(paths[root]);
+      seenRoots.add(canonicalRoot);
+      paths.push({ root: canonicalRoot, scope: scopeOf(destination) });
     }
-    if (!defaultProject && roots.length === 0)
+    if (!defaultProject && paths.length === 0)
       throw new LifecycleError("config_invalid");
   } else {
     defaultProject = scopeOf(value.projectMemory.defaultProject);
@@ -101,7 +108,9 @@ export async function readLifecycleConfig(host, env = process.env) {
   return {
     enabled: lifecycle.enabled,
     directory,
+    version: value.version,
     defaultProject,
+    paths,
     codexParticipantVerified: lifecycle.codexParticipantVerified === true,
   };
 }
@@ -141,9 +150,14 @@ export function sanitizedRemote(value) {
   return url.href;
 }
 
+// With `allowMissingRemote`, a repository whose origin is absent or not a
+// supported non-local URL is reported as present with no remote instead of
+// unavailable, so version 7 routing can fall through to its global
+// destination the way the prompt hook does. Git itself failing to answer is
+// still unavailable: nothing is guessed about a repository that cannot be read.
 export async function inspectRepository(
   cwd,
-  { env = process.env, execute = run } = {},
+  { env = process.env, execute = run, allowMissingRemote = false } = {},
 ) {
   if (!path.isAbsolute(cwd)) throw new LifecycleError("repository_unavailable");
   let directory;
@@ -197,20 +211,45 @@ export async function inspectRepository(
       },
     );
     remote = sanitizedRemote(result.stdout.trim());
-  } catch {
+  } catch (error) {
+    // Exit status 1 is Git's answer for "no such key": the repository has no
+    // origin at all. Any other failure means Git could not be consulted.
+    if (allowMissingRemote && error?.code === 1)
+      return { kind: "present", remoteUrl: null };
     throw new LifecycleError("repository_unavailable");
   }
-  if (!remote) throw new LifecycleError("repository_unavailable");
+  if (!remote) {
+    if (allowMissingRemote) return { kind: "present", remoteUrl: null };
+    throw new LifecycleError("repository_unavailable");
+  }
   return { kind: "present", remoteUrl: remote };
 }
 
+// Version 6 routes a repository through its exact remote binding and uses the
+// default Project only outside every repository. Version 7 applies the prompt
+// hook's order: a saved path (longest canonical root, linked worktrees mapped
+// to the main checkout) wins even over a bound remote; otherwise the exact
+// remote binding; otherwise the global destination, which also receives a
+// repository whose remote is missing, unsupported, or unresolved. A
+// repository that cannot be read at all is unavailable under both versions.
 export async function resolveLifecycleScope(
   event,
   config,
   call,
   inspect = inspectRepository,
+  canonicalize = resolveCanonicalWorkingDirectory,
 ) {
-  const repository = await inspect(event.cwd);
+  const version7 = config.version === 7;
+  const repository = await inspect(event.cwd, {
+    allowMissingRemote: version7,
+  });
+  if (version7 && config.paths?.length > 0) {
+    const match = matchProjectDestination(
+      config.paths,
+      await canonicalize(event.cwd),
+    );
+    if (match) return match.scope;
+  }
   if (repository.kind === "absent") {
     // A version 7 file may carry only per-path destinations; outside a
     // repository it then has no default to offer, and nothing is guessed.
@@ -219,11 +258,21 @@ export async function resolveLifecycleScope(
   }
   if (repository.kind !== "present")
     throw new LifecycleError("repository_unavailable");
+  if (!repository.remoteUrl) {
+    if (version7 && config.defaultProject) return config.defaultProject;
+    throw new LifecycleError("repository_unavailable");
+  }
   // Repository paths (including a local root basename) stay local. The exact
   // encrypted remote binding is the only routing evidence sent to Recall.
   const result = parseToolResult(
     await call("resolve_project", { remoteUrl: repository.remoteUrl }),
   );
+  if (
+    version7 &&
+    config.defaultProject &&
+    ["none", "ambiguous", "not_ready"].includes(result?.match)
+  )
+    return config.defaultProject;
   if (result?.match === "ambiguous")
     throw new LifecycleError("project_ambiguous");
   if (result?.match !== "exact")

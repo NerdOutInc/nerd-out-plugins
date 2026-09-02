@@ -2551,18 +2551,34 @@ test("v7 withholds every destination when repository identity cannot be proved",
   assert.equal(context, readFixture("v7", "unknown-identity-context.txt"));
   assert.match(
     context,
-    /could not prove whether filesystem repository identity exists/,
+    /could not prove whether this working directory has filesystem repository identity/,
   );
   assert.match(
     context,
-    /do not use a saved filesystem-project or global destination/,
+    /do not use a saved filesystem-project or global destination, and do not open a session/,
+  );
+  assert.match(
+    context,
+    /Say plainly in your first user-visible reply that structured journaling is unavailable/,
   );
   assert.equal(context.includes("global-project-id"), false);
   assert.equal(context.includes("path-project-id"), false);
   assert.equal(context.includes("General Memory"), false);
-  // No tool is called on this route, so the malformed-call retry rule that
-  // qualifies the other routes' give-up lists must not appear here.
-  assert.equal(context.includes("retry once"), false);
+  // No Project was resolved, so nothing that follows one may appear: not the
+  // writer protocol, not the lineage key, not the skill, and not the
+  // malformed-call retry rule that qualifies the tool-using routes.
+  for (const absent of [
+    "structured writer",
+    "open_session",
+    "append_entry",
+    "close_session",
+    "lineageKey",
+    "recall-journal",
+    "retry once",
+    "connector presence",
+  ]) {
+    assert.equal(context.includes(absent), false, absent);
+  }
 });
 
 test("v7 stays silent outside every saved path without a global destination", () => {
@@ -2800,4 +2816,206 @@ test("v7 Cursor reads its own config and routes through the same rungs", () => {
   assert.match(output.additional_context, /projectUuid path-project-id/);
   assert.match(output.additional_context, /Load \/recall-journal/);
   assert.equal(output.additional_context.includes(savedRoot), false);
+});
+
+function claudeV7Environment(config) {
+  return {
+    ...cleanEnvironment(),
+    CLAUDE_CONFIG_DIR: makeConfigDirectory(config),
+    CLAUDE_PLUGIN_ROOT: pluginRoot,
+    PATH: makeFakePsDirectory({
+      bridgeCommand:
+        "node /plugins/recall/bridge/index.mjs --client-name Claude",
+    }),
+    TMPDIR: makeTemporaryDirectory(),
+  };
+}
+
+test("v7 and legacy configs reject a saved root that is a symlink to the filesystem root", () => {
+  const link = path.join(makeTemporaryDirectory(), "scope");
+  fs.symlinkSync(path.parse(repositoryRoot).root, link);
+  for (const config of [
+    v7Config({ paths: { [link]: v7PathDestination() } }),
+    v7Config({ global: null, paths: { [link]: v7PathDestination() } }),
+    configWithProject(link),
+  ]) {
+    for (const cwd of [repositoryRoot, makeTemporaryDirectory()]) {
+      const result = runV7Hook(makeConfigDirectory(config), cwd);
+      assert.equal(result.status, 0, JSON.stringify(config));
+      assert.equal(result.stderr, "", JSON.stringify(config));
+      assert.equal(result.stdout, "", JSON.stringify(config));
+    }
+  }
+});
+
+test("v7 rejects two saved roots that canonicalize to the same directory", () => {
+  const root = makeTemporaryDirectory();
+  const alias = path.join(makeTemporaryDirectory(), "alias");
+  fs.symlinkSync(root, alias);
+  for (const paths of [
+    { [root]: v7PathDestination(), [alias]: v7PathDestination() },
+    {
+      [root]: v7PathDestination(),
+      [`${root}${path.sep}`]: v7PathDestination(),
+    },
+  ]) {
+    const result = runV7Hook(makeConfigDirectory(v7Config({ paths })), root);
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout, "", Object.keys(paths).join(", "));
+  }
+  // One alias still matches through its canonical root.
+  const context = v7Context(
+    runV7Hook(
+      makeConfigDirectory(
+        v7Config({ paths: { [alias]: v7PathDestination() } }),
+      ),
+      root,
+    ),
+  );
+  assert.match(context, /projectUuid path-project-id/);
+  assertNoV7Leak(context, root, alias);
+});
+
+test("v7 stops honoring a saved root retargeted at the filesystem root after setup", () => {
+  const root = path.join(makeTemporaryDirectory(), "project");
+  fs.mkdirSync(path.join(root, "src"), { recursive: true });
+  const configDirectory = makeConfigDirectory(
+    v7Config({ paths: { [root]: v7PathDestination() } }),
+  );
+  assert.match(
+    v7Context(runV7Hook(configDirectory, path.join(root, "src"))),
+    /projectUuid path-project-id/,
+  );
+
+  fs.rmSync(root, { recursive: true });
+  fs.symlinkSync(path.parse(root).root, root);
+  for (const cwd of [makeTemporaryDirectory(), repositoryRoot]) {
+    const result = runV7Hook(configDirectory, cwd);
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout, "", cwd);
+  }
+});
+
+test("a paths-only v7 file still journals in an exactly bound repository outside its paths", () => {
+  const context = v7Context(
+    runV7Hook(
+      makeConfigDirectory(
+        v7Config({
+          global: null,
+          paths: { "/Users/example/projects/bound-app": v7PathDestination() },
+        }),
+      ),
+      repositoryRoot,
+    ),
+  );
+  assert.match(context, /repository-first routing/);
+  assert.match(context, /call resolve_project/);
+  assert.match(context, /Version 7 is the structured writer/);
+  assert.equal(context.includes("path-project-id"), false);
+  const configuration = fs.readFileSync(
+    path.join(
+      repositoryRoot,
+      "plugins/recall/skills/recall-journal/references/configuration.md",
+    ),
+    "utf8",
+  );
+  assert.match(
+    configuration,
+    /is \*\*not\*\* scoped to its saved\s+paths alone/,
+  );
+});
+
+test("an inert v6 file becomes an automatic writer only through an explicit v7 conversion", () => {
+  const destination = v7GlobalDestination();
+  const inert = {
+    version: 6,
+    projectMemory: { enabled: true, defaultProject: destination },
+    sessionLifecycle: { enabled: false },
+  };
+  const converted = v7Config({
+    global: destination,
+    sessionLifecycle: { enabled: false },
+  });
+  const run = (config) =>
+    runHook({
+      args: ["--host", "claude-code"],
+      environment: claudeV7Environment(config),
+      input: claudeV5Input,
+    });
+
+  const before = run(inert);
+  assert.equal(before.status, 0);
+  assert.equal(before.stderr, "");
+  assert.equal(before.stdout, "");
+
+  const after = run(converted);
+  assert.equal(after.status, 0);
+  const context = JSON.parse(after.stdout).hookSpecificOutput.additionalContext;
+  assert.match(context, /Version 7 is the structured writer/);
+  assert.match(context, /open_session/);
+  assert.match(context, /projectUuid global-project-id/);
+
+  const configuration = fs.readFileSync(
+    path.join(
+      repositoryRoot,
+      "plugins/recall/skills/recall-journal/references/configuration.md",
+    ),
+    "utf8",
+  );
+  assert.match(
+    configuration,
+    /Converting such a file\s+therefore turns automatic journaling on/,
+  );
+  assert.match(
+    configuration,
+    /A version 4 file is reader-only; the version 7 file that replaces it is a\s+writer/,
+  );
+});
+
+test("both readers honor one config-size bound for large v7 files", () => {
+  const manyPaths = (count, padding) =>
+    Object.fromEntries(
+      Array.from({ length: count }, (_, index) => [
+        `/Users/example/projects/${"app".padEnd(padding, "x")}-${index}`,
+        v7PathDestination(),
+      ]),
+    );
+  const sizeOf = (config) => Buffer.byteLength(JSON.stringify(config));
+  const run = (config) =>
+    runHook({
+      args: ["--host", "claude-code"],
+      environment: claudeV7Environment(config),
+      input: claudeV5Input,
+    });
+
+  const large = manyPaths(140, 3);
+  assert.ok(sizeOf(v7Config({ paths: large })) > 16 * 1024);
+  assert.ok(sizeOf(v7Config({ paths: large })) < 64 * 1024);
+  const writer = run(
+    v7Config({ paths: large, sessionLifecycle: { enabled: false } }),
+  );
+  assert.equal(writer.status, 0);
+  assert.match(
+    JSON.parse(writer.stdout).hookSpecificOutput.additionalContext,
+    /Version 7 is the structured writer/,
+  );
+  const pilot = run(
+    v7Config({ paths: large, sessionLifecycle: { enabled: true } }),
+  );
+  assert.equal(pilot.status, 0);
+  assert.match(
+    JSON.parse(pilot.stdout).hookSpecificOutput.additionalContext,
+    /opt-in version 6 conversation-segment adapter/,
+  );
+
+  const oversized = manyPaths(600, 40);
+  assert.ok(sizeOf(v7Config({ paths: oversized })) > 64 * 1024);
+  for (const enabled of [false, true]) {
+    const result = run(
+      v7Config({ paths: oversized, sessionLifecycle: { enabled } }),
+    );
+    assert.equal(result.status, 0, String(enabled));
+    assert.equal(result.stderr, "", String(enabled));
+    assert.equal(result.stdout, "", String(enabled));
+  }
 });

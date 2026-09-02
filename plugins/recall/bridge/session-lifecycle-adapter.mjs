@@ -23,6 +23,7 @@ import {
   resolveLifecycleScope,
 } from "./session-lifecycle-routing.mjs";
 import { LifecycleStateStore } from "./session-lifecycle-state.mjs";
+import { resolveCanonicalWorkingDirectory } from "./journal-destinations.mjs";
 
 const HOOK_EVENTS_WITH_CONTEXT = new Set([
   "PreToolUse",
@@ -133,6 +134,7 @@ export class SessionLifecycleAdapter {
     env = process.env,
     clock = Date.now,
     inspectRepository,
+    canonicalizeWorkingDirectory,
     readConfig = readLifecycleConfig,
     storeFactory = (directory) => new LifecycleStateStore(directory, { clock }),
     eventTimeoutMs = 4000,
@@ -143,6 +145,11 @@ export class SessionLifecycleAdapter {
     this.env = env;
     this.clock = clock;
     this.inspectRepository = inspectRepository;
+    // Version 7 path routing maps linked worktrees onto the main checkout
+    // with the bridge's environment, exactly as the prompt hook does.
+    this.canonicalizeWorkingDirectory =
+      canonicalizeWorkingDirectory ??
+      ((cwd) => resolveCanonicalWorkingDirectory(cwd, { env }));
     this.readConfig = readConfig;
     this.storeFactory = storeFactory;
     this.eventTimeoutMs = eventTimeoutMs;
@@ -219,6 +226,7 @@ export class SessionLifecycleAdapter {
         config,
         call,
         this.inspectRepository,
+        this.canonicalizeWorkingDirectory,
       );
       const base = {
         protocolVersion: 1,

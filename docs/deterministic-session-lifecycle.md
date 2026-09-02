@@ -6,8 +6,12 @@ stay unchanged; connection diagnostics also cover Codex and Cursor.
 No installed cache, user config, hook trust, or production sessions are modified
 by this implementation. Since plugin 0.34.0 a version 7 journal config carries
 the same block as `sessionLifecycle`, so global and per-path structured
-destinations can coexist with the pilot; the adapter's routing is unchanged,
-with the version 7 `global` destination playing the version 6 default's role.
+destinations can coexist with the pilot. Under version 7 the adapter routes
+exactly as the prompt hook does, through the shared
+`bridge/journal-destinations.mjs`: a saved path (canonical longest root,
+linked worktrees mapped to the main checkout) wins even over a bound remote,
+then the exact remote binding, then the global destination, which also
+receives a repository whose remote is missing, unsupported, or unresolved.
 See the journal configuration reference.
 
 This supersedes the earlier proposal to open at SessionStart, close at Stop,
@@ -141,10 +145,13 @@ explicit capability flag records actual host proof; it is not a CLI minimum.
 
 The adapter verifies cwd and repository locally. A supported non-local remote
 must resolve exactly through `resolve_project`; no local basename is sent.
-Missing/inaccessible repositories, invalid remotes, ambiguous matches,
-unavailable tools, and blocked scope never use a default. Only proved absence
-of repository identity permits the configured exact default Project. The app
-revalidates membership, policy, and key state.
+Under version 6, missing/inaccessible repositories, invalid remotes, ambiguous
+matches, unavailable tools, and blocked scope never use a default, and only
+proved absence of repository identity permits the configured exact default
+Project. Under version 7 a saved path wins first and the global destination
+also receives unbound or unresolved repositories; an unreadable repository
+stays unavailable under both. The app revalidates membership, policy, and key
+state.
 
 Host/run/participant/event values use domain-separated SHA-256 over JSON tuple
 encoding. Raw host IDs and paths never cross the native lifecycle boundary.

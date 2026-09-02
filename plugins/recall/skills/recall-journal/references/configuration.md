@@ -224,9 +224,15 @@ Recall Project.
   `{ "enabled": false }`, keeps the pilot off.
 - The shape is exact: any other key, including every legacy routing field,
   makes the file invalid so one prompt can never straddle protocols.
+- The file must stay under 64 KiB. The hook and the session-recording adapter
+  both reject a larger file as invalid, so the pilot flag can never change
+  whether the file is honored. Refuse to save a version 7 file that would
+  exceed that bound and ask the user to drop destinations instead.
 
 Routing happens in the hook, in this order, and the hook's context names which
-rung applied and the destination it chose on every prompt:
+rung applied and the destination it chose on every prompt. The
+session-recording adapter (see "Version 6 session-recording pilot") applies
+the same order when the pilot is enabled under version 7:
 
 1. **Saved filesystem-project destination.** The canonical working directory
    is inside a saved `paths` root. The hook names that workspace and Project;
@@ -247,9 +253,15 @@ rung applied and the destination it chose on every prompt:
 Once a rung has chosen a Project, a `get_project_context` result that is
 missing, blocked, mismatched, or not ready means continue without project
 memory; no later rung is tried. When the hook cannot classify the working
-directory at all (missing or inaccessible), it withholds every destination.
-Outside every saved path, a version 7 file without a global destination is
-silent, exactly like a project-only version 2 file.
+directory at all (missing or inaccessible), it withholds every destination
+and the writer protocol with it, and the agent says so in its first reply.
+
+A version 7 file without a global destination is **not** scoped to its saved
+paths alone: outside them, rung 2 still applies, so every other repository
+whose remote has an exact Recall binding opens structured sessions there.
+Only a directory with no repository identity, or a repository whose remote is
+missing, unsupported, or unresolved, is left without project memory. Say this
+plainly whenever setup or reconfiguration produces a paths-only file.
 
 Migration is always explicit (see "Explicitly changing journal modes"): a
 version 5 `defaultProject` becomes `global`, and version 6 additionally keeps
@@ -324,16 +336,20 @@ with global or per-path destinations can enable it without giving them up:
 ```
 
 With the block enabled, the prompt hook yields to the adapter context exactly
-as it does for version 6, and the adapter's own routing is unchanged from
-version 6: a repository session must resolve exactly through
-`resolve_project`, and the `global` destination plays the version 6 default's
-role for proved no-repository sessions. A version 7 file with only `paths`
-has no such default, so its no-repository lifecycle events report scope
-unavailable. Saved path destinations route the prompt-hook writer, not the
-adapter. Enabling the block requires the same host acceptance, catalog
-schema, certification, and explicit confirmation as version 6, and
-`sessionLifecycle.enabled: false` disables the pilot without touching the
-destinations.
+as it does for version 6, and the adapter routes every event through the
+same three rungs as the hook: a saved path (canonical longest root, linked
+worktrees mapped to the main checkout) wins even over a bound remote; then
+the exact `resolve_project` binding; then the `global` destination, which
+also receives a repository whose remote is missing, unsupported, or
+unresolved. A version 7 file with only `paths` has no global destination, so
+outside its paths an unbound or unresolved repository and any no-repository
+directory report scope unavailable rather than guessing. A repository that
+Git cannot read at all stays unavailable under both versions. Enabling the
+block requires the same host acceptance, catalog schema, certification, and
+explicit confirmation as version 6. `sessionLifecycle.enabled: false`
+disables the pilot without touching the destinations; unlike version 6, it
+does not make the file inert, because the version 7 writer still runs (see
+"Upgrading version 4, 5, or 6 to version 7").
 
 Before enabling, require the installed host to accept `mcp_tool` hooks and the
 current connected Recall catalog to advertise the complete version-1
@@ -428,7 +444,10 @@ valid effective destination stays silent.
    workspace-root destination. Explain that outside a saved path, repository
    work resolves to its exactly bound Project when one exists, and that the
    global destination receives repository work whose remote is unbound,
-   unsupported, or unresolved. For Legacy journal note, if there are no
+   unsupported, or unresolved. When the file will have no global destination,
+   say plainly that exactly bound repositories still journal and that
+   everything else outside the saved paths gets no project memory. For Legacy
+   journal note, if there are no
    Projects configure the workspace root; otherwise offer the root or one exact
    Project.
 6. For Legacy journal note, ask where the short day summary should go. If
@@ -541,6 +560,22 @@ The upgrade is explicit and whole-file, never triggered by lifecycle context:
 - Either may add `paths` entries for the current filesystem project during the
   same upgrade, using the resolved absolute path.
 
+Two of these conversions change what happens automatically, and the user must
+confirm that consequence in so many words before the save:
+
+- A version 4 file is reader-only; the version 7 file that replaces it is a
+  writer. From the next prompt, agents open sessions, append checkpoints, and
+  close with day summaries that appear in **Today -> Now activity** and on the
+  Today timeline.
+- A version 6 file with `sessionLifecycle.enabled: false` is inert: it emits
+  no journal context at all. The same block under version 7 only keeps the
+  pilot off, and the normal structured writer runs. Converting such a file
+  therefore turns automatic journaling on. If the user wants journaling to
+  stay off, do not convert; leave the version 6 file alone or remove it.
+
+Say which of these applies, name the destinations that will receive the
+records, and require an explicit yes before continuing.
+
 Re-check the whole capability gate, show the exact replacement v7 shape, and
 ask for final confirmation before the atomic save.
 
@@ -560,10 +595,12 @@ with it, and pending delivery state is preserved.
 When asked to stop separate journaling for the current filesystem project,
 confirm the exact path and delete only that `projects` (version 2) or `paths`
 (version 7) entry; sessions then use the global destination if one exists. A
-project-only config becomes disabled outside that saved path automatically.
-When removing the final remaining destination, explicitly confirm disabling
-journaling and remove the config file instead of writing an invalid empty v2
-or v7 object.
+project-only version 2 file becomes disabled outside its saved paths
+automatically, but a paths-only version 7 file does not: exactly bound
+repositories still journal through the repository rung, so say so whenever a
+removal leaves a version 7 file with no global destination. When removing the
+final remaining destination, explicitly confirm disabling journaling and
+remove the config file instead of writing an invalid empty v2 or v7 object.
 
 ## Migrating a retired DailyNote summary target
 
