@@ -140,9 +140,11 @@ Routing is fail-closed and happens before any named-note capability probe:
 The default is never a recovery path. Do not use it after a repository has no
 supported remote, after `resolve_project` returns `none`, `ambiguous`, or
 `not_ready`, when either required tool is unavailable, or when structured
-context is missing, blocked, mismatched, or not ready.
+context is missing, blocked, mismatched, or not ready. Version 7 replaces this
+refusal with a named global destination; see "Version 7 structured
+destinations" below.
 
-Versions 3, 4, and 5 are mutually exclusive with the legacy `scope`,
+Versions 3, 4, 5, 6, and 7 are mutually exclusive with the legacy `scope`,
 `workspace`, `journal`, `global`, and `projects` fields. Mixed or additional
 fields make the file invalid so one prompt can never enter both protocols.
 
@@ -153,7 +155,7 @@ notes, Today summaries, or structured sessions under them.
 `projectMemory.defaultProject` shape as version 4 and is validated by the same
 exact-shape rules, but a valid version 5 config directs the agent to write
 structured sessions instead of legacy notes — see "Structured journaling
-(version 5)" in the skill. It never writes a legacy journal note or a
+(versions 5 and 7)" in the skill. It never writes a legacy journal note or a
 hand-built Today card.
 
 ```json
@@ -169,18 +171,103 @@ hand-built Today card.
 }
 ```
 
-Version 5 setup is available only after the live MCP catalog passes the whole
-structured-surface check below. It always requires one exact, live, write-ready
-Recall Project as its no-repository default; a workspace root is invalid. Never
-write version 3 or version 4 during setup. They remain readable compatibility
-formats, and an explicit upgrade may replace either one with version 5.
+Version 5 always carries one exact, live, write-ready Recall Project as its
+no-repository default; a workspace root is invalid. It is now a readable
+compatibility format, like versions 3 and 4: the hook honors an existing
+version 5 file unchanged, but new structured setups write version 7 below,
+and an explicit upgrade may replace version 3, 4, 5, or 6 with version 7.
+Never write version 3, 4, 5, or 6 during setup.
 
 Never auto-migrate, downgrade, or change modes from lifecycle context. A mode
 change is a separate, explicit configuration action with its own consequence
 summary and confirmation. Older journal notes and Today cards remain untouched
 archive under every mode change.
 
-## Capability gate for version 5 setup
+## Version 7 structured destinations
+
+Version 7 is the current structured writer shape. It keeps the version 5
+session protocol and restores the version 2 destination model: an optional
+global destination plus optional per-path destinations, every one naming a
+Recall Project.
+
+```json
+{
+  "version": 7,
+  "projectMemory": {
+    "enabled": true,
+    "global": {
+      "workspace": { "id": "workspace-id", "name": "Workspace name" },
+      "recallProject": { "id": "project-id", "name": "Project name" }
+    },
+    "paths": {
+      "/absolute/path/to/project": {
+        "workspace": { "id": "workspace-id", "name": "Workspace name" },
+        "recallProject": { "id": "project-id", "name": "Project name" }
+      }
+    }
+  },
+  "sessionLifecycle": { "enabled": false }
+}
+```
+
+- `global` and `paths` are independently optional, but at least one
+  destination must exist, or the file is invalid.
+- Every destination names both a workspace and a Recall Project. A
+  workspace-root destination is invalid: structured sessions, checkpoints,
+  handoffs, and asks are Project-scoped end to end. Workspace-root
+  destinations remain available only in the legacy journal-note mode.
+- Every `paths` key is an absolute, non-root directory. Nested roots are
+  allowed and the longest matching root wins; linked worktrees resolve to the
+  main checkout path before matching, exactly as the legacy resolver does.
+- `sessionLifecycle` is optional and carries the version 6 pilot unchanged
+  (see "Version 6 session-recording pilot"). Omitting it, or writing
+  `{ "enabled": false }`, keeps the pilot off.
+- The shape is exact: any other key, including every legacy routing field,
+  makes the file invalid so one prompt can never straddle protocols.
+- The file must stay under 64 KiB. The hook and the session-recording adapter
+  both reject a larger file as invalid, so the pilot flag can never change
+  whether the file is honored. Refuse to save a version 7 file that would
+  exceed that bound and ask the user to drop destinations instead.
+
+Routing happens in the hook, in this order, and the hook's context names which
+rung applied and the destination it chose on every prompt. The
+session-recording adapter (see "Version 6 session-recording pilot") applies
+the same order when the pilot is enabled under version 7:
+
+1. **Saved filesystem-project destination.** The canonical working directory
+   is inside a saved `paths` root. The hook names that workspace and Project;
+   the agent calls `get_project_context` directly with that `projectUuid` and
+   accepts only a result whose Project and workspace ids match. No
+   `resolve_project` call is made, even inside a Git repository with a bound
+   remote — the saved path wins. The saved path itself is never printed.
+2. **Repository binding.** No path matched and the directory has repository
+   identity with a supported non-local remote: `resolve_project` as in
+   version 5, exact match only.
+3. **Global destination.** Nothing above produced a Project — no repository
+   identity, an unsupported or missing remote, or a `none`, `ambiguous`, or
+   `not_ready` resolution — and a global destination exists. The version 5
+   refusal to use the default after a repository routing failure is dropped
+   for version 7, because the hook now names the destination on every prompt.
+   Without a global destination, continue without project memory.
+
+Once a rung has chosen a Project, a `get_project_context` result that is
+missing, blocked, mismatched, or not ready means continue without project
+memory; no later rung is tried. When the hook cannot classify the working
+directory at all (missing or inaccessible), it withholds every destination
+and the writer protocol with it, and the agent says so in its first reply.
+
+A version 7 file without a global destination is **not** scoped to its saved
+paths alone: outside them, rung 2 still applies, so every other repository
+whose remote has an exact Recall binding opens structured sessions there.
+Only a directory with no repository identity, or a repository whose remote is
+missing, unsupported, or unresolved, is left without project memory. Say this
+plainly whenever setup or reconfiguration produces a paths-only file.
+
+Migration is always explicit (see "Explicitly changing journal modes"): a
+version 5 `defaultProject` becomes `global`, and version 6 additionally keeps
+its `sessionLifecycle` block. Lifecycle context never rewrites a file.
+
+## Capability gate for structured setup (versions 5 and 7)
 
 Inspect the live MCP catalog and its exact input schemas; do not probe by making
 invalid calls. Offer **Structured Project activity** only when all of these are
@@ -195,12 +282,14 @@ advertised:
 - `close_session`, accepting `workspaceId`, `projectUuid`, `sessionUuid`,
   `idempotencyKey`, `outcome`, `runningSummary`, `followUps`, and `daySummary`.
 
-If any part is absent, do not write version 5. During first setup, offer the
-legacy journal-note mode only and explain that Structured Project activity
-requires an updated and restarted Recall app. If a v5 config already exists,
-leave it unchanged; runtime follows the skill's all-or-nothing fallback. Re-check
-the whole gate immediately before every version 5 save; never infer support from
-a plugin or app version.
+If any part is absent, do not write version 5 or version 7. During first
+setup, offer the legacy journal-note mode only and explain that Structured
+Project activity requires an updated and restarted Recall app. The same rule
+protects existing files. If a v5 config already exists, leave it unchanged;
+if a v7 config already exists, leave it unchanged too. Runtime then follows
+the skill's all-or-nothing fallback. The version 5 gate is the version 7 gate.
+Re-check the whole gate immediately before every version 7 save; never infer
+support from a plugin or app version.
 
 ## Version 6 session-recording pilot
 
@@ -228,6 +317,39 @@ same live write-ready workspace and exact Project selection as version 5 and
 is used only after proving no repository exists. Repository failures never
 fall back to it. `sessionLifecycle.enabled: false` disables this mode without
 entering an older writer. Disabling preserves pending delivery state.
+
+The pilot also lives under version 7's `sessionLifecycle` block, so a user
+with global or per-path destinations can enable it without giving them up:
+
+```json
+{
+  "version": 7,
+  "projectMemory": {
+    "enabled": true,
+    "global": {
+      "workspace": { "id": "workspace-id", "name": "Workspace name" },
+      "recallProject": { "id": "project-id", "name": "Project name" }
+    }
+  },
+  "sessionLifecycle": { "enabled": true }
+}
+```
+
+With the block enabled, the prompt hook yields to the adapter context exactly
+as it does for version 6, and the adapter routes every event through the
+same three rungs as the hook: a saved path (canonical longest root, linked
+worktrees mapped to the main checkout) wins even over a bound remote; then
+the exact `resolve_project` binding; then the `global` destination, which
+also receives a repository whose remote is missing, unsupported, or
+unresolved. A version 7 file with only `paths` has no global destination, so
+outside its paths an unbound or unresolved repository and any no-repository
+directory report scope unavailable rather than guessing. A repository that
+Git cannot read at all stays unavailable under both versions. Enabling the
+block requires the same host acceptance, catalog schema, certification, and
+explicit confirmation as version 6. `sessionLifecycle.enabled: false`
+disables the pilot without touching the destinations; unlike version 6, it
+does not make the file inert, because the version 7 writer still runs (see
+"Upgrading version 4, 5, or 6 to version 7").
 
 Before enabling, require the installed host to accept `mcp_tool` hooks and the
 current connected Recall catalog to advertise the complete version-1
@@ -257,7 +379,8 @@ Use only the command for the current host. Merge the emitted entries through
 the host's supported hook settings workflow, preserving unrelated hooks and
 the existing Recall `UserPromptSubmit` context hook. Do not install duplicate
 entries. These profiles are deliberately not included in the default plugin
-manifest. After saving the v6 config with explicit confirmation, refresh the
+manifest. After saving the v6 config, or a v7 config whose `sessionLifecycle`
+block is enabled, with explicit confirmation, refresh the
 host's plugin/MCP configuration through its supported interface and review the
 resulting hooks. Codex trust remains an explicit user action in `/hooks`;
 never edit trust state, copy hashes, or bypass review. No installed cache file
@@ -274,7 +397,8 @@ runtime proof matrix and limits, see the repository's
 ## Resolve the current filesystem project
 
 Show the user the resolved absolute path before saving a filesystem-project
-destination.
+destination in either mode — a version 2 `projects` entry or a version 7
+`paths` entry.
 
 1. Normalize the session working directory to an absolute real path when
    possible.
@@ -296,44 +420,54 @@ valid effective destination stays silent.
    the user to choose one complete mode:
    - **Structured Project activity** — recommended when the user wants agent
      work to appear in **Today -> Now activity**. Recall owns durable sessions,
-     checkpoints, continuity, and optional day cards. Repository sessions route
-     by an exact non-local Git-remote binding; the configured default Project is
-     used only when the hook proves there is no repository identity.
+     checkpoints, continuity, and optional day cards. Saved filesystem-project
+     destinations route first, then an exact non-local Git-remote binding, then
+     the global destination; the hook names which applied on every prompt.
+     Every destination names a Recall Project. Writes version 7.
    - **Legacy journal note** — one named note per chat thread, with an optional
      Today summary. It supports a global destination, filesystem-path routes,
-     and workspace-root destinations.
+     and workspace-root destinations. Writes version 2.
    If the gate fails, offer only Legacy journal note and explain why. Do not
    silently select or combine modes.
-2. Call `list_workspaces`. Offer only confirmed workspaces with both
+2. In either mode, tell the user the current filesystem project's resolved
+   absolute path (see "Resolve the current filesystem project") and ask
+   whether this destination applies to that filesystem project or globally.
+3. Call `list_workspaces`. Offer only confirmed workspaces with both
    `roleWritable: true` and `writeReady: true`. Show name, id, role, and write
    status. If none qualify, stop and explain how to grant **Write** access or
    finish device readiness in Recall.
-3. After the user selects a workspace, page through
+4. After the user selects a workspace, page through
    `list_projects({ workspaceId, limit: 100, offset })` until `hasMore` is false,
    never exceeding the advertised offset bound.
-4. For Structured Project activity, require one exact Project from that catalog,
+5. For Structured Project activity, require one exact Project from that catalog,
    shown by name and id. If the workspace has no Projects, stop; never save a
-   workspace-root default. Explain that repository work may resolve to another
-   exactly bound Project and that this default is not used after any repository
-   routing failure. For Legacy journal note, if there are no Projects configure
-   the workspace root; otherwise offer the root or one exact Project.
-5. For Legacy journal note, first tell the user the current filesystem project's
-   absolute path and ask whether this destination applies to that filesystem
-   project or globally. Then ask where the short day summary should go. If
+   workspace-root destination. Explain that outside a saved path, repository
+   work resolves to its exactly bound Project when one exists, and that the
+   global destination receives repository work whose remote is unbound,
+   unsupported, or unresolved. When the file will have no global destination,
+   say plainly that exactly bound repositories still journal and that
+   everything else outside the saved paths gets no project memory. For Legacy
+   journal note, if there are no
+   Projects configure the workspace root; otherwise offer the root or one exact
+   Project.
+6. For Legacy journal note, ask where the short day summary should go. If
    `create_today_note` is in the
    MCP tool catalog, offer **Today timeline** (recommended) and **no day
    summary**. If it is absent, offer only no day summary and explain that Today
    summaries require an updated/restarted Recall app; the user can reconfigure
    after updating. Never offer the retired legacy DailyNote, and never
-   configure Today by assuming `create_note.placement` will work.
-6. Confirm the complete mode and its routing. For Legacy journal note, also
+   configure Today by assuming `create_note.placement` will work. Structured
+   Project activity has no summary setting: the day card comes from
+   `close_session`.
+7. Confirm the complete mode and its routing. For Legacy journal note, also
    confirm the scope, absolute filesystem path when applicable, workspace,
    optional Recall Project, and summary target. For Structured Project activity,
-   confirm the exact default workspace and Project. Immediately re-run
+   confirm the scope, the absolute filesystem path when applicable, and the
+   exact workspace and Project. Immediately re-run
    `list_workspaces` and page `list_projects` again; require the exact Project id
    in the same workspace whenever a Project was selected. Re-check the full
-   structured capability gate before saving version 5.
-7. Only after confirmation and revalidation, atomically write the exact v2 or v5
+   structured capability gate before saving version 7.
+8. Only after confirmation and revalidation, atomically write the exact v2 or v7
    shape: create the
    config directory if needed, write a temporary file in that directory, rename
    it over the target, then parse and validate the saved file. Keep it local and
@@ -371,38 +505,81 @@ When the user explicitly asks to reconfigure where journaling goes:
 3. When keeping version 5, require the whole capability gate, then offer only
    exact live Projects from write-ready workspaces. Revalidate and atomically
    replace only `projectMemory.defaultProject`; never add legacy routing fields,
-   ask about a summary target, or use a workspace root.
+   ask about a summary target, or use a workspace root. Adding a global or
+   filesystem-project destination to a version 5 file is not a same-mode
+   change: offer the explicit upgrade to version 7 below instead.
+4. When keeping version 7, require the whole capability gate. Ask whether to
+   change the current filesystem project's destination, add one for it, or
+   change the global destination; show the resolved absolute path whenever a
+   filesystem project is involved. Repeat the write-ready workspace selection
+   when the workspace changes, then require one exact Project from that
+   workspace, never a workspace root. Revalidate and atomically replace only
+   the selected destination, preserving every other destination and the
+   `sessionLifecycle` block unchanged; never add legacy routing fields or ask
+   about a summary target.
 
 ## Explicitly changing journal modes
 
 Only run a mode change when the user explicitly chooses it during setup or
-reconfiguration. Before converting v1 or v2 to version 5, explain and confirm
+reconfiguration. Before converting v1 or v2 to version 7, explain and confirm
 all of these consequences together:
 
-- The old global and filesystem-path destinations cannot be translated
-  losslessly and will not carry into v5. Repository sessions use an exact
-  supported Git-remote binding; no remote, `none`, `ambiguous`, `not_ready`, or
-  unavailable routing means no structured journal for that repository.
-- The one selected default is an exact Recall Project and applies only when the
-  hook proves no filesystem repository identity exists. A workspace-root global
-  destination has no v5 equivalent.
+- Global and filesystem-path destinations that name a Recall Project carry
+  over as version 7's `global` and `paths` entries after live revalidation.
+  Workspace-root destinations cannot be translated losslessly: each one needs
+  an exact Project chosen now, or it is dropped from the new file.
+- Outside a saved path, repository sessions use an exact supported Git-remote
+  binding; no remote, `none`, `ambiguous`, or `not_ready` fall back to the
+  global destination when one exists, otherwise that repository has no
+  structured journal.
 - Legacy named-note journals stop receiving updates. New sessions and
   checkpoints are user-facing in **Today -> Now activity**, and Recall may
   create one app-owned Today card when the agent supplies a meaningful
   `daySummary` at close.
-- Version 5 has no persistent `summaryTarget: "none"` preference. If an
-  always-no-card preference is required, keep version 2.
+- Version 5 has no persistent `summaryTarget: "none"` preference, and neither
+  does version 7. If an always-no-card preference is required, keep version 2.
 - Existing journal notes and Today cards remain readable and are never moved,
   rewritten, or deleted.
 
-Then select and revalidate one exact write-ready default Project, re-check the
-whole structured capability gate, show the exact replacement v5 shape, and ask
-for final confirmation before the atomic save. Converting version 3 requires
-the same target selection and confirmation. Converting version 4 may retain its
-default only after live revalidation. Neither reader version upgrades
-implicitly.
+Then revalidate every carried destination against `list_workspaces` and
+`list_projects`, re-check the whole structured capability gate, show the exact
+replacement v7 shape, and ask for final confirmation before the atomic save.
+Converting version 3 requires selecting at least one destination the same way.
+No older version upgrades implicitly.
 
-An explicit switch from v5 to Legacy journal note is also a whole-mode
+### Upgrading version 4, 5, or 6 to version 7
+
+The upgrade is explicit and whole-file, never triggered by lifecycle context:
+
+- Version 4 or 5: `projectMemory.defaultProject` becomes `projectMemory.global`
+  after live revalidation of its workspace and Project. The routing
+  consequence to confirm is that this destination now also receives repository
+  work whose remote is unbound or unresolved, which version 5 refused.
+- Version 6: the same, and `sessionLifecycle` is kept unchanged, so the pilot
+  stays exactly as enabled or disabled as before.
+- Either may add `paths` entries for the current filesystem project during the
+  same upgrade, using the resolved absolute path.
+
+Two of these conversions change what happens automatically, and the user must
+confirm that consequence in so many words before the save:
+
+- A version 4 file is reader-only; the version 7 file that replaces it is a
+  writer. From the next prompt, agents open sessions, append checkpoints, and
+  close with day summaries that appear in **Today -> Now activity** and on the
+  Today timeline.
+- A version 6 file with `sessionLifecycle.enabled: false` is inert: it emits
+  no journal context at all. The same block under version 7 only keeps the
+  pilot off, and the normal structured writer runs. Converting such a file
+  therefore turns automatic journaling on. If the user wants journaling to
+  stay off, do not convert; leave the version 6 file alone or remove it.
+
+Say which of these applies, name the destinations that will receive the
+records, and require an explicit yes before continuing.
+
+Re-check the whole capability gate, show the exact replacement v7 shape, and
+ask for final confirmation before the atomic save.
+
+An explicit switch from v5 or v7 to Legacy journal note is also a whole-mode
 replacement, not a downgrade fallback. Explain that structured sessions remain
 readable archive but stop receiving automatic entries; then run the Legacy
 first-setup choices and confirm the complete replacement v2 shape.
@@ -410,14 +587,20 @@ first-setup choices and confirm the complete replacement v2 shape.
 When disabling version 5, show its exact default workspace and Project, confirm
 that automatic structured sessions will stop while existing activity remains
 readable, and remove the config file. Never replace it with an inert or invalid
-v5 object.
+v5 object. When disabling version 7, show every saved destination — the global
+one and each absolute path with its workspace and Project — and confirm the
+same way before removing the file; an enabled `sessionLifecycle` block stops
+with it, and pending delivery state is preserved.
 
 When asked to stop separate journaling for the current filesystem project,
-confirm the exact path and delete only that `projects` entry; sessions then use
-the global destination if one exists. A project-only config becomes disabled
-outside that saved path automatically. When removing the final remaining
-destination, explicitly confirm disabling journaling and remove the config file
-instead of writing an invalid empty v2 object.
+confirm the exact path and delete only that `projects` (version 2) or `paths`
+(version 7) entry; sessions then use the global destination if one exists. A
+project-only version 2 file becomes disabled outside its saved paths
+automatically, but a paths-only version 7 file does not: exactly bound
+repositories still journal through the repository rung, so say so whenever a
+removal leaves a version 7 file with no global destination. When removing the
+final remaining destination, explicitly confirm disabling journaling and
+remove the config file instead of writing an invalid empty v2 or v7 object.
 
 ## Migrating a retired DailyNote summary target
 

@@ -33,6 +33,7 @@ import {
   SessionRpcInterposer,
 } from "../plugins/recall/bridge/session-rpc.mjs";
 import { startSessionAdapter } from "../plugins/recall/bridge/session-adapter.mjs";
+import { resolveCanonicalWorkingDirectory } from "../plugins/recall/bridge/journal-destinations.mjs";
 import { lifecycleContext } from "../plugins/recall/hooks/session-lifecycle-context.mjs";
 import { lifecycleHookProfile } from "../plugins/recall/hooks/session-lifecycle-profiles.mjs";
 
@@ -1281,6 +1282,493 @@ test("v6 config is exact, separate from older modes, and disabled by default", a
       /config_invalid/,
     );
   }
+});
+
+const version7Config = {
+  version: 7,
+  projectMemory: {
+    enabled: true,
+    global: version6Config.projectMemory.defaultProject,
+    paths: {
+      "/fixture/bound": {
+        workspace: { id: "workspace-two", name: "Workspace" },
+        recallProject: { id: "project-two", name: "Project" },
+      },
+    },
+  },
+  sessionLifecycle: { enabled: true },
+};
+const scopeOne = { workspaceId: "workspace-one", projectUuid: "project-one" };
+const scopeTwo = { workspaceId: "workspace-two", projectUuid: "project-two" };
+const scopeThree = {
+  workspaceId: "workspace-three",
+  projectUuid: "project-three",
+};
+const boundRepository = {
+  kind: "present",
+  remoteUrl: "https://github.com/example/project.git",
+};
+const exactResolution = (scope) => ({
+  match: "exact",
+  project: { id: scope.projectUuid, workspaceId: scope.workspaceId },
+});
+
+test("v7 carries the session-recording pilot beside its destinations and rejects unusable roots", async (t) => {
+  const directory = await fs.mkdtemp(
+    path.join(os.tmpdir(), "recall-lifecycle-config-v7-"),
+  );
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const env = { CLAUDE_CONFIG_DIR: directory };
+  const file = path.join(directory, "recall-journal.json");
+  const write = (value) => fs.writeFile(file, JSON.stringify(value));
+
+  // The global destination is the adapter's no-repository fallback, and the
+  // saved paths ride along with their canonical roots.
+  await write(version7Config);
+  assert.deepEqual(await readLifecycleConfig("claude-code", env), {
+    enabled: true,
+    directory,
+    version: 7,
+    defaultProject: scopeOne,
+    paths: [{ root: "/fixture/bound", scope: scopeTwo }],
+    codexParticipantVerified: false,
+  });
+
+  // The pilot is optional under v7 and off unless explicitly enabled.
+  const { sessionLifecycle, ...withoutLifecycle } = version7Config;
+  await write(withoutLifecycle);
+  assert.equal((await readLifecycleConfig("claude-code", env)).enabled, false);
+  await write({ ...version7Config, sessionLifecycle: { enabled: false } });
+  assert.equal((await readLifecycleConfig("claude-code", env)).enabled, false);
+  await write({
+    ...version7Config,
+    sessionLifecycle: { enabled: true, codexParticipantVerified: true },
+  });
+  assert.equal(
+    (await readLifecycleConfig("codex", { CODEX_HOME: directory }))
+      .codexParticipantVerified,
+    true,
+  );
+
+  // A paths-only file has no global destination and says so.
+  const { global: _global, ...pathsOnly } = version7Config.projectMemory;
+  await write({ ...version7Config, projectMemory: pathsOnly });
+  const pathsOnlyConfig = await readLifecycleConfig("claude-code", env);
+  assert.equal(pathsOnlyConfig.enabled, true);
+  assert.equal(pathsOnlyConfig.defaultProject, null);
+  assert.equal(pathsOnlyConfig.paths.length, 1);
+
+  // A large but valid file is honored by this reader exactly as by the hook.
+  const bound = version7Config.projectMemory.paths["/fixture/bound"];
+  const manyPaths = (count, padding) =>
+    Object.fromEntries(
+      Array.from({ length: count }, (_, index) => [
+        `/fixture/projects/${"app".padEnd(padding, "x")}-${index}`,
+        bound,
+      ]),
+    );
+  const large = {
+    ...version7Config,
+    projectMemory: { ...pathsOnly, paths: manyPaths(140, 3) },
+  };
+  assert.ok(Buffer.byteLength(JSON.stringify(large)) > 16 * 1024);
+  await write(large);
+  assert.equal(
+    (await readLifecycleConfig("claude-code", env)).paths.length,
+    140,
+  );
+
+  const rootLink = path.join(directory, "root-link");
+  await fs.symlink(path.parse(directory).root, rootLink);
+  const { paths: _paths, ...globalOnly } = version7Config.projectMemory;
+  for (const value of [
+    { version: 7, projectMemory: { enabled: true }, sessionLifecycle },
+    {
+      version: 7,
+      projectMemory: { enabled: true, paths: {} },
+      sessionLifecycle,
+    },
+    { ...version7Config, projectMemory: { ...globalOnly, enabled: false } },
+    {
+      ...version7Config,
+      projectMemory: {
+        enabled: true,
+        defaultProject: version6Config.projectMemory.defaultProject,
+      },
+    },
+    { ...version7Config, global: {} },
+    { ...version7Config, sessionLifecycle: { enabled: true, unknown: true } },
+    { ...version7Config, sessionLifecycle: { enabled: "yes" } },
+    {
+      ...version7Config,
+      projectMemory: {
+        ...globalOnly,
+        global: { workspace: { id: "workspace-one", name: "Workspace" } },
+      },
+    },
+    {
+      ...version7Config,
+      projectMemory: { ...globalOnly, paths: { "relative/path": bound } },
+    },
+    {
+      ...version7Config,
+      projectMemory: { ...globalOnly, paths: { "/": bound } },
+    },
+    {
+      ...version7Config,
+      projectMemory: { ...globalOnly, paths: { [rootLink]: bound } },
+    },
+    {
+      ...version7Config,
+      projectMemory: {
+        ...globalOnly,
+        paths: { "/fixture/bound": bound, "/fixture/bound/": bound },
+      },
+    },
+    { ...version7Config, projectMemory: { ...globalOnly, paths: [] } },
+    {
+      ...version7Config,
+      projectMemory: { ...globalOnly, paths: { "/fixture/bound": null } },
+    },
+    {
+      ...version7Config,
+      projectMemory: { ...pathsOnly, paths: manyPaths(600, 40) },
+    },
+  ]) {
+    await write(value);
+    await assert.rejects(
+      readLifecycleConfig("claude-code", env),
+      /config_invalid/,
+      JSON.stringify(value).slice(0, 200),
+    );
+  }
+});
+
+test("v7 lifecycle scope routes a saved path, then the exact remote, then the global destination", async () => {
+  const config7 = {
+    version: 7,
+    enabled: true,
+    defaultProject: scopeOne,
+    paths: [{ root: "/fixture/bound", scope: scopeTwo }],
+  };
+  const noCall = async () => {
+    throw new Error("resolve_project must not be called");
+  };
+  const inspections = [];
+  const present = async (cwd, options) => {
+    inspections.push(options);
+    return boundRepository;
+  };
+  const canonical = async (cwd) => cwd;
+  const resolve = (event, config, call, inspect) =>
+    resolveLifecycleScope(event, config, call, inspect, canonical);
+
+  // A saved path wins even inside a repository with a bound remote.
+  assert.deepEqual(
+    await resolve({ cwd: "/fixture/bound/src" }, config7, noCall, present),
+    scopeTwo,
+  );
+  assert.deepEqual(inspections, [{ allowMissingRemote: true }]);
+  // Worktree canonicalization decides the match, not the raw cwd.
+  assert.deepEqual(
+    await resolveLifecycleScope(
+      { cwd: "/fixture/worktree/src" },
+      config7,
+      noCall,
+      present,
+      async () => "/fixture/bound/src",
+    ),
+    scopeTwo,
+  );
+  // Outside every saved path the exact remote binding applies.
+  assert.deepEqual(
+    await resolve(
+      { cwd: "/fixture/work" },
+      config7,
+      async () => jsonResult(exactResolution(scopeThree)),
+      present,
+    ),
+    scopeThree,
+  );
+  // An unresolved, missing, or unsupported remote and no repository at all
+  // fall back to the global destination.
+  for (const match of ["none", "ambiguous", "not_ready"]) {
+    assert.deepEqual(
+      await resolve(
+        { cwd: "/fixture/work" },
+        config7,
+        async () => jsonResult({ match }),
+        present,
+      ),
+      scopeOne,
+      match,
+    );
+  }
+  assert.deepEqual(
+    await resolve({ cwd: "/fixture/work" }, config7, noCall, async () => ({
+      kind: "present",
+      remoteUrl: null,
+    })),
+    scopeOne,
+  );
+  assert.deepEqual(
+    await resolve({ cwd: "/fixture/work" }, config7, noCall, async () => ({
+      kind: "absent",
+    })),
+    scopeOne,
+  );
+  // A malformed reply is not a routing outcome and never reaches the global.
+  await assert.rejects(
+    resolve(
+      { cwd: "/fixture/work" },
+      config7,
+      async () => jsonResult({}),
+      present,
+    ),
+    /project_unresolved/,
+  );
+
+  // Paths-only: the path rung still wins, bound repositories still resolve,
+  // and everything else is unavailable rather than guessed.
+  const pathsOnly = { ...config7, defaultProject: null };
+  assert.deepEqual(
+    await resolve({ cwd: "/fixture/bound" }, pathsOnly, noCall, present),
+    scopeTwo,
+  );
+  assert.deepEqual(
+    await resolve(
+      { cwd: "/fixture/work" },
+      pathsOnly,
+      async () => jsonResult(exactResolution(scopeThree)),
+      present,
+    ),
+    scopeThree,
+  );
+  await assert.rejects(
+    resolve({ cwd: "/fixture/work" }, pathsOnly, noCall, async () => ({
+      kind: "absent",
+    })),
+    /scope_unavailable/,
+  );
+  await assert.rejects(
+    resolve({ cwd: "/fixture/work" }, pathsOnly, noCall, async () => ({
+      kind: "present",
+      remoteUrl: null,
+    })),
+    /repository_unavailable/,
+  );
+  await assert.rejects(
+    resolve(
+      { cwd: "/fixture/work" },
+      pathsOnly,
+      async () => jsonResult({ match: "none" }),
+      present,
+    ),
+    /project_unresolved/,
+  );
+  await assert.rejects(
+    resolve(
+      { cwd: "/fixture/work" },
+      pathsOnly,
+      async () => jsonResult({ match: "ambiguous" }),
+      present,
+    ),
+    /project_ambiguous/,
+  );
+
+  // Version 6 is unchanged: no path rung, a strict remote, and no fallback.
+  const config6 = {
+    version: 6,
+    enabled: true,
+    defaultProject: scopeOne,
+    paths: [],
+  };
+  const inspections6 = [];
+  const present6 = async (cwd, options) => {
+    inspections6.push(options);
+    return boundRepository;
+  };
+  await assert.rejects(
+    resolve(
+      { cwd: "/fixture/bound/src" },
+      config6,
+      async () => jsonResult({ match: "none" }),
+      present6,
+    ),
+    /project_unresolved/,
+  );
+  assert.deepEqual(inspections6, [{ allowMissingRemote: false }]);
+  await assert.rejects(
+    resolve({ cwd: "/fixture/work" }, config6, noCall, async () => ({
+      kind: "present",
+      remoteUrl: null,
+    })),
+    /repository_unavailable/,
+  );
+});
+
+test("the adapter records v7 work in the Project the saved path, remote, or global destination selects", async (t) => {
+  const paths = [{ root: "/fixture/bound", scope: scopeTwo }];
+  for (const [name, cwd, resolution, expected, resolveCalls] of [
+    [
+      "saved path beats the bound remote",
+      "/fixture/bound/src",
+      exactResolution(scopeThree),
+      scopeTwo,
+      0,
+    ],
+    [
+      "exact remote",
+      "/fixture/work",
+      exactResolution(scopeThree),
+      scopeThree,
+      1,
+    ],
+    [
+      "unresolved remote falls back to global",
+      "/fixture/work",
+      { match: "none" },
+      scopeOne,
+      1,
+    ],
+  ]) {
+    const { adapter, app } = await rig(t, {
+      config: { version: 7, paths },
+      repository: boundRepository,
+      adapterOptions: { canonicalizeWorkingDirectory: async (value) => value },
+    });
+    app.setResolution(resolution);
+    await adapter.handle(LOCAL_HOOK_TOOL, event({ cwd }));
+    const begin = app.calls.find((call) => call.input.operation === "begin");
+    assert.ok(begin, name);
+    assert.deepEqual(
+      {
+        workspaceId: begin.input.workspaceId,
+        projectUuid: begin.input.projectUuid,
+      },
+      expected,
+      name,
+    );
+    assert.equal(
+      app.calls.filter((call) => call.tool === "resolve_project").length,
+      resolveCalls,
+      name,
+    );
+  }
+});
+
+test("linked worktrees canonicalize to the main checkout for adapter path routing", async (t) => {
+  const parent = await fs.mkdtemp(
+    path.join(os.tmpdir(), "recall-lifecycle-worktree-"),
+  );
+  t.after(() => fs.rm(parent, { recursive: true, force: true }));
+  const mainCheckout = path.join(parent, "main");
+  const nested = path.join(mainCheckout, "packages", "app");
+  await fs.mkdir(nested, { recursive: true });
+  await fs.writeFile(path.join(nested, "README.md"), "# fixture\n");
+  const git = (cwd, ...args) => {
+    const result = spawnSync("git", args, {
+      cwd,
+      encoding: "utf8",
+      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+      timeout: 10_000,
+    });
+    assert.equal(result.status, 0, result.stderr);
+  };
+  git(mainCheckout, "init", "--quiet");
+  git(mainCheckout, "add", "packages/app/README.md");
+  git(
+    mainCheckout,
+    "-c",
+    "user.name=Recall Tests",
+    "-c",
+    "user.email=tests@recall.test",
+    "commit",
+    "--no-gpg-sign",
+    "--quiet",
+    "-m",
+    "fixture",
+  );
+  const linked = path.join(parent, "worktrees", "linked");
+  await fs.mkdir(path.dirname(linked), { recursive: true });
+  git(mainCheckout, "worktree", "add", "--quiet", "--detach", linked, "HEAD");
+
+  const canonicalNested = await fs.realpath(nested);
+  assert.equal(
+    await resolveCanonicalWorkingDirectory(
+      path.join(linked, "packages", "app"),
+    ),
+    canonicalNested,
+  );
+  assert.equal(await resolveCanonicalWorkingDirectory(nested), canonicalNested);
+  const plain = path.join(parent, "plain");
+  await fs.mkdir(plain);
+  assert.equal(
+    await resolveCanonicalWorkingDirectory(plain),
+    await fs.realpath(plain),
+  );
+  assert.equal(
+    await resolveCanonicalWorkingDirectory(plain, {
+      execute: async () => {
+        throw new Error("git unavailable");
+      },
+    }),
+    await fs.realpath(plain),
+  );
+  // The whole adapter route: a saved main-checkout root claims the worktree.
+  assert.deepEqual(
+    await resolveLifecycleScope(
+      { cwd: path.join(linked, "packages", "app") },
+      {
+        version: 7,
+        enabled: true,
+        defaultProject: scopeOne,
+        paths: [{ root: canonicalNested, scope: scopeTwo }],
+      },
+      async () => {
+        throw new Error("resolve_project must not be called");
+      },
+      async () => boundRepository,
+    ),
+    scopeTwo,
+  );
+});
+
+test("v7 repository inspection reports a missing or unsupported origin instead of failing", async (t) => {
+  const directory = await fs.mkdtemp(
+    path.join(os.tmpdir(), "recall-lifecycle-unbound-"),
+  );
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  await fs.writeFile(
+    path.join(directory, ".git"),
+    "gitdir: /fixture/not-read-by-this-test\n",
+  );
+  const missing = async () => {
+    throw Object.assign(new Error("exit 1"), { code: 1 });
+  };
+  const unsupported = async () => ({ stdout: "/tmp/local-mirror\n" });
+  const broken = async () => {
+    throw new Error("git unavailable");
+  };
+  await assert.rejects(
+    inspectRepository(directory, { execute: missing }),
+    /repository_unavailable/,
+  );
+  await assert.rejects(
+    inspectRepository(directory, { execute: unsupported }),
+    /repository_unavailable/,
+  );
+  for (const execute of [missing, unsupported]) {
+    assert.deepEqual(
+      await inspectRepository(directory, { execute, allowMissingRemote: true }),
+      { kind: "present", remoteUrl: null },
+    );
+  }
+  // Git failing to answer is still unavailable: nothing is guessed.
+  await assert.rejects(
+    inspectRepository(directory, { execute: broken, allowMissingRemote: true }),
+    /repository_unavailable/,
+  );
 });
 
 test("v6 prompt context names explicit begin/status and rejects unproved or malformed participants", async (t) => {

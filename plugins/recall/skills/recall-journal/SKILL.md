@@ -66,16 +66,20 @@ approve the hook. The supported action is the user's explicit review in
 
 For any explicit setup, reconfiguration, disabling, or stale-config repair,
 read and follow [references/configuration.md](references/configuration.md).
-It defines the legacy v1-compatible/v2 schema, structured v3/v4/v5 schemas,
-and the explicit, default-off v6 session-recording pilot,
+It defines the legacy v1-compatible/v2 schema, structured v3/v4/v5/v7 schemas,
+the explicit, default-off v6 session-recording pilot (carried by a version 6
+file or by a version 7 file's `sessionLifecycle` block),
 canonical absolute filesystem-project path, live capability gate, workspace and
 Recall Project selection, explicit mode migration, compatibility errors,
 confirmation, and atomic write protocol.
 
-Select version 6 before every older protocol when its lifecycle context is
-present. Follow "Conversation segments (version 6 pilot)" below. Never open a
-parallel v5 session or downgrade to a legacy note because the adapter is
-unavailable. Existing v1–v5 configurations do not opt into this pilot.
+Select the version 6 pilot before every other protocol when its lifecycle
+context is present, whether a version 6 file or a version 7 file's enabled
+`sessionLifecycle` block produced it. Follow "Conversation segments (version 6
+pilot)" below. Never open a parallel v5 or v7 session or downgrade to a legacy
+note because the adapter is unavailable. Existing v1–v5 configurations, and
+version 7 files without an enabled `sessionLifecycle` block, do not opt into
+this pilot.
 
 One compatibility exception is reader-only **version 3 and version 4 structured
 project memory**. When lifecycle context explicitly identifies either valid
@@ -85,14 +89,21 @@ never create or update a legacy journal note or Today summary. Never create a
 structured session under version 3 or version 4: those versions read structured
 memory and never write it.
 
-**Version 5 is the structured writer.** When lifecycle context identifies a
-valid version 5 config, follow "Structured journaling (version 5)" below
-instead of every legacy section, and never create or update a legacy journal
-note or hand-built Today summary. On explicit setup or reconfiguration, the
-configuration reference may write version 5 only after the entire live schema
-gate passes, the user selects an exact write-ready default Recall Project, and
-the user confirms the complete routing consequences. Lifecycle context never
-changes a config version.
+**Versions 5 and 7 are the structured writer.** When lifecycle context
+identifies a valid version 5 or version 7 config, follow "Structured
+journaling (versions 5 and 7)" below instead of every legacy section, and
+never create or update a legacy journal note or hand-built Today summary. The
+two share one session protocol and differ only in routing: version 5 is
+repository-first with one default Project for proved no-repository sessions,
+while version 7 restores the version 2 destination model — a saved
+filesystem-project destination first, then the repository's exact Git-remote
+binding, then the global destination — and lifecycle context names which rung
+applied on every prompt. On explicit setup or reconfiguration, the
+configuration reference writes version 7 only after the entire live schema
+gate passes, the user selects exact write-ready destinations that each name a
+Recall Project, and the user confirms the complete routing consequences; a
+version 5 or 6 file stays as it is until an explicit upgrade.
+Lifecycle context never changes a config version.
 
 Version 3 is repository-only. Use a supported non-local Git remote with
 `resolve_project`, and pass only an exact result to `get_project_context`.
@@ -143,7 +154,7 @@ declare an ask from v3 or v4 routing.
 
 Never rewrite, migrate, reconfigure, or downgrade a v3 or v4 config through the
 v1/v2 configuration flow. An explicit, confirmed whole-mode upgrade may replace
-v3 or v4 with v5 through the configuration reference. In particular, do not
+v3, v4, v5, or v6 with v7 through the configuration reference. In particular, do not
 auto-migrate v1/v2 global users: their global destination intentionally supplies
 memory outside Git and cannot be translated losslessly to a Project-only mode.
 Select this protocol before inspecting named-note capabilities: in v3 or v4,
@@ -266,8 +277,8 @@ a duplicate session, or change the user's mode as a workaround.
 ### Checkpoints and a real ending
 
 Model judgment still supplies checkpoint and outcome prose. Use the
-human-scale `append_entry` guidance in version 5, with the acknowledged exact
-scope and session UUID. Keep every uncertain entry or close attached to its
+human-scale `append_entry` guidance in "Structured journaling (versions 5 and
+7)", with the acknowledged exact scope and session UUID. Keep every uncertain entry or close attached to its
 original UUID/idempotency key/payload. An app delivery queue is not saved
 history. Never relabel a predecessor checkpoint as successor activity; a new
 entry may refer back explicitly when that is the honest meaning.
@@ -305,13 +316,16 @@ Omission means unknown; zero means a known empty queue. Acknowledged recording
 does not mean checkpoint prose, a close, or a Today card was saved. The v5 day-card
 result meanings still apply when a model close requests one.
 
-## Structured journaling (version 5)
+## Structured journaling (versions 5 and 7)
 
 Version 5 replaces the whole hand-executed note protocol with Recall's session
 tools. The journal is still yours to write — Recall has no language model and
 end-to-end encryption rules out server-side authorship — but the mechanics
 below belong to the app now, and reciting them by hand is what this version
-exists to stop.
+exists to stop. Version 7 keeps this protocol unchanged and restores global
+and per-path destinations to it, so a Git repository is no longer required to
+map agent work to a Recall Project; only the "resolve the Project" step below
+differs between the two.
 
 ### Require the whole structured surface first
 
@@ -332,8 +346,33 @@ drift this version removes. Cache the decision for this thread only.
 ### The session protocol
 
 **Start.** When substantive work begins, resolve the Project the way lifecycle
-context directs (repository-first, or the explicit default only on a proved
-no-repository route), then `open_session` with a caller-minted `sessionUuid`
+context directs. Under version 5 that is repository-first, with the explicit
+default only on a proved no-repository route. Under version 7 the context
+names which of three rungs applies, in this order:
+
+1. **Saved filesystem-project destination.** The canonical working directory
+   (linked worktrees mapped back to the main checkout, the longest saved root
+   winning) is inside a saved path. The context names that destination's
+   workspace and Project ids: call `get_project_context` directly with that
+   `projectUuid` and accept only a result whose Project and workspace ids
+   match. Never call `resolve_project` on this rung, even inside a repository
+   with a bound remote — the saved path wins — and never echo the saved path.
+2. **Repository binding.** No saved path matched and the directory has
+   repository identity: read the supported non-local Git remote and call
+   `resolve_project` with it as `remoteUrl` and at most the repository-root
+   basename as `repoRootBasename`. Only an exact match feeds
+   `get_project_context` and the session tools.
+3. **Global destination.** Nothing above produced a Project — no repository
+   identity, an unsupported or missing remote, or a `none`, `ambiguous`, or
+   `not_ready` resolution — and the context names a global destination: call
+   `get_project_context` directly with its `projectUuid` and accept only a
+   matching result. Without a global destination, continue without project
+   memory and say so.
+
+Once a rung has chosen a Project, a `get_project_context` result that is
+missing, blocked, mismatched, or not ready means continue without project
+memory; never move to a later rung after that, and never choose a Project the
+context did not name. Then `open_session` with a caller-minted `sessionUuid`
 and `idempotencyKey`, a concise plain-language `intent`, the exact current
 `branch` when there is one, and the `lineageKey` lifecycle context names. The
 intent and branch are user-facing in **Today -> Now activity**, so keep the
@@ -427,7 +466,7 @@ and then continue the task. A user watching the Now dashboard must learn from
 the chat that nothing will appear there, never from the absence itself. Never
 let journaling stall or abort the work itself.
 
-### What version 5 never does
+### What versions 5 and 7 never do
 
 - Never create or update a legacy journal note, and never write a Today card by
   hand.
@@ -437,6 +476,8 @@ let journaling stall or abort the work itself.
 - Never treat another agent's active or unfinished session as a lock.
 - Never rewrite history: entries are append-only, and a correction is a new
   entry referencing the old one.
+- Never reveal a saved filesystem path from configuration, and never route to
+  a Project that lifecycle context did not name for this working directory.
 
 Older journal notes stay readable archive. Search still surfaces them, and they
 are never migrated or rewritten.
@@ -444,12 +485,13 @@ are never migrated or rewritten.
 ## Recall before working
 
 **The rest of this document is the legacy note protocol.** It applies to
-version 1 and version 2 destinations, and to a version 5 config whose connected
-app lacks the structured surface (see the fallback rule above). Under a working
-version 5 it is superseded by "Structured journaling (version 5)"; under
-version 3 or version 4 it does not apply at all. Version 6 uses only its segment
-protocol above and the explicitly referenced checkpoint/close guidance; it
-never enters this legacy fallback.
+version 1 and version 2 destinations, and to a version 5 or version 7 config
+whose connected app lacks the structured surface (see the fallback rule
+above). Under a working version 5 or version 7 it is superseded by
+"Structured journaling (versions 5 and 7)"; under version 3 or version 4 it
+does not apply at all. Version 6 uses only its segment protocol above and the
+explicitly referenced checkpoint/close guidance; it never enters this legacy
+fallback.
 
 The archive only pays for itself when it changes what happens next. At the
 start of meaningful work, decide whether the journal could already cover part
