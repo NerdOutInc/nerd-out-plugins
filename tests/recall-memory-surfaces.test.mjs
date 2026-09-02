@@ -453,3 +453,81 @@ test("user-facing note activity gets a useful change summary", async () => {
     assert.match(skill, /never (?:put|use) (?:paths?|a path),? hash(?:es)?/i);
   }
 });
+
+test("structured journaling reads context after the session opens and gates the delta read on the live schema", async () => {
+  const [skill, configuration, readme, recallSkill] = await Promise.all([
+    read("plugins/recall/skills/recall-journal/SKILL.md"),
+    read("plugins/recall/skills/recall-journal/references/configuration.md"),
+    read("plugins/recall/README.md"),
+    read("plugins/recall/skills/recall/SKILL.md"),
+  ]);
+
+  assert.match(skill, /\*\*Open the session before reading context\.\*\*/);
+  assert.match(skill, /\*\*Then read context once\.\*\*/);
+  assert.match(
+    skill,
+    /pass `previousSession\.sessionUuid` as\s+`sinceSessionUuid`/,
+  );
+  assert.match(
+    skill,
+    /`since\.available: false` means it did not resolve\s+and nothing was filtered/,
+  );
+  assert.match(skill, /never infer support from a plugin or app version/);
+  assert.match(
+    skill,
+    /keep the session —\s+it is already recorded — and work without the context/,
+  );
+  assert.match(skill, /`callerSessionUuid` when the schema advertises it/);
+
+  // Activity is a summary by default; rows are requested only on purpose.
+  assert.match(skill, /activity as a \*\*summary by default\*\*/);
+  assert.match(
+    skill,
+    /`activityLimit` only when the task needs a\s+specific note event/,
+  );
+  assert.match(
+    skill,
+    /never by default and never merely to look at the\s+summary/,
+  );
+  assert.match(
+    skill,
+    /`closedSessions` \(the most recently CLOSED sessions, newest first/,
+  );
+  assert.match(skill, /`entryLimit`, 1–16/);
+  assert.match(
+    skill,
+    /Never pass `sinceSessionUuid`, `entryLimit`, or `callerSessionUuid` unless\s+the live `get_project_context` schema advertises them/,
+  );
+
+  // The delta read is never part of the setup gate and never a config field.
+  assert.match(
+    configuration,
+    /The delta read is a runtime capability, not part of this gate/,
+  );
+  assert.match(
+    configuration,
+    /never blocks a version 7 save or changes the saved file/,
+  );
+  assert.doesNotMatch(configuration, /"sinceSessionUuid"/);
+  assert.match(
+    configuration,
+    /a session that\s+fails to open means continue without project memory/,
+  );
+
+  // The general Recall skill describes the same response shape.
+  assert.match(recallSkill, /activity as a summary by default/);
+  assert.match(recallSkill, /`closedSessions` \(newest CLOSED first/);
+  assert.match(
+    recallSkill,
+    /`since\.available: false` means nothing was filtered/,
+  );
+
+  assert.match(
+    readme,
+    /Plugin `0\.35\.0` reads Project context after the session opens/,
+  );
+  assert.match(
+    readme,
+    /support comes from the live schema, never from a plugin or app version/,
+  );
+});

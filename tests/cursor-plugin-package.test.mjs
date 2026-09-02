@@ -19,7 +19,7 @@ test("packages Cursor as a separate official host plugin", () => {
 
   assert.equal(manifest.name, "recall");
   assert.equal(manifest.displayName, "Recall");
-  assert.equal(manifest.version, "0.34.0");
+  assert.equal(manifest.version, "0.35.0");
   assert.equal(manifest.mcpServers, "./mcp.json");
   assert.equal(manifest.hooks, "./.cursor-plugin/hooks.json");
   assert.equal(manifest.skills, "./skills/");
@@ -51,5 +51,5 @@ test("keeps host manifests on one release version", () => {
     return readJSON(`plugins/recall/${directory}/plugin.json`).version;
   });
 
-  assert.deepEqual(versions, ["0.34.0", "0.34.0", "0.34.0"]);
+  assert.deepEqual(versions, ["0.35.0", "0.35.0", "0.35.0"]);
 });

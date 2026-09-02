@@ -2512,7 +2512,7 @@ test("v7 repository routing has no fallback without a global destination", () =>
   assert.match(context, /repository-first routing/);
   assert.match(
     context,
-    /No global destination is configured, so if there is no supported remote, either tool is unavailable, resolution returns none, ambiguous, or not_ready, or project context is not ready, continue without project memory/,
+    /No global destination is configured, so if there is no supported remote, either tool is unavailable, or resolution returns none, ambiguous, or not_ready, continue without project memory/,
   );
   assert.doesNotMatch(context, /fall back/);
   assert.equal(context.includes("path-project-id"), false);
@@ -3017,5 +3017,89 @@ test("both readers honor one config-size bound for large v7 files", () => {
     assert.equal(result.status, 0, String(enabled));
     assert.equal(result.stderr, "", String(enabled));
     assert.equal(result.stdout, "", String(enabled));
+  }
+});
+
+// Versions 5 and 7 open the session before the context read so that read can
+// be anchored to the predecessor open_session hands back. The anchor is gated
+// on the live get_project_context schema, never on a version or a config field.
+test("v5 and v7 open the session before the context read and gate the delta read on the live schema", () => {
+  const writerFixtures = [
+    ["v5", "repository-context.txt"],
+    ["v5", "no-repository-context.txt"],
+    ["v7", "path-context.txt"],
+    ["v7", "path-in-repository-context.txt"],
+    ["v7", "repository-with-global-context.txt"],
+    ["v7", "repository-without-global-context.txt"],
+    ["v7", "no-repository-context.txt"],
+  ];
+  for (const [version, filename] of writerFixtures) {
+    const context = readFixture(version, filename);
+    const label = `${version}/${filename}`;
+    assert.match(
+      context,
+      /open_session on the resolved Project first, then call get_project_context for that same Project and use that compact context before deeper searches/,
+      label,
+    );
+    assert.match(
+      context,
+      /When open_session returns a previousSession and the live get_project_context input schema advertises sinceSessionUuid, pass previousSession\.sessionUuid as sinceSessionUuid/,
+      label,
+    );
+    assert.match(
+      context,
+      /when the schema does not advertise it, read the full context without an anchor, and never infer support from a plugin or app version/,
+      label,
+    );
+    assert.match(
+      context,
+      /does not undo the session: keep journaling to it and work without that context/,
+      label,
+    );
+    // The old order — a context read before the session opened — is gone.
+    assert.doesNotMatch(
+      context,
+      /Before substantive work, require get_project_context/,
+      label,
+    );
+    assert.doesNotMatch(
+      context,
+      /or project context is not ready, continue without project memory/,
+      label,
+    );
+    // No anchor value is ever printed by the hook: it comes from open_session.
+    assert.doesNotMatch(context, /sinceSessionUuid [0-9a-f-]{36}/, label);
+  }
+
+  // Direct routes name the saved ids once for both the session tools and the
+  // context read, and still check the context result against them.
+  for (const [version, filename] of [
+    ["v5", "no-repository-context.txt"],
+    ["v7", "path-context.txt"],
+    ["v7", "path-in-repository-context.txt"],
+    ["v7", "no-repository-context.txt"],
+  ]) {
+    assert.match(
+      readFixture(version, filename),
+      /Use it directly for the session tools and get_project_context, passing workspaceId [\w-]+ and projectUuid [\w-]+, and accept only a context result whose project id and workspaceId match that saved (?:target|destination)\./,
+      `${version}/${filename}`,
+    );
+  }
+  assert.match(
+    readFixture("v7", "repository-with-global-context.txt"),
+    /fall back to the global [^:]+: use it directly for the session tools and get_project_context, passing workspaceId global-workspace-id and projectUuid global-project-id/,
+  );
+
+  // Reader-only versions open nothing, so they never see the anchor rule.
+  for (const [version, filename] of [
+    ["v3", "additional-context.txt"],
+    ["v4", "repository-context.txt"],
+    ["v4", "no-repository-context.txt"],
+  ]) {
+    assert.doesNotMatch(
+      readFixture(version, filename),
+      /sinceSessionUuid|previousSession/,
+      `${version}/${filename}`,
+    );
   }
 });

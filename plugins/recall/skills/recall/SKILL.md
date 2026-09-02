@@ -106,7 +106,10 @@ Recall forward, let it update, or restart it. Do not keep retrying variants.
   `cursorSupported`, `truncated`, `unavailableCount`, and `nextCursor` before
   describing activity. A false or missing capability, or `available: false`,
   means activity is unknown on this transport; it never proves that nothing
-  happened. `count` covers matches in one bounded workspace scan, not the
+  happened. Newer builds return activity as a summary by default (`mode:
+  "summary"`, empty `items`, counts by kind, distinct notes, newest and
+  oldest); pass `activityLimit` only when specific note events are needed,
+  never by default. `count` covers matches in one bounded workspace scan, not the
   Project's lifetime. `coverage` is `exact_snapshot`,
   `current_membership_inferred`, `mixed`, or null; inferred or mixed coverage
   and any positive `unavailableCount` carry attribution uncertainty, while null
@@ -210,11 +213,16 @@ and report honestly.
 ### Context and sessions
 
 - Start Project-aware work with `get_project_context`. Its `sessions`,
-  `entries`, `handoffs`, and `asks` sections are each served only when that
+  `closedSessions` (newest CLOSED first, under the same `capabilities.sessions`
+  flag), `entries` (`entryLimit`, 1–16, only when the schema advertises it),
+  `handoffs`, and `asks` sections are each served only when that
   same response's `capabilities.sessions`, `capabilities.entries`,
   `capabilities.handoffs`, or `capabilities.asks` is exactly `true`; a false
   or missing flag means the section was withheld on this transport, never
-  that nothing exists. `brief` ({noteUuid, text} bounded excerpt) and
+  that nothing exists. When the schema advertises `sinceSessionUuid`, pass a
+  predecessor session's uuid to limit entries, closed sessions, and activity
+  to what happened after it ended; the response's `since` names the anchor,
+  and `since.available: false` means nothing was filtered. `brief` ({noteUuid, text} bounded excerpt) and
   `status` (`exploring`, `building`, `blocked`, `paused`, `shipped`, or
   `archived`) have no capability flag but fail closed to
   `available: false`.
