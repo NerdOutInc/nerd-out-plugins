@@ -4,7 +4,11 @@
 still required.** Existing v1–v5 journaling protocols and hook registrations
 stay unchanged; connection diagnostics also cover Codex and Cursor.
 No installed cache, user config, hook trust, or production sessions are modified
-by this implementation.
+by this implementation. Since plugin 0.34.0 a version 7 journal config carries
+the same block as `sessionLifecycle`, so global and per-path structured
+destinations can coexist with the pilot; the adapter's routing is unchanged,
+with the version 7 `global` destination playing the version 6 default's role.
+See the journal configuration reference.
 
 This supersedes the earlier proposal to open at SessionStart, close at Stop,
 open a second helper connection from a hook, or overwrite an automatic intent.

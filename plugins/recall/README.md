@@ -25,6 +25,23 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
+Plugin `0.34.0` adds journal config version 7, which restores global and
+per-path destinations to structured journaling so a Git repository is no
+longer required to map agent work to a Recall Project. Version 7 routes in a
+fixed order that the hook names on every prompt: a saved filesystem-project
+destination (longest root, linked worktrees mapped to the main checkout) wins
+even inside a repository with a bound remote; otherwise repository identity
+resolves the exact Git-remote binding, with the global destination as the
+fallback for unbound, unsupported, or unresolved remotes; otherwise the global
+destination alone. Every destination names a Project, and an optional
+`sessionLifecycle` block carries the version 6 pilot unchanged. Versions 5 and
+6 stay readable; explicit setup now writes version 7, and the upgrade from
+either is a confirmed whole-file replacement, never automatic.
+
+Plugin `0.33.0` made the local-socket bridge self-healing: a refused hello or a
+dropped socket degrades the MCP session instead of ending it, and the bridge
+re-dials with backoff so tools recover in the same conversation.
+
 Plugin `0.32.0` adds the explicit version 6 conversation-segment recording
 pilot and extends missing-connector diagnostics to Claude Code, Codex, and
 Cursor. Their journal hooks and doctor use an explicit host identity and
@@ -259,11 +276,11 @@ substitute for a live Recall account test; the matrix marks routes that are not
 yet live-certified instead of claiming them as verified. The current support
 boundary is:
 
-The journal column describes existing **v1–v5 assisted journaling**, not a
-certified v6 recording pilot. Claude Code and Codex still require actual host
-certification before v6 activation; Cursor has no v6 recording profile.
+The journal column describes existing **v1–v5 and v7 assisted journaling**,
+not a certified v6 recording pilot. Claude Code and Codex still require actual
+host certification before v6 activation; Cursor has no v6 recording profile.
 
-| Surface | Recall tools and skills | Assisted journal or project memory (v1–v5) |
+| Surface | Recall tools and skills | Assisted journal or project memory (v1–v5, v7) |
 | --- | --- | --- |
 | Codex app and Codex CLI | Supported through the local bridge after plugin trust and native approval. | Supported. The bundled Codex `UserPromptSubmit` hook reads this agent's config. |
 | Claude Code | Supported through the local bridge after plugin installation and native approval. | Supported. The bundled Claude Code `UserPromptSubmit` hook reads this agent's config. |
@@ -304,13 +321,17 @@ the hook:
 | v3 | Repository-only structured lookup. No supported remote or no exact `resolve_project` match means no project memory. | No memory; v3 has no global or default fallback. | None; reader-only. |
 | v4 | Repository-first structured lookup, even when the repository has no usable remote. Never use the default after `none`, `ambiguous`, or `not_ready`. | Read the one explicitly configured default Recall Project directly, but only after the hook proves no repository identity exists. | None; reader-only in this release. |
 | v5 | Repository-first exact Project lookup and structured sessions. No supported remote or exact binding means no Project memory or journal for that repository; the default is never an error fallback. | Use the one explicitly configured exact default Recall Project only after the hook proves no repository identity exists. | App-owned sessions and human-scale checkpoints shown in Today -> Now activity, with an optional app-owned Today card at close. |
+| v7 | A saved filesystem-project destination wins, even over a bound remote; otherwise repository-first exact Project lookup, falling back to the global destination when the remote is unbound, unsupported, or unresolved. | A saved filesystem-project destination wins; otherwise the global destination remains available, so non-Git chats keep structured memory. | App-owned sessions and human-scale checkpoints shown in Today -> Now activity, with an optional app-owned Today card at close. |
 
 Do not auto-migrate v1/v2 users to a structured mode: doing so could silently
 remove their global, non-Git memory. Version 0.28 can replace a legacy config
 with v5 only after an explicit mode choice, a live whole-schema check, selection
 of one exact write-ready default Project, and confirmation of the routing
-change. Structured defaults are not error fallbacks, and structured modes never
-mix with legacy named-note writes. Direct, explicit Recall tool use remains
+change. Version 0.34 replaces a legacy config with v7 the same way, carrying
+over Project-scoped global and filesystem-path destinations and requiring an
+exact Project for any workspace-root destination. Structured defaults under
+v5 are not error fallbacks, and structured modes never mix with legacy
+named-note writes. Direct, explicit Recall tool use remains
 available wherever the local MCP connection and skills are actually loaded.
 
 ### Troubleshooting Claude surfaces
@@ -494,16 +515,20 @@ under `skills/` that contains a `SKILL.md`. It currently includes:
   under the repo included — then journal to and recall from the project's
   workspace and optional Recall Project instead of the global destination.
 
-  The hook can also read the version 3, version 4, and version 5 project-memory
-  shapes. Versions 3 and 4 are intentionally reader-only. Version 3 is
-  repository-only; versions 4 and 5 are repository-first and may use one exact
-  default Recall Project only after proving that no repository identity exists.
-  Version 5 is the structured writer: it opens one app-owned session, records a
-  handful of durable checkpoints, and closes with the outcome and optional
-  app-owned day summary. The session and checkpoints appear in **Today -> Now
-  activity**; the optional day summary lands as an app-owned Today timeline
-  card.
-  Explicit setup can write v2 Legacy journal note or capability-gated v5
+  The hook can also read the version 3, version 4, version 5, and version 7
+  project-memory shapes. Versions 3 and 4 are intentionally reader-only.
+  Version 3 is repository-only; versions 4 and 5 are repository-first and may
+  use one exact default Recall Project only after proving that no repository
+  identity exists. Versions 5 and 7 are the structured writer: they open one
+  app-owned session, record a handful of durable checkpoints, and close with
+  the outcome and optional app-owned day summary. Version 7 additionally
+  restores global and per-path destinations, each naming a Recall Project: a
+  saved filesystem-project destination wins, then the repository's exact
+  remote binding, then the global destination, and the hook names the chosen
+  destination on every prompt. The session and checkpoints appear in **Today
+  -> Now activity**; the optional day summary lands as an app-owned Today
+  timeline card.
+  Explicit setup can write v2 Legacy journal note or capability-gated v7
   Structured Project activity; it never auto-migrates an existing config, and
   the modes bypass one another so one prompt cannot enter both protocols.
 

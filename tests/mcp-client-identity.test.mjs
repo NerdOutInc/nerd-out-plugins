@@ -309,7 +309,10 @@ test("host manifests share the current plugin version", async () => {
   // 0.33.0 makes the local-socket bridge resilient: a refused hello or a
   // dropped socket degrades the MCP session instead of killing it, and the
   // bridge re-dials with backoff so tools recover in the same conversation.
-  assert.equal(codexPlugin.version, "0.33.0");
+  // 0.34.0 adds journal config version 7: global and per-path destinations
+  // for the structured writer, so a Git repository is no longer required to
+  // map agent work to a Recall Project.
+  assert.equal(codexPlugin.version, "0.34.0");
   assert.equal(claudePlugin.version, codexPlugin.version);
   const desktop = await readJson("desktop-extensions/recall/manifest.json");
   assert.equal(desktop.version, "0.10.0");

@@ -1,0 +1,17 @@
+{
+  "version": 7,
+  "projectMemory": {
+    "enabled": true,
+    "global": {
+      "workspace": { "id": "global-workspace-id", "name": "General Memory" },
+      "recallProject": { "id": "global-project-id", "name": "General" }
+    },
+    "paths": {
+      "/Users/example/projects/bound-app": {
+        "workspace": { "id": "path-workspace-id", "name": "Product Team" },
+        "recallProject": { "id": "path-project-id", "name": "Bound App" }
+      }
+    }
+  },
+  "sessionLifecycle": { "enabled": false }
+}

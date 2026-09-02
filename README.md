@@ -166,9 +166,11 @@ The plugin supports multiple skills in its `skills/` directory. In addition to
 the direct note workflow, the journal skill
 (`$recall:recall-journal` in Codex,
 `/recall:recall-journal` in Claude Code, and `/recall-journal` in Cursor)
-configures a per-agent `recall-journal.json` in one of two complete modes: v5
-Structured Project activity, or a v2 legacy global/filesystem-path journal
-destination selecting a Recall workspace and optional Recall Project. A bundled
+configures a per-agent `recall-journal.json` in one of two complete modes: v7
+Structured Project activity, with global and filesystem-path destinations that
+each name a Recall Project (existing v5 and v6 configs stay readable), or a v2
+legacy global/filesystem-path journal destination selecting a Recall workspace
+and optional Recall Project. A bundled
 per-prompt hook detects that valid opt-in config, reminds
 the agent to search prior journal notes for
 relevant context when a task relates to earlier work, and reminds it to

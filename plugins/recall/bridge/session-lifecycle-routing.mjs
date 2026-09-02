@@ -35,44 +35,74 @@ export async function readLifecycleConfig(host, env = process.env) {
     if (error.code === "ENOENT") return { enabled: false, directory };
     throw new LifecycleError("config_invalid");
   }
-  if (value?.version !== 6) return { enabled: false, directory };
+  // Version 6 carries the pilot beside one default Project. Version 7 carries
+  // the same `sessionLifecycle` block, optional this time, beside the global
+  // and per-path destinations; its global destination is the adapter's
+  // no-repository default, and a file without one has no such default.
+  if (value?.version !== 6 && value?.version !== 7)
+    return { enabled: false, directory };
+  const version7 = value.version === 7;
+  const lifecycle = version7
+    ? (value.sessionLifecycle ?? { enabled: false })
+    : value.sessionLifecycle;
   if (
     !onlyKeys(value, ["version", "projectMemory", "sessionLifecycle"]) ||
-    !onlyKeys(value.projectMemory, ["enabled", "defaultProject"]) ||
+    !onlyKeys(
+      value.projectMemory,
+      version7 ? ["enabled", "global", "paths"] : ["enabled", "defaultProject"],
+    ) ||
     value.projectMemory.enabled !== true ||
-    !onlyKeys(value.sessionLifecycle, [
-      "enabled",
-      "codexParticipantVerified",
-    ]) ||
-    typeof value.sessionLifecycle.enabled !== "boolean" ||
-    (value.sessionLifecycle.codexParticipantVerified !== undefined &&
-      typeof value.sessionLifecycle.codexParticipantVerified !== "boolean")
+    !onlyKeys(lifecycle, ["enabled", "codexParticipantVerified"]) ||
+    typeof lifecycle.enabled !== "boolean" ||
+    (lifecycle.codexParticipantVerified !== undefined &&
+      typeof lifecycle.codexParticipantVerified !== "boolean")
   ) {
     throw new LifecycleError("config_invalid");
   }
-  const destination = value.projectMemory.defaultProject;
-  if (!onlyKeys(destination, ["workspace", "recallProject"]))
-    throw new LifecycleError("config_invalid");
-  for (const key of ["workspace", "recallProject"]) {
-    if (
-      !onlyKeys(destination[key], ["id", "name"]) ||
-      !isToken(destination[key].id) ||
-      typeof destination[key].name !== "string" ||
-      !destination[key].name.trim() ||
-      destination[key].name.length > 256
-    ) {
+  const scopeOf = (destination) => {
+    if (!onlyKeys(destination, ["workspace", "recallProject"]))
       throw new LifecycleError("config_invalid");
+    for (const key of ["workspace", "recallProject"]) {
+      if (
+        !onlyKeys(destination[key], ["id", "name"]) ||
+        !isToken(destination[key].id) ||
+        typeof destination[key].name !== "string" ||
+        !destination[key].name.trim() ||
+        destination[key].name.length > 256
+      ) {
+        throw new LifecycleError("config_invalid");
+      }
     }
-  }
-  return {
-    enabled: value.sessionLifecycle.enabled,
-    directory,
-    defaultProject: {
+    return {
       workspaceId: destination.workspace.id,
       projectUuid: destination.recallProject.id,
-    },
-    codexParticipantVerified:
-      value.sessionLifecycle.codexParticipantVerified === true,
+    };
+  };
+  let defaultProject;
+  if (version7) {
+    const { global: globalValue, paths } = value.projectMemory;
+    defaultProject = globalValue === undefined ? null : scopeOf(globalValue);
+    if (paths !== undefined && !isObject(paths))
+      throw new LifecycleError("config_invalid");
+    const roots = paths === undefined ? [] : Object.keys(paths);
+    for (const root of roots) {
+      if (
+        !path.isAbsolute(root) ||
+        path.resolve(root) === path.parse(path.resolve(root)).root
+      )
+        throw new LifecycleError("config_invalid");
+      scopeOf(paths[root]);
+    }
+    if (!defaultProject && roots.length === 0)
+      throw new LifecycleError("config_invalid");
+  } else {
+    defaultProject = scopeOf(value.projectMemory.defaultProject);
+  }
+  return {
+    enabled: lifecycle.enabled,
+    directory,
+    defaultProject,
+    codexParticipantVerified: lifecycle.codexParticipantVerified === true,
   };
 }
 
@@ -181,7 +211,12 @@ export async function resolveLifecycleScope(
   inspect = inspectRepository,
 ) {
   const repository = await inspect(event.cwd);
-  if (repository.kind === "absent") return config.defaultProject;
+  if (repository.kind === "absent") {
+    // A version 7 file may carry only per-path destinations; outside a
+    // repository it then has no default to offer, and nothing is guessed.
+    if (!config.defaultProject) throw new LifecycleError("scope_unavailable");
+    return config.defaultProject;
+  }
   if (repository.kind !== "present")
     throw new LifecycleError("repository_unavailable");
   // Repository paths (including a local root basename) stay local. The exact

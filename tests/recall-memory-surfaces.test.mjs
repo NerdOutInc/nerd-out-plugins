@@ -108,6 +108,10 @@ test("the documented mode matrix preserves legacy non-Git memory", async () => {
     readme,
     /^\| v5 \| Repository-first exact Project lookup[^\n]*Today -> Now activity[^\n]*\|$/m,
   );
+  assert.match(
+    readme,
+    /^\| v7 \| A saved filesystem-project destination wins, even over a bound remote;[^\n]*global destination remains available[^\n]*Today -> Now activity[^\n]*\|$/m,
+  );
   assert.match(readme, /Do not auto-migrate v1\/v2 users to a structured mode/);
   assert.match(
     readme,
@@ -166,7 +170,7 @@ test("v4 is a strict reader-before-writer contract", async () => {
   );
   assert.match(
     skill,
-    /explicit, confirmed whole-mode upgrade may replace\s+v3 or v4 with v5/,
+    /explicit, confirmed whole-mode upgrade may replace\s+v3, v4, v5, or v6 with v7/,
   );
   assert.match(skill, /do not\s+auto-migrate v1\/v2 global users/);
 });
@@ -175,7 +179,7 @@ test("v5 teaches the session tools and retires the hand-executed mechanics", asy
   const skill = await read("plugins/recall/skills/recall-journal/SKILL.md");
 
   // The structured protocol must name the whole write path.
-  assert.match(skill, /## Structured journaling \(version 5\)/);
+  assert.match(skill, /## Structured journaling \(versions 5 and 7\)/);
   assert.match(skill, /`open_session`/);
   assert.match(skill, /`append_entry`/);
   assert.match(skill, /`close_session`/);
@@ -292,13 +296,120 @@ test("v5 setup and migration are explicit, exact, and capability-gated", async (
     configuration,
     /Version 5 has no persistent `summaryTarget: "none"` preference/,
   );
-  assert.match(configuration, /show the exact replacement v5 shape/);
+  assert.match(configuration, /show the exact replacement v7 shape/);
   assert.match(configuration, /When disabling version 5/);
   assert.match(
     configuration,
     /Older journal notes and Today cards remain untouched/,
   );
   assert.match(skill, /Lifecycle context never\s+changes a config version/);
+});
+
+test("v7 restores global and per-path destinations to the structured writer", async () => {
+  const [fixtureText, skill, configuration, readme] = await Promise.all([
+    read("tests/fixtures/recall-journal-hook/v7/recall-journal.json"),
+    read("plugins/recall/skills/recall-journal/SKILL.md"),
+    read("plugins/recall/skills/recall-journal/references/configuration.md"),
+    read("plugins/recall/README.md"),
+  ]);
+  const fixture = JSON.parse(fixtureText);
+
+  // The fixture is the documented shape: exact destinations, each naming a
+  // Project, plus the version 6 pilot carried as an optional block.
+  assert.deepEqual(Object.keys(fixture), [
+    "version",
+    "projectMemory",
+    "sessionLifecycle",
+  ]);
+  assert.equal(fixture.version, 7);
+  assert.deepEqual(Object.keys(fixture.projectMemory), [
+    "enabled",
+    "global",
+    "paths",
+  ]);
+  for (const destination of [
+    fixture.projectMemory.global,
+    ...Object.values(fixture.projectMemory.paths),
+  ]) {
+    assert.deepEqual(Object.keys(destination), ["workspace", "recallProject"]);
+  }
+  assert.deepEqual(fixture.sessionLifecycle, { enabled: false });
+
+  // The reference documents the shape, its invariants, and the routing order.
+  assert.match(configuration, /## Version 7 structured destinations/);
+  assert.match(configuration, /"version": 7/);
+  assert.match(
+    configuration,
+    /`global` and `paths` are independently optional, but at least one\s+destination must exist/,
+  );
+  assert.match(
+    configuration,
+    /Every destination names both a workspace and a Recall Project/,
+  );
+  assert.match(
+    configuration,
+    /Every `paths` key is an absolute, non-root directory/,
+  );
+  assert.match(configuration, /the longest matching root wins/);
+  assert.match(configuration, /the saved path wins/);
+  assert.match(configuration, /The saved path itself is never printed/);
+  assert.match(
+    configuration,
+    /refusal to use the default after a repository routing failure is dropped\s+for version 7/,
+  );
+  assert.match(
+    configuration,
+    /Without a global destination, continue without project memory/,
+  );
+  assert.match(
+    configuration,
+    /`sessionLifecycle` is optional and carries the version 6 pilot unchanged/,
+  );
+  assert.match(
+    configuration,
+    /The pilot also lives under version 7's `sessionLifecycle` block/,
+  );
+
+  // Setup restores the version 2 questions and writes version 7; upgrades are
+  // explicit, and nothing is ever auto-migrated.
+  assert.match(
+    configuration,
+    /ask\s+whether this destination applies to that filesystem project or globally/,
+  );
+  assert.match(
+    configuration,
+    /Re-check the full\s+structured capability gate before saving version 7/,
+  );
+  assert.match(configuration, /atomically write the exact v2 or v7\s+shape/);
+  assert.match(configuration, /Never write version 3, 4, 5, or 6 during setup/);
+  assert.match(configuration, /When keeping version 7/);
+  assert.match(configuration, /### Upgrading version 4, 5, or 6 to version 7/);
+  assert.match(
+    configuration,
+    /`projectMemory.defaultProject` becomes `projectMemory.global`/,
+  );
+  assert.match(configuration, /`sessionLifecycle` is kept unchanged/);
+  assert.match(configuration, /Lifecycle context never rewrites a file/);
+  assert.match(configuration, /When disabling version 7/);
+  assert.match(
+    configuration,
+    /delete only that `projects` \(version 2\) or `paths`\s+\(version 7\) entry/,
+  );
+
+  // The skill teaches the three rungs without changing the session protocol.
+  assert.match(skill, /\*\*Versions 5 and 7 are the structured writer\.\*\*/);
+  assert.match(skill, /1\. \*\*Saved filesystem-project destination\.\*\*/);
+  assert.match(skill, /2\. \*\*Repository binding\.\*\*/);
+  assert.match(skill, /3\. \*\*Global destination\.\*\*/);
+  assert.match(skill, /never move to a later rung after that/);
+  assert.match(skill, /### What versions 5 and 7 never do/);
+  assert.match(
+    skill,
+    /Never reveal a saved filesystem path from configuration/,
+  );
+
+  // The README changelog and mode matrix name the release.
+  assert.match(readme, /Plugin `0\.34\.0` adds journal config version 7/);
 });
 
 test("user-facing note activity gets a useful change summary", async () => {

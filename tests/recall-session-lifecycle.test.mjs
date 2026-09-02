@@ -1283,6 +1283,149 @@ test("v6 config is exact, separate from older modes, and disabled by default", a
   }
 });
 
+const version7Config = {
+  version: 7,
+  projectMemory: {
+    enabled: true,
+    global: version6Config.projectMemory.defaultProject,
+    paths: {
+      "/fixture/bound": {
+        workspace: { id: "workspace-two", name: "Workspace" },
+        recallProject: { id: "project-two", name: "Project" },
+      },
+    },
+  },
+  sessionLifecycle: { enabled: true },
+};
+
+test("v7 carries the session-recording pilot unchanged beside its destinations", async (t) => {
+  const directory = await fs.mkdtemp(
+    path.join(os.tmpdir(), "recall-lifecycle-config-v7-"),
+  );
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const env = { CLAUDE_CONFIG_DIR: directory };
+  const file = path.join(directory, "recall-journal.json");
+  const write = (value) => fs.writeFile(file, JSON.stringify(value));
+
+  // The global destination is the adapter's no-repository default, exactly
+  // as v6's defaultProject was.
+  await write(version7Config);
+  assert.deepEqual(await readLifecycleConfig("claude-code", env), {
+    enabled: true,
+    directory,
+    defaultProject: {
+      workspaceId: "workspace-one",
+      projectUuid: "project-one",
+    },
+    codexParticipantVerified: false,
+  });
+
+  // The pilot is optional under v7 and off unless explicitly enabled.
+  const { sessionLifecycle, ...withoutLifecycle } = version7Config;
+  await write(withoutLifecycle);
+  assert.equal((await readLifecycleConfig("claude-code", env)).enabled, false);
+  await write({ ...version7Config, sessionLifecycle: { enabled: false } });
+  assert.equal((await readLifecycleConfig("claude-code", env)).enabled, false);
+  await write({
+    ...version7Config,
+    sessionLifecycle: { enabled: true, codexParticipantVerified: true },
+  });
+  assert.equal(
+    (await readLifecycleConfig("codex", { CODEX_HOME: directory }))
+      .codexParticipantVerified,
+    true,
+  );
+
+  // A paths-only file has no default; the adapter then has nothing to offer
+  // outside a repository and says so instead of guessing.
+  const { global: _global, ...pathsOnly } = version7Config.projectMemory;
+  await write({ ...version7Config, projectMemory: pathsOnly });
+  const pathsOnlyConfig = await readLifecycleConfig("claude-code", env);
+  assert.equal(pathsOnlyConfig.enabled, true);
+  assert.equal(pathsOnlyConfig.defaultProject, null);
+  await assert.rejects(
+    resolveLifecycleScope(
+      { cwd: "/fixture/work" },
+      pathsOnlyConfig,
+      async () => {
+        throw new Error("resolve_project must not be called");
+      },
+      async () => ({ kind: "absent" }),
+    ),
+    /scope_unavailable/,
+  );
+  assert.deepEqual(
+    await resolveLifecycleScope(
+      { cwd: "/fixture/work" },
+      {
+        ...pathsOnlyConfig,
+        defaultProject: { workspaceId: "w", projectUuid: "p" },
+      },
+      async () => {
+        throw new Error("resolve_project must not be called");
+      },
+      async () => ({ kind: "absent" }),
+    ),
+    { workspaceId: "w", projectUuid: "p" },
+  );
+
+  const { paths: _paths, ...globalOnly } = version7Config.projectMemory;
+  for (const value of [
+    { version: 7, projectMemory: { enabled: true }, sessionLifecycle },
+    {
+      version: 7,
+      projectMemory: { enabled: true, paths: {} },
+      sessionLifecycle,
+    },
+    { ...version7Config, projectMemory: { ...globalOnly, enabled: false } },
+    {
+      ...version7Config,
+      projectMemory: {
+        enabled: true,
+        defaultProject: version6Config.projectMemory.defaultProject,
+      },
+    },
+    { ...version7Config, global: {} },
+    { ...version7Config, sessionLifecycle: { enabled: true, unknown: true } },
+    { ...version7Config, sessionLifecycle: { enabled: "yes" } },
+    {
+      ...version7Config,
+      projectMemory: {
+        ...globalOnly,
+        global: { workspace: { id: "workspace-one", name: "Workspace" } },
+      },
+    },
+    {
+      ...version7Config,
+      projectMemory: {
+        ...globalOnly,
+        paths: {
+          "relative/path": version7Config.projectMemory.paths["/fixture/bound"],
+        },
+      },
+    },
+    {
+      ...version7Config,
+      projectMemory: {
+        ...globalOnly,
+        paths: { "/": version7Config.projectMemory.paths["/fixture/bound"] },
+      },
+    },
+    { ...version7Config, projectMemory: { ...globalOnly, paths: [] } },
+    {
+      ...version7Config,
+      projectMemory: { ...globalOnly, paths: { "/fixture/bound": null } },
+    },
+  ]) {
+    await write(value);
+    await assert.rejects(
+      readLifecycleConfig("claude-code", env),
+      /config_invalid/,
+      JSON.stringify(value),
+    );
+  }
+});
+
 test("v6 prompt context names explicit begin/status and rejects unproved or malformed participants", async (t) => {
   const directory = await fs.mkdtemp(
     path.join(os.tmpdir(), "recall-lifecycle-context-"),
