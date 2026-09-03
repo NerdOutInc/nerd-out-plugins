@@ -1,6 +1,6 @@
 ---
 name: recall-journal
-description: Keep a concise, searchable journal of agent work in Recall and read it back as the agent's long-term memory. Use when the user invokes the recall-journal skill ($recall:recall-journal in Codex, /recall:recall-journal in Claude Code, /recall-journal in Cursor), asks to configure, migrate, or reconfigure journaling, or when plugin lifecycle context reports a valid recall-journal.json destination. Explicit setup can choose capability-gated Structured Project activity shown in Today -> Now, or the legacy per-thread journal-note mode; never silently migrate between them.
+description: Keep a concise, searchable journal of agent work in Recall and read it back as the agent's long-term memory. Use when the user invokes the recall-journal skill ($recall:recall-journal in Codex, /recall:recall-journal in Claude Code, /recall-journal in Cursor), asks to configure, migrate, or reconfigure journaling, or when plugin lifecycle context reports a valid recall-journal.json destination. Explicit setup can choose capability-gated Structured Project activity shown in Today to Now, or the legacy per-thread journal-note mode; never silently migrate between them.
 ---
 
 # Recall Journal
@@ -374,6 +374,73 @@ The delta read is a separate, per-read capability, never part of this gate:
 are discovered from the live input schema and the response itself, and their
 absence changes nothing about whether structured journaling runs.
 
+### Efforts
+
+Efforts are an optional layer on structured journaling for one named body of
+work that spans sessions or agents. Enable effort behavior for this thread only
+when the live catalog advertises both `open_effort` and `record_milestone`,
+`record_milestone` advertises `todayCard` in its input schema, `open_session`
+advertises `effortUuid`, and either the live
+`get_project_context` input schema advertises `effortLimit` and its response
+reports both `capabilities.efforts: true` and `efforts.available: true`, or an
+`open_session` response already carries the bound `effort` block. If any part
+is missing, keep the ordinary version 5 or version 7 session protocol with no
+effort behavior; never infer support from a plugin or app version.
+
+**Open one only for work that needs one.** Open an effort when the user names a
+body of work that will outlast this session or agent, or when a multi-session
+plan becomes clear while opening the session. Ordinary tasks remain
+effort-free. When the boundary is unclear, ask the user. `open_effort` attempts
+the Started card automatically; do not supply or invent a card input for it.
+
+**Continue by meaning.** Continue an effort when the user says to continue or
+pick up that work, or when the live `efforts` section lists an active effort
+that semantically matches the request. Never choose by string equality. If
+more than one effort could match, ask rather than guessing. For an explicit
+continuation, use `list_efforts` when it is advertised to identify the active
+candidate before opening. When the effort is known before the session opens,
+pass its `effortUuid` to `open_session` and read the returned `effort` hand-off
+before working. If the effort is discovered only after the session was opened
+unbound, do not replay a changed open request; bind it on the first
+`record_milestone` instead and read the returned fresh effort state before the
+next phase. Another session bound to the same effort is advisory presence,
+never a lock.
+
+**Record human-scale milestones.** For an effort checkpoint, use
+`record_milestone` at the same cadence as `append_entry` rather than adding a
+duplicate entry: a normal session still has only a handful. Make each `summary`
+read like the next line of the work's story, and put the detail a future agent
+needs in `detail`. Include `todayCard` only for a checkpoint a person would
+want to see on Today; its title and ELI5 text contain no paths, ids, commands,
+hashes, or test inventory. Keep the exact payload for an identical retry.
+
+Complete checklist items by their current response text, add new items when
+the plan grows, and treat the returned checklist as the source for the next
+phase so human edits are preserved. On the milestone that completes the work,
+set `effortStatus: "done"` and always include a useful finish `todayCard`; no
+separate confirmation is required.
+
+**Read card receipts honestly.** For the automatic Started card and every
+requested milestone or finish card, read the returned `todayCard`. `created`
+and `already_exists` mean the card is present. `failed` means the effort or
+milestone still succeeded but its card is absent: report the partial result
+with its `reason`, and never retry the durable mutation just to repair its card.
+
+Never edit an effort note through `update_note_content` or
+`patch_note_content`, hand-write its app-owned Effort link section, open a
+second effort for the same work, or treat another session's binding as a lock.
+If an effort milestone already posted a card for the closing day,
+`close_session` may omit `daySummary`; a returned `superseded` status means
+Recall correctly skipped a duplicate day roll-up, not that closing failed.
+
+The structured failure rule is unchanged: retry an uncertain write once with
+the identical payload, then continue and say what is missing. Typed
+`mcpError.data` with `code` and `checklist` is a confirmed rejection: correct
+the call from that current checklist and the live schema. For a corrected
+`record_milestone`, keep `workspaceId`, `projectUuid`, `sessionUuid`, and
+`effortUuid` fixed; mint only a fresh `milestoneUuid` and `idempotencyKey`, then
+try once more.
+
 ### The session protocol
 
 **Start.** When substantive work begins, resolve the Project the way lifecycle
@@ -506,9 +573,13 @@ card failure never means the session failed to close:
   wherever a newer one would report `updated`.
 - `deferred` — the close is queued, so there is no authoritative end time to
   date a card by yet. Not a failure.
+- `superseded` — this session already posted a live effort card on Today for
+  the closing day, so Recall correctly skipped a duplicate day roll-up. Not a
+  failure.
 - `failed` — the session is closed and the card is missing (or was deleted by
-  the user — the app never resurrects one). Say so in the final response
-  rather than implying the day was recorded.
+  or archived by the user — the app never resurrects one). When present, use
+  its `reason` to say which. Say so in the final response rather than implying
+  the day was recorded.
 
 ### Failure handling
 

@@ -1780,6 +1780,10 @@ test("v5 names the session tools and never the retired card recipe", () => {
   assert.match(context, /always attach sessionUuid/);
   assert.match(context, /handful of durable checkpoints/);
   assert.match(context, /rejoin Today's chronology after close/);
+  assert.match(context, /open_session\.effortUuid/);
+  assert.match(context, /including record_milestone\.todayCard/);
+  assert.match(context, /record milestones with record_milestone/);
+  assert.match(context, /Recall owns the effort note and its Today cards/);
   // The mechanics this version exists to retire must never be recited again.
   assert.equal(context.includes("create_today_note"), false);
   assert.equal(context.includes("### Full journal entry"), false);
@@ -2675,7 +2679,7 @@ test("v7 with the session-recording pilot enabled yields to the version 6 adapte
     [
       true,
       /opt-in version 6 conversation-segment adapter/,
-      /Version 7 is the structured writer|version 7 is enabled/,
+      /Version 7 is the structured writer|version 7 is enabled|record_milestone\.todayCard/,
     ],
     [
       false,
@@ -2814,6 +2818,8 @@ test("v7 Cursor reads its own config and routes through the same rungs", () => {
   assert.equal(output.hookSpecificOutput, undefined);
   assert.match(output.additional_context, /version 7 is enabled for Cursor/);
   assert.match(output.additional_context, /projectUuid path-project-id/);
+  assert.match(output.additional_context, /open_session\.effortUuid/);
+  assert.match(output.additional_context, /record_milestone/);
   assert.match(output.additional_context, /Load \/recall-journal/);
   assert.equal(output.additional_context.includes(savedRoot), false);
 });
@@ -3029,6 +3035,7 @@ test("v5 and v7 open the session before the context read and gate the delta read
     ["v5", "no-repository-context.txt"],
     ["v7", "path-context.txt"],
     ["v7", "path-in-repository-context.txt"],
+    ["v7", "path-in-linked-worktree-context.txt"],
     ["v7", "repository-with-global-context.txt"],
     ["v7", "repository-without-global-context.txt"],
     ["v7", "no-repository-context.txt"],
@@ -3077,6 +3084,11 @@ test("v5 and v7 open the session before the context read and gate the delta read
     );
     // No anchor value is ever printed by the hook: it comes from open_session.
     assert.doesNotMatch(context, /sinceSessionUuid [0-9a-f-]{36}/, label);
+    assert.equal(
+      context.split("When work belongs to a named multi-session effort").length - 1,
+      1,
+      label,
+    );
   }
 
   // Direct routes name the saved ids once for both the session tools and the
@@ -3106,7 +3118,19 @@ test("v5 and v7 open the session before the context read and gate the delta read
   ]) {
     assert.doesNotMatch(
       readFixture(version, filename),
-      /sinceSessionUuid|previousSession/,
+      /sinceSessionUuid|previousSession|record_milestone\.todayCard/,
+      `${version}/${filename}`,
+    );
+  }
+
+  for (const [version, filename] of [
+    ["v5", "bridge-missing-context.txt"],
+    ["v7", "bridge-missing-context.txt"],
+    ["v7", "unknown-identity-context.txt"],
+  ]) {
+    assert.doesNotMatch(
+      readFixture(version, filename),
+      /record_milestone\.todayCard|open_session\.effortUuid|record_milestone/,
       `${version}/${filename}`,
     );
   }

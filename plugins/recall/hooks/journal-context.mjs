@@ -610,6 +610,7 @@ function buildStructuredWriterHookOutput(context, version, routing, threadId) {
         `Automatic Recall structured project memory version ${version} is enabled for ${context.agentName} by a valid per-agent config. ` +
         routing +
         `Version ${version} is the structured writer: when substantive work begins, open_session on the resolved Project first, then call get_project_context for that same Project and use that compact context before deeper searches; append_entry at checkpoints, and close_session with the outcome and a short plain-language daySummary for the day's Today card. ` +
+        "When work belongs to a named multi-session effort, first require the recall-journal skill's full live capability gate, including record_milestone.todayCard; once it passes, bind the session with open_session.effortUuid and record milestones with record_milestone, while Recall owns the effort note and its Today cards. " +
         "These user-facing records appear in Today -> Now activity: use a concise plain-language intent; when a current branch exists, pass its exact name; give each checkpoint a useful title and a standard decision, blocker, shipped, or progress type; always attach sessionUuid; keep normal work to a handful of durable checkpoints because entries rejoin Today's chronology after close. " +
         lineage +
         CONTEXT_SINCE_RULE +

@@ -25,6 +25,17 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
+Plugin `0.36.0` teaches version 5 and version 7 structured journals how to use
+named, multi-session Efforts when the live Recall catalog exposes the complete
+surface, including `record_milestone.todayCard`. Agents open or continue an
+effort by meaning, bind the session with `effortUuid`, preserve the current
+human-edited checklist, and record a handful of useful milestones; only
+human-worthy checkpoints get an ELI5 Today card, while every finish requests
+one and Recall owns the automatic Started card, effort note, and link sections.
+A
+superseded close-time day card is an expected de-duplication result. Older
+catalogs keep ordinary structured journaling with no effort behavior.
+
 Plugin `0.35.0` reads Project context after the session opens. Under versions
 5 and 7, `open_session` now runs first, and the single `get_project_context`
 read passes the predecessor's `sessionUuid` as `sinceSessionUuid` whenever the

@@ -315,7 +315,8 @@ test("host manifests share the current plugin version", async () => {
   // 0.35.0 opens the structured session before the one context read, anchors
   // that read on the predecessor with sinceSessionUuid when the live schema
   // advertises it, and reads activity as the app's summary by default.
-  assert.equal(codexPlugin.version, "0.35.0");
+  // 0.36.0 teaches capability-gated Efforts to all three journal hosts.
+  assert.equal(codexPlugin.version, "0.36.0");
   assert.equal(claudePlugin.version, codexPlugin.version);
   const desktop = await readJson("desktop-extensions/recall/manifest.json");
   assert.equal(desktop.version, "0.10.0");
