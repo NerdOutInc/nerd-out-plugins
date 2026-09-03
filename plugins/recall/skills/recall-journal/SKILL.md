@@ -427,9 +427,11 @@ hashes, or test inventory. Keep the exact payload for an identical retry.
 
 Complete checklist items by their current response text, add new items when
 the plan grows, and treat the returned checklist as the source for the next
-phase so human edits are preserved. On the milestone that completes the work,
-set `effortStatus: "done"` and always include a useful finish `todayCard`; no
-separate confirmation is required.
+phase so human edits are preserved. Only include an item in `complete` when
+every clause of that exact current item is satisfied. If the milestone `detail`
+says any part remains, is deferred, or is still owed, keep that item unchecked.
+On the milestone that completes the work, set `effortStatus: "done"` and always
+include a useful finish `todayCard`; no separate confirmation is required.
 
 **Read card receipts honestly.** For the automatic Started card and every
 requested milestone or finish card, read the returned `todayCard`. `created`
