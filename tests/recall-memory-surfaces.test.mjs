@@ -274,7 +274,15 @@ test("v5 and v7 gate Efforts on the live catalog and preserve app ownership", as
   assert.match(skill, /Complete checklist items by their current response text/);
   assert.match(
     skill,
-    /set `effortStatus: "done"` and always include a useful finish `todayCard`/,
+    /Only include an item in `complete` when\s+every clause of that exact current item is satisfied/,
+  );
+  assert.match(
+    skill,
+    /If the milestone `detail`\s+says any part remains, is deferred, or is still owed, keep that item unchecked/,
+  );
+  assert.match(
+    skill,
+    /set `effortStatus: "done"` and always\s+include a useful finish `todayCard`/,
   );
   assert.match(
     skill,
@@ -304,6 +312,10 @@ test("v5 and v7 gate Efforts on the live catalog and preserve app ownership", as
   assert.match(
     readme,
     /Plugin `0\.36\.0` teaches version 5 and version 7[\s\S]*including `record_milestone\.todayCard`/,
+  );
+  assert.match(
+    readme,
+    /Plugin `0\.36\.1` keeps compound Effort checklist items honest[\s\S]*every clause of that exact\s+current item is satisfied/,
   );
 });
 

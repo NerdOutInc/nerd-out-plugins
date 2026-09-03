@@ -25,6 +25,11 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
+Plugin `0.36.1` keeps compound Effort checklist items honest: an agent may send
+an item in `record_milestone.complete` only after every clause of that exact
+current item is satisfied. If its milestone detail admits that any part remains,
+is deferred, or is still owed, the item stays unchecked.
+
 Plugin `0.36.0` teaches version 5 and version 7 structured journals how to use
 named, multi-session Efforts when the live Recall catalog exposes the complete
 surface, including `record_milestone.todayCard`. Agents open or continue an
