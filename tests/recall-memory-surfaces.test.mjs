@@ -254,6 +254,20 @@ test("v5 and v7 gate Efforts on the live catalog and preserve app ownership", as
   assert.match(skill, /Never choose by string equality/);
   assert.match(
     skill,
+    /`efforts\.truncated: true` means Project context is not enough/,
+  );
+  assert.match(
+    skill,
+    /`list_efforts\.hasMore: true` means continue with its `nextCursor`/,
+  );
+  assert.match(skill, /active, paused, and done candidates are considered/);
+  assert.match(
+    skill,
+    /paused semantic match is the same effort[\s\S]*set `effortStatus: "active"`/,
+  );
+  assert.match(skill, /Never reopen a done effort implicitly/);
+  assert.match(
+    skill,
     /Another session bound to the\s+same effort is advisory presence,\s+never a lock/,
   );
   assert.match(skill, /only for a checkpoint a person would\s+want to see on Today/);
@@ -267,6 +281,19 @@ test("v5 and v7 gate Efforts on the live catalog and preserve app ownership", as
     /`created`\s+and `already_exists` mean the card is present[\s\S]*`failed` means the effort or\s+milestone still succeeded but its card is absent/,
   );
   assert.match(skill, /never retry the durable mutation just to repair its card/);
+  assert.match(
+    skill,
+    /Read the separate `sessionBinding` receipt on every `open_effort` and\s+`record_milestone` response/,
+  );
+  assert.match(
+    skill,
+    /`deferred` means the effort or milestone succeeded but the session link did\s+not reach the server/,
+  );
+  assert.match(
+    skill,
+    /Replay that exact effort call once, with every UUID,\s+idempotency key, and payload byte unchanged/,
+  );
+  assert.match(skill, /report the partial linkage/);
   assert.match(skill, /Never edit an effort note through `update_note_content`/);
   assert.match(skill, /a returned `superseded` status means\s+Recall correctly skipped a duplicate day roll-up/);
   assert.match(skill, /Typed\s+`mcpError\.data` with `code` and `checklist`/);

@@ -394,13 +394,24 @@ effort-free. When the boundary is unclear, ask the user. `open_effort` attempts
 the Started card automatically; do not supply or invent a card input for it.
 
 **Continue by meaning.** Continue an effort when the user says to continue or
-pick up that work, or when the live `efforts` section lists an active effort
-that semantically matches the request. Never choose by string equality. If
-more than one effort could match, ask rather than guessing. For an explicit
-continuation, use `list_efforts` when it is advertised to identify the active
-candidate before opening. When the effort is known before the session opens,
-pass its `effortUuid` to `open_session` and read the returned `effort` hand-off
-before working. If the effort is discovered only after the session was opened
+pick up that work, or when the live `efforts` section lists an active or paused
+effort that semantically matches the request. Never choose by string equality.
+Before binding, establish that the match is unique across the available set:
+`efforts.truncated: true` means Project context is not enough, and
+`list_efforts.hasMore: true` means continue with its `nextCursor` until the
+relevant list is exhausted. If the complete list cannot be read or more than
+one effort could match, ask rather than guessing. For an explicit
+continuation, use `list_efforts` without a status filter when it is advertised
+so active, paused, and done candidates are considered before opening.
+
+A paused semantic match is the same effort, not permission to call
+`open_effort` again: set `effortStatus: "active"` on the first resumed
+`record_milestone`. Never reopen a done effort implicitly. Show the completed
+match and ask the user whether to reopen it; when they explicitly choose to,
+set `effortStatus: "active"` on that first milestone rather than opening a
+duplicate effort. When the effort is known before the session opens, pass its
+`effortUuid` to `open_session` and read the returned `effort` hand-off before
+working. If the effort is discovered only after the session was opened
 unbound, do not replay a changed open request; bind it on the first
 `record_milestone` instead and read the returned fresh effort state before the
 next phase. Another session bound to the same effort is advisory presence,
@@ -425,6 +436,16 @@ requested milestone or finish card, read the returned `todayCard`. `created`
 and `already_exists` mean the card is present. `failed` means the effort or
 milestone still succeeded but its card is absent: report the partial result
 with its `reason`, and never retry the durable mutation just to repair its card.
+
+Read the separate `sessionBinding` receipt on every `open_effort` and
+`record_milestone` response too. `bound` and `already_bound` confirm the link;
+`deferred` means the effort or milestone succeeded but the session link did
+not reach the server. Replay that exact effort call once, with every UUID,
+idempotency key, and payload byte unchanged, because its replay retries the
+binding without duplicating the write. If binding is still deferred, keep the
+effort result, report the partial linkage, and let the next genuine effort call
+retry it; never invent a milestone, change the session's open request, or
+claim the session is bound.
 
 Never edit an effort note through `update_note_content` or
 `patch_note_content`, hand-write its app-owned Effort link section, open a
