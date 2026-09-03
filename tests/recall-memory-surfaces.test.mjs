@@ -218,6 +218,7 @@ test("v5 teaches the session tools and retires the hand-executed mechanics", asy
     "updated",
     "already_exists",
     "deferred",
+    "superseded",
     "failed",
   ]) {
     assert.match(skill, new RegExp(`\`${status}\``), status);
@@ -226,6 +227,84 @@ test("v5 teaches the session tools and retires the hand-executed mechanics", asy
   // The card's Related Notes section belongs to the app, never the agent.
   assert.match(skill, /Related Notes/);
   assert.match(skill, /Never hand-write a Related Notes section/);
+});
+
+test("v5 and v7 gate Efforts on the live catalog and preserve app ownership", async () => {
+  const [skill, readme] = await Promise.all([
+    read("plugins/recall/skills/recall-journal/SKILL.md"),
+    read("plugins/recall/README.md"),
+  ]);
+
+  for (const capability of [
+    "open_effort",
+    "record_milestone",
+    "effortUuid",
+    "efforts",
+  ]) {
+    assert.match(skill, new RegExp(`\`${capability}\``), capability);
+  }
+  assert.match(
+    skill,
+    /If any part\s+is missing[\s\S]*ordinary version 5 or version 7/,
+  );
+  assert.match(
+    skill,
+    /`record_milestone` advertises `todayCard` in its input schema/,
+  );
+  assert.match(skill, /Never choose by string equality/);
+  assert.match(
+    skill,
+    /`efforts\.truncated: true` means Project context is not enough/,
+  );
+  assert.match(
+    skill,
+    /`list_efforts\.hasMore: true` means continue with its `nextCursor`/,
+  );
+  assert.match(skill, /active, paused, and done candidates are considered/);
+  assert.match(
+    skill,
+    /paused semantic match is the same effort[\s\S]*set `effortStatus: "active"`/,
+  );
+  assert.match(skill, /Never reopen a done effort implicitly/);
+  assert.match(
+    skill,
+    /Another session bound to the\s+same effort is advisory presence,\s+never a lock/,
+  );
+  assert.match(skill, /only for a checkpoint a person would\s+want to see on Today/);
+  assert.match(skill, /Complete checklist items by their current response text/);
+  assert.match(
+    skill,
+    /set `effortStatus: "done"` and always include a useful finish `todayCard`/,
+  );
+  assert.match(
+    skill,
+    /`created`\s+and `already_exists` mean the card is present[\s\S]*`failed` means the effort or\s+milestone still succeeded but its card is absent/,
+  );
+  assert.match(skill, /never retry the durable mutation just to repair its card/);
+  assert.match(
+    skill,
+    /Read the separate `sessionBinding` receipt on every `open_effort` and\s+`record_milestone` response/,
+  );
+  assert.match(
+    skill,
+    /`deferred` means the effort or milestone succeeded but the session link did\s+not reach the server/,
+  );
+  assert.match(
+    skill,
+    /Replay that exact effort call once, with every UUID,\s+idempotency key, and payload byte unchanged/,
+  );
+  assert.match(skill, /report the partial linkage/);
+  assert.match(skill, /Never edit an effort note through `update_note_content`/);
+  assert.match(skill, /a returned `superseded` status means\s+Recall correctly skipped a duplicate day roll-up/);
+  assert.match(skill, /Typed\s+`mcpError\.data` with `code` and `checklist`/);
+  assert.match(
+    skill,
+    /keep `workspaceId`, `projectUuid`, `sessionUuid`, and\s+`effortUuid` fixed; mint only a fresh `milestoneUuid` and `idempotencyKey`/,
+  );
+  assert.match(
+    readme,
+    /Plugin `0\.36\.0` teaches version 5 and version 7[\s\S]*including `record_milestone\.todayCard`/,
+  );
 });
 
 test("v5 forbids a hybrid and keeps the legacy protocol as the whole fallback", async () => {
