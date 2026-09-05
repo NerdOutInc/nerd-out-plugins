@@ -286,14 +286,16 @@ advertised:
 - `close_session`, accepting `workspaceId`, `projectUuid`, `sessionUuid`,
   `idempotencyKey`, `outcome`, `runningSummary`, `followUps`, and `daySummary`.
 
-If any part is absent, do not write version 5 or version 7. During first
-setup, offer the legacy journal-note mode only and explain that Structured
-Project activity requires an updated and restarted Recall app. The same rule
-protects existing files. If a v5 config already exists, leave it unchanged;
-if a v7 config already exists, leave it unchanged too. Runtime then follows
-the skill's all-or-nothing fallback. The version 5 gate is the version 7 gate.
-Re-check the whole gate immediately before every version 7 save; never infer
-support from a plugin or app version.
+If any part is absent, do not save a new version 5 or version 7 configuration.
+During first setup, explain the exact missing coverage; absence does not prove
+whether the app, plugin, host, connection, or permission is responsible. Legacy
+journal-note mode is a separate explicit user choice, never a runtime fallback.
+Leave an existing v5 or v7 config and its configured mode unchanged. Runtime
+must disclose the unavailable structured recording in the first user-visible
+reply, skip writes, and continue the user's task without substitute journal or
+Today notes. The version 5 gate is the version 7 gate.
+Re-check the whole gate immediately before every version 7 save; never infer support from a plugin or
+app version.
 
 The delta read is a runtime capability, not part of this gate:
 `sinceSessionUuid`, `entryLimit`, and `callerSessionUuid` on

@@ -25,6 +25,12 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
+Plugin `0.36.2` keeps configured structured recording in its selected mode when
+tools are missing. Agents report unavailable recording and continue the task;
+they never substitute legacy notes or hand-built Today cards. Today prose asks
+for no Related Notes section. Older Recall builds may still generate that
+section until the app-side cleanup ships.
+
 Plugin `0.36.1` keeps compound Effort checklist items honest: an agent may send
 an item in `record_milestone.complete` only after every clause of that exact
 current item is satisfied. If its milestone detail admits that any part remains,

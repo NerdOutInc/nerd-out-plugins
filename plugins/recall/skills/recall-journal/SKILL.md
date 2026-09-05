@@ -361,12 +361,14 @@ by making deliberately invalid calls. Structured journaling needs **all** of:
 - `close_session` advertising a `daySummary` property,
 - `append_entry` for checkpoints.
 
-If any of those is missing, the connected Recall app predates structured
-journaling. Fall back to the **entire** legacy protocol in the sections below —
-thread note, markers, toggles, hand-built Today card — and say plainly in the
-final response that structured journaling was unavailable. Never mix the two:
-structured sessions with a hand-assembled day card reintroduce exactly the
-drift this version removes. Cache the decision for this thread only.
+If any of those is missing, structured recording is unavailable in this
+conversation. Report the missing tool or field in the first user-visible reply,
+then continue the user's work without journal writes. Never fall back to the
+legacy protocol, create a substitute thread note or Today card, or rewrite the
+saved config. A missing tool can mean catalog skew, permissions, or a connector
+outage; it does not prove that the app is old. Cache the decision for this
+thread only. Legacy recording is available only when the effective config
+explicitly selects version 1 or version 2.
 
 The delta read is a separate, per-read capability, never part of this gate:
 `sinceSessionUuid`, `entryLimit`, and `callerSessionUuid` on
@@ -574,13 +576,14 @@ could follow, no paths, commands, hashes, ids, or test inventories. Good:
 `Made journal notes friendlier` / `The work diary now reads like a story, and
 the techy bits hide inside little dropdowns.`
 
-Recall derives the card's identity from the session's lineage and day, places
-it on the Today timeline, and maintains the card's **Related Notes** section —
-links to the notes agents touched for the Project, refreshed on every same-day
-close of the same lineage. Do not compute an
-idempotency key, do not emit a heading, and do not attach a backlink — those
-are the app's now. Never hand-write a Related Notes section into any note; the
-app rebuilds that section from the heading down on the next close.
+Recall derives the card's identity from the session's lineage and day and places
+it on Today. Supply only the useful title and short paragraph. Effort cards
+carry the app-owned direct Effort link. Never hand-write a Related Notes section
+or attach search results, recently touched notes, or test fixtures as backlinks.
+Do not compute an
+idempotency key, do not emit a heading, and do not attach a backlink to a session
+day summary. Older installed apps may still append Related Notes; report that
+app behavior without trying to compensate by rebuilding the card yourself.
 
 ### Reading the close result honestly
 
@@ -588,12 +591,11 @@ app rebuilds that section from the heading down on the next close.
 card failure never means the session failed to close:
 
 - `created` — the day's card landed.
-- `updated` — the card already existed and its Related Notes links were
-  refreshed. Normal for the second and later closes of a day.
-- `already_exists` — this lineage already has a card for that day and its
-  links were already current, including after a retry. Correct and final;
-  never force a second one. Older app versions report `already_exists`
-  wherever a newer one would report `updated`.
+- `updated` — an existing card was maintained, including conservative removal
+  of an untouched legacy Related Notes block. Human additions remain intact.
+- `already_exists` — this lineage already has a card for that day, including
+  after a retry. Correct and final; never force a second one. Neither status
+  implies that unrelated note links are required or that new prose replaced it.
 - `deferred` — the close is queued, so there is no authoritative end time to
   date a card by yet. Not a failure.
 - `superseded` — this session already posted a live effort card on Today for
@@ -652,14 +654,10 @@ are never migrated or rewritten.
 
 ## Recall before working
 
-**The rest of this document is the legacy note protocol.** It applies to
-version 1 and version 2 destinations, and to a version 5 or version 7 config
-whose connected app lacks the structured surface (see the fallback rule
-above). Under a working version 5 or version 7 it is superseded by
-"Structured journaling (versions 5 and 7)"; under version 3 or version 4 it
-does not apply at all. Version 6 uses only its segment protocol above and the
-explicitly referenced checkpoint/close guidance; it never enters this legacy
-fallback.
+**The rest of this document is the legacy note protocol.** It applies only to
+an effective version 1 or version 2 destination. Versions 3 and 4 are readers;
+versions 5 and 7 use structured sessions; the version 6 pilot uses conversation
+segments. Missing structured tools never select this legacy mode.
 
 The archive only pays for itself when it changes what happens next. At the
 start of meaningful work, decide whether the journal could already cover part
