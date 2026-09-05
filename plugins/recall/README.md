@@ -25,6 +25,15 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
+Plugin `0.37.0` teaches optional live-schema-gated `read_effort`, `bind_effort`,
+and `resume_milestone` workflows. Agents inspect the exact current checklist,
+keep the effort intro current with a revision guard, and distinguish each
+milestone delivery stage. Recovery preserves the original operation and its
+principal; saved payloads are local to the Recall device. Routine work stays
+in effort history, while Today gets meaningful starts, checkpoints, blockers,
+and completion with the direct Effort link. These instructions do not assert
+that every installed app or host has the new tools.
+
 Plugin `0.36.2` keeps configured structured recording in its selected mode when
 tools are missing. Agents report unavailable recording and continue the task;
 they never substitute legacy notes or hand-built Today cards. Today prose asks

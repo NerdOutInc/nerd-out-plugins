@@ -268,7 +268,7 @@ test("v5 and v7 gate Efforts on the live catalog and preserve app ownership", as
   assert.match(skill, /Never reopen a done effort implicitly/);
   assert.match(
     skill,
-    /Another session bound to the\s+same effort is advisory presence,\s+never a lock/,
+    /Another session is advisory presence, never\s+a lock/,
   );
   assert.match(skill, /only for a checkpoint a person would\s+want to see on Today/);
   assert.match(skill, /Complete checklist items by their current response text/);
@@ -282,33 +282,22 @@ test("v5 and v7 gate Efforts on the live catalog and preserve app ownership", as
   );
   assert.match(
     skill,
-    /set `effortStatus: "done"` and always\s+include a useful finish `todayCard`/,
+    /set `effortStatus: "done"` and always include a useful\s+finish `todayCard`/,
   );
-  assert.match(
-    skill,
-    /`created`\s+and `already_exists` mean the card is present[\s\S]*`failed` means the effort or\s+milestone still succeeded but its card is absent/,
-  );
-  assert.match(skill, /never retry the durable mutation just to repair its card/);
-  assert.match(
-    skill,
-    /Read the separate `sessionBinding` receipt on every `open_effort` and\s+`record_milestone` response/,
-  );
-  assert.match(
-    skill,
-    /`deferred` means the effort or milestone succeeded but the session link did\s+not reach the server/,
-  );
-  assert.match(
-    skill,
-    /Replay that exact effort call once, with every UUID,\s+idempotency key, and payload byte unchanged/,
-  );
-  assert.match(skill, /report the partial linkage/);
+  for (const tool of ["read_effort", "bind_effort", "resume_milestone"]) {
+    assert.match(skill, new RegExp(`\`${tool}\``));
+  }
+  assert.match(skill, /only an explicit synced\s+receipt confirms server delivery/);
+  assert.match(skill, /Never mint fresh IDs to repair a partial\s+write/);
+  assert.match(skill, /`deferred` means the link is unconfirmed/);
+  assert.match(skill, /saved payload is device-local/);
+  assert.match(skill, /`expectedRevision`/);
+  assert.match(skill, /Inspection-only requests[\s\S]*never open a session or bind one/);
+  assert.match(skill, /completed\s+operations can occupy the scanned page/);
   assert.match(skill, /Never edit an effort note through `update_note_content`/);
   assert.match(skill, /a returned `superseded` status means\s+Recall correctly skipped a duplicate day roll-up/);
-  assert.match(skill, /Typed\s+`mcpError\.data` with `code` and `checklist`/);
-  assert.match(
-    skill,
-    /keep `workspaceId`, `projectUuid`, `sessionUuid`, and\s+`effortUuid` fixed; mint only a fresh `milestoneUuid` and `idempotencyKey`/,
-  );
+  assert.match(skill, /Only a confirmed pre-admission rejection or owner-proven unstarted cancellation\s+with `freshMilestoneAllowed: true`/);
+  assert.match(skill, /`milestone_incomplete` error is always a\s+continuation of the original operation/);
   assert.match(
     readme,
     /Plugin `0\.36\.0` teaches version 5 and version 7[\s\S]*including `record_milestone\.todayCard`/,
