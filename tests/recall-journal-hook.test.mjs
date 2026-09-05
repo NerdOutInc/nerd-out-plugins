@@ -1,3 +1,4 @@
+import { readSkillGuidanceSync } from "./helpers/read-skill-guidance.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -605,7 +606,9 @@ test("keeps v3/v4 reader-only while gating explicit v5 setup", () => {
     "plugins/recall/skills/recall-journal/SKILL.md",
     "plugins/recall/skills/recall-journal/references/configuration.md",
   ].map((relativePath) =>
-    fs.readFileSync(path.join(repositoryRoot, relativePath), "utf8"),
+    relativePath.endsWith("/SKILL.md")
+      ? readSkillGuidanceSync(path.join(repositoryRoot, relativePath))
+      : fs.readFileSync(path.join(repositoryRoot, relativePath), "utf8"),
   );
 
   assert.match(
