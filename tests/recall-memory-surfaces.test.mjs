@@ -224,7 +224,7 @@ test("v5 teaches the session tools and retires the hand-executed mechanics", asy
     assert.match(skill, new RegExp(`\`${status}\``), status);
   }
 
-  // The card's Related Notes section belongs to the app, never the agent.
+  // Today summaries never solicit automatically discovered backlinks.
   assert.match(skill, /Related Notes/);
   assert.match(skill, /Never hand-write a Related Notes section/);
 });
@@ -319,24 +319,15 @@ test("v5 and v7 gate Efforts on the live catalog and preserve app ownership", as
   );
 });
 
-test("v5 forbids a hybrid and keeps the legacy protocol as the whole fallback", async () => {
+test("structured recording never falls back to legacy notes during an outage", async () => {
   const skill = await read("plugins/recall/skills/recall-journal/SKILL.md");
 
-  // The fallback is all-or-nothing: a partial structured surface must not
-  // produce structured sessions plus a hand-built card.
   assert.match(skill, /Structured journaling needs \*\*all\*\* of/);
-  assert.match(skill, /Fall back to the \*\*entire\*\* legacy protocol/);
-  assert.match(skill, /Never mix the two/);
-
-  // Degradation is always explicit to the user.
-  assert.match(
-    skill,
-    /say plainly in the\s+final response that structured journaling was unavailable/,
-  );
-
-  // The legacy sections must remain present and explicitly scoped, because
-  // v1/v2 users and the fallback both still execute them.
-  assert.match(skill, /The rest of this document is the legacy note protocol/);
+  assert.match(skill, /Never fall back to the\s+legacy protocol/);
+  assert.match(skill, /first user-visible reply/);
+  assert.match(skill, /continue the user's work without journal writes/);
+  assert.doesNotMatch(skill, /Fall back to the \*\*entire\*\* legacy protocol/);
+  assert.match(skill, /applies only to\s+an effective version 1 or version 2 destination/);
   assert.match(skill, /### Thread identity and journal markers/);
   assert.match(skill, /### Write-failure protocol/);
 });
@@ -376,10 +367,10 @@ test("v5 setup and migration are explicit, exact, and capability-gated", async (
     assert.match(configuration, new RegExp(`\`${field}\``), field);
   }
 
-  assert.match(configuration, /If any part is absent, do not write version 5/);
+  assert.match(configuration, /If any part is absent, do not save a new version 5 or version 7 configuration/);
   assert.match(
     configuration,
-    /If a v5 config already exists,\s+leave it unchanged/,
+    /Leave an existing v5 or v7 config and its configured mode unchanged/,
   );
   assert.match(configuration, /workspace root is invalid/);
   assert.match(configuration, /cannot be translated\s+losslessly/);
