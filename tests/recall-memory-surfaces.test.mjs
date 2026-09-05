@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFileWithSkillReferences as readFile } from "./helpers/read-skill-guidance.mjs";
 import test from "node:test";
 
 const repositoryRoot = new URL("../", import.meta.url);
@@ -533,7 +533,7 @@ test("structured journaling reads context after the session opens and gates the 
     read("plugins/recall/skills/recall/SKILL.md"),
   ]);
 
-  assert.match(skill, /\*\*Open the session before reading context\.\*\*/);
+  assert.match(skill, /\*\*Open the session before reading Project context\.\*\*/);
   assert.match(skill, /\*\*Then read context once\.\*\*/);
   assert.match(
     skill,

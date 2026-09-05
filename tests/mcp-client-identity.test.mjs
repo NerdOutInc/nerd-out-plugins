@@ -1,3 +1,4 @@
+import { readFileWithSkillReferences as readFile } from "./helpers/read-skill-guidance.mjs";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import {
@@ -5,7 +6,6 @@ import {
   chmod,
   mkdir,
   mkdtemp,
-  readFile,
   rm,
   writeFile,
 } from "node:fs/promises";

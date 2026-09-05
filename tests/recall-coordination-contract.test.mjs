@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFileWithSkillReferences as readFile } from "./helpers/read-skill-guidance.mjs";
 import test from "node:test";
 
 const repositoryRoot = new URL("../", import.meta.url);

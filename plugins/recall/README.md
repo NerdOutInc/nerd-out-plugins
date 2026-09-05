@@ -25,6 +25,12 @@ credentials under `~/.mcp-auth/recall/`. A denial, revocation, signature
 failure, or protocol error on the local-socket path is surfaced as an error and
 never silently downgraded to OAuth.
 
+The Recall Journal entrypoint routes to focused references for structured
+readers, structured sessions and Efforts, the explicit lifecycle pilot, and
+legacy notes. Load only the selected mode. Configuration and Codex hook trust
+remain separate procedures, so ordinary project work does not repeatedly load
+or run setup instructions.
+
 Plugin `0.37.0` teaches optional live-schema-gated `read_effort`, `bind_effort`,
 and `resume_milestone` workflows. Agents inspect the exact current checklist,
 keep the effort intro current with a revision guard, and distinguish each
