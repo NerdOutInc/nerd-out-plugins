@@ -8,6 +8,25 @@ description: Use Recall's local MCP server to list, read, search, and optionally
 Use this skill when the user asks the agent to work with their notes in Recall
 through the local MCP server.
 
+## Shared project work
+
+For a request to inspect or continue a named body of work, resolve its exact
+Recall Project and page `list_efforts` before creating anything. Match by
+meaning across all returned pages; preserve active, paused, and done candidates
+when the request is a continuation. More than one plausible match needs the
+user's choice. An inspection stays read-only: `read_effort`, when advertised,
+returns the current intro, exact checklist, revision, and bounded history without
+opening or binding a session. Check availability/truncation flags and use its
+`history` read paths when more context is needed. Pending milestone pages are
+local to the signed-in user and device; an empty page with `hasMore` still needs
+its `nextCursor`. Missing metadata means unknown, not proof of completeness.
+
+For authorized ongoing work under a configured structured journal, follow the
+Recall Journal skill's Effort workflow to open/bind your own session and preserve
+the current plan. The same Effort note is shared across agents. Use its direct
+scoped link in Today summaries; never add a Related Notes section or unrelated
+search-result backlinks. Do not modify the user's journal mode to gain a tool.
+
 ## Setup Checks
 
 - The Recall Mac app must be running.
