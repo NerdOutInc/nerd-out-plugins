@@ -56,7 +56,12 @@ session never opens its own, and the close-time Project brief refresh through
 `update_project_state`; `efforts.md` keeps the ordinary effort path and hands
 partial stages, pending recoveries, deferred bindings, and timeouts to the
 new `efforts-recovery.md`; and the always-on skill descriptions are shorter.
-The plan behind this release is `docs/token-usage-optimization-plan.md`.
+`tests/recall-token-budgets.test.mjs` pins every hook golden, the live hook
+on every route and event, each skill reference, the mode bundles, and the
+skill descriptions to a byte ceiling, and `scripts/measure-context-cost.mjs`
+prints the measured hook, bundle, catalog, and cost-model tables (`--json`
+for machine output). The plan behind this release is
+`docs/token-usage-optimization-plan.md`.
 
 Plugin `0.38.0` offers the version 7 upgrade instead of waiting to be asked.
 The hook names the saved config version at session start for versions 1
