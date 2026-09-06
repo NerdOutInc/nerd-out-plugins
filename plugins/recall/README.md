@@ -46,8 +46,17 @@ session event alone. The session context also states the ordinary protocol's
 prose target (60 to 120 words per checkpoint), the `noteLimit` and
 `entryLimit` hints for the context read, and the cases that call for the full
 skill, so an ordinary task no longer needs to load it. Cursor keeps its single
-`sessionStart` payload. The plan behind this release is
-`docs/token-usage-optimization-plan.md`.
+`sessionStart` payload. The journal skill follows the same idea: its
+dispatcher says the session-start context already covers the ordinary
+protocol and points at `structured-writer.md` for the full statement, a
+failed or uncertain write, or a missing context; the writer reference now
+carries the checkpoint, outcome, and day-card prose targets, the `noteLimit`
+and `entryLimit` read hints, the rule that a helper spawned by a journaling
+session never opens its own, and the close-time Project brief refresh through
+`update_project_state`; `efforts.md` keeps the ordinary effort path and hands
+partial stages, pending recoveries, deferred bindings, and timeouts to the
+new `efforts-recovery.md`; and the always-on skill descriptions are shorter.
+The plan behind this release is `docs/token-usage-optimization-plan.md`.
 
 Plugin `0.38.0` offers the version 7 upgrade instead of waiting to be asked.
 The hook names the saved config version at session start for versions 1
