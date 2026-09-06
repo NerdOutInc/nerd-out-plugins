@@ -181,7 +181,10 @@ Never write version 3, 4, 5, or 6 during setup.
 Never auto-migrate, downgrade, or change modes from lifecycle context. A mode
 change is a separate, explicit configuration action with its own consequence
 summary and confirmation. Older journal notes and Today cards remain untouched
-archive under every mode change.
+archive under every mode change. Lifecycle context may report that the saved
+file is older than version 7, or that it cannot be read as any version; both
+are invitations to run the explicit flows in "Upgrading an older config to
+version 7", never permission to rewrite the file.
 
 ## Version 7 structured destinations
 
@@ -485,7 +488,8 @@ valid effective destination stays silent.
    it over the target, then parse and validate the saved file. Keep it local and
    store no tokens, credentials, or note bodies.
 
-If the file is malformed, show the problem and ask before replacing it. If a
+If the file is malformed, show the problem and ask before replacing it (see
+"Repairing an unreadable config"). If a
 saved workspace or Project is stale, preserve the old selection until the user
 chooses and confirms a replacement; never silently clear the Project or fall
 back to another workspace.
@@ -557,7 +561,10 @@ Then revalidate every carried destination against `list_workspaces` and
 `list_projects`, re-check the whole structured capability gate, show the exact
 replacement v7 shape, and ask for final confirmation before the atomic save.
 Converting version 3 requires selecting at least one destination the same way.
-No older version upgrades implicitly.
+No older version upgrades implicitly. The bundled helper's `plan` step (see
+"Upgrading an older config to version 7") lists the carried and dropped
+destinations and asks the required question for each workspace-root
+destination, so run it before explaining the consequences.
 
 ### Upgrading version 4, 5, or 6 to version 7
 
@@ -589,7 +596,13 @@ Say which of these applies, name the destinations that will receive the
 records, and require an explicit yes before continuing.
 
 Re-check the whole capability gate, show the exact replacement v7 shape, and
-ask for final confirmation before the atomic save.
+ask for final confirmation before the atomic save. The bundled helper's `plan`
+step proposes exactly this translation, lists the carried destination for
+live revalidation, and names these consequences together with the optional
+questions — whether to keep the old default as the global destination or
+choose a different Project, and whether to add a saved path for the current
+filesystem project — so run it first; see "Upgrading an older config to
+version 7".
 
 An explicit switch from v5 or v7 to Legacy journal note is also a whole-mode
 replacement, not a downgrade fallback. Explain that structured sessions remain
@@ -613,6 +626,107 @@ repositories still journal through the repository rung, so say so whenever a
 removal leaves a version 7 file with no global destination. When removing the
 final remaining destination, explicitly confirm disabling journaling and
 remove the config file instead of writing an invalid empty v2 or v7 object.
+
+## Upgrading an older config to version 7
+
+Version 7 is the only shape new setups write, and every valid older file is
+honored unchanged until the user explicitly upgrades it. The hook names the
+saved version on every prompt for versions 1 through 6 — a version 6 file
+only while its pilot is enabled, because an inert version 6 file means
+someone turned journaling off — and asks the agent to offer the upgrade once
+per session. Lifecycle context never rewrites a file; the only writer is the
+bundled helper below, and it writes only what the user confirmed.
+
+1. **When.** On an explicit invocation, offer the upgrade right after the
+   Codex preflight. During implicit journaling, offer it once when finalizing
+   the task's work, never mid-task and never more than once per session. If
+   the user declines or does not answer, leave the file unchanged and do not
+   ask again in that session; nothing records the decline, so a later
+   session may offer again. When the retired DailyNote migration also applies
+   to a version 1 or 2 file, make one combined ask: upgrading retires that
+   summary target with the file.
+2. **Gate first.** Before offering, inspect the live catalog for the whole
+   structured capability gate above. If it fails, skip the offer in this
+   session and say nothing about it unless the user asks; an upgrade that
+   cannot be saved is not an offer.
+3. **Plan.** Resolve the `scripts/` directory relative to this skill's
+   `SKILL.md` and run the bundled helper for the current host, passing the
+   session's working directory:
+
+   ```sh
+   scripts/upgrade-journal-config plan --host claude-code --cwd "$PWD"
+   ```
+
+   Use `--host codex` or `--host cursor` on those hosts. The helper prints
+   one JSON object; it never talks to Recall and never writes. Read:
+   - `status`: `current` (already version 7; say so and stop), `upgradable`
+     (a complete file is proposed with nothing dropped), `needs_input` (a
+     required question must be answered first), `invalid` (see "Repairing an
+     unreadable config"), or `missing` (run first setup instead).
+   - `proposed`: the exact replacement version 7 file, or `null` until the
+     required questions are answered.
+   - `carried`: every destination copied from the old file. Each one must be
+     revalidated live before the save.
+   - `dropped`: destinations that cannot be translated, with the reason
+     (`workspace_root` or `duplicate_root`).
+   - `consequences`: what changes automatically, in the user's terms. Relay
+     every item; the ones that need an explicit yes in so many words are
+     listed under "Upgrading version 4, 5, or 6 to version 7" and
+     "Explicitly changing journal modes".
+   - `questions`: `required` ones block the save; optional ones are offered.
+     `global_project` lets the user keep the carried global destination or
+     choose a different Project for it, which matters when the old default
+     was picked with one repository in mind; `add_current_path` offers a
+     saved destination for the resolved current filesystem project, whose
+     absolute path is `filesystemProject.root`.
+4. **Ask.** Show the source version, the carried and dropped destinations,
+   and every consequence; ask each required question and offer each optional
+   one. Any new Project is chosen exactly as in first setup: write-ready
+   workspaces from `list_workspaces`, then one exact Project paged from
+   `list_projects`, never a workspace root.
+5. **Revalidate and confirm.** Re-run `list_workspaces` and page
+   `list_projects` for every destination in the final file, require each
+   exact Project id in its workspace, re-check the whole capability gate,
+   show the exact replacement version 7 shape, and ask for final
+   confirmation.
+6. **Apply.** Only after that confirmation, hand the confirmed file to the
+   helper, naming the version the plan was made from so a file that changed
+   underneath is refused:
+
+   ```sh
+   scripts/upgrade-journal-config apply --host claude-code --expect-version 5 --input /path/to/confirmed.json
+   ```
+
+   The helper validates the exact version 7 shape and the 64 KiB bound,
+   writes a temporary file beside the target, renames it into place, and
+   reports `status: "written"` with `verified: true` after reading it back.
+   A `rejected` result names the reason: fix the input or stop, and never
+   write the file by hand to get past it. Tell the user the new file is in
+   effect from the next prompt.
+
+Per-version summary:
+
+| From | Translation | What changes | Needs from the user |
+| --- | --- | --- | --- |
+| 5 | `defaultProject` becomes `global` | The global destination also receives unbound or unresolved repositories | One yes; optionally a different global Project |
+| 6, pilot on | Same, `sessionLifecycle` kept | Same, inside the adapter | One yes |
+| 6, pilot off | Same | Automatic journaling turns on | An explicit yes to that, or leave the file alone |
+| 4 | Same | Reader-only becomes a writer | An explicit yes to that |
+| 3 | Nothing carries over | Reader-only becomes a writer | At least one destination |
+| 1 or 2 | Project-scoped destinations carry over | Mode change: legacy notes stop, workspace-root destinations need a Project, no persistent "no day summary" | Full mode-change confirmation plus a Project or a drop for each workspace-root destination |
+
+### Repairing an unreadable config
+
+When the hook reports that `recall-journal.json` exists but is not a valid
+config, journaling is off and nothing may guess a destination from the file.
+Run `plan`: its `invalid.description` names the problem — not valid JSON,
+over the size bound, a version newer than this plugin supports, an
+unsupported version, or a shape that does not match the version it names.
+Show the user that description. A newer version means the plugin should be
+updated, not the file rewritten. Otherwise ask whether to replace the file
+through first setup or leave it alone; only an explicit choice replaces it,
+and `apply` then writes the confirmed version 7 file without
+`--expect-version`.
 
 ## Migrating a retired DailyNote summary target
 
