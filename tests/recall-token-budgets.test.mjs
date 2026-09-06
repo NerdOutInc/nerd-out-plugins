@@ -23,10 +23,10 @@ const BUDGETS = {
   hookCursorSession: 4.5 * KIB,
   dispatcher: 4.5 * KIB,
   writer: 12 * KIB,
-  projectContext: 4.25 * KIB,
+  projectContext: 4.5 * KIB,
   efforts: 9 * KIB,
   effortsRecovery: 4 * KIB,
-  ordinaryBundle: 21 * KIB,
+  ordinaryBundle: 21.5 * KIB,
   effortsBundle: 30 * KIB,
   descriptionJournal: 400,
   descriptionDoctor: 256,
@@ -132,11 +132,13 @@ test("the always-on skill descriptions stay short", () => {
 
 test("the catalog fixture is the generation the guidance was measured against", () => {
   const catalog = measureCatalog();
-  assert.equal(catalog.catalogVersion, 7);
-  assert.equal(catalog.toolCount, 39);
-  // Six tools carry the evidence schema; its duplicated flattened copy is the
-  // app-side item B4 in the plan, so the fixture keeps the number visible.
+  assert.equal(catalog.catalogVersion, 8);
+  assert.equal(catalog.toolCount, 40);
+  // Six tools carry the evidence schema. Generation 8 dropped its flattened
+  // item-level copy, so the whole catalog is smaller than generation 7's
+  // 64,938 bytes even with read_entry added.
   assert.equal(catalog.evidenceTools, 6);
+  assert.ok(catalog.descriptionBytes + catalog.schemaBytes < 64_938, String(catalog.descriptionBytes + catalog.schemaBytes));
   assert.ok(catalog.coreFive > 0 && catalog.journalingTen > catalog.coreFive);
 });
 

@@ -49,7 +49,7 @@ const RECORDS_RULE =
 // whose outcome prose arrived whole. The reader is optional to the writer, so
 // losing it never costs the session.
 const CONTEXT_READ_RULE =
-  "Pass your own sessionUuid as callerSessionUuid, plus noteLimit 2 and entryLimit 6, when the live get_project_context schema advertises them. Pass previousSession.sessionUuid as sinceSessionUuid only when open_session returned a CLOSED previousSession with contentAvailable true and contentTruncated not true and that schema advertises the anchor; otherwise read the full context. Check each section's available and truncated flags before calling the read complete. A read that is unavailable, fails, or is not ready never undoes the session: keep journaling to it and work without that context. ";
+  "Pass your own sessionUuid as callerSessionUuid, profile journal, noteLimit 2, and entryLimit 6 when the live get_project_context schema advertises them; read a truncated entry or session whole through read_entry or read_session when those are advertised. Pass previousSession.sessionUuid as sinceSessionUuid only when open_session returned a CLOSED previousSession with contentAvailable true and contentTruncated not true and that schema advertises the anchor; otherwise read the full context. Check each section's available and truncated flags before calling the read complete. A read that is unavailable, fails, or is not ready never undoes the session: keep journaling to it and work without that context. ";
 // A resumed or compacted conversation already has a session; the summary it
 // kept may have lost the uuid, and a second session would leak the first.
 const RESUMED_SESSION_RULE =
