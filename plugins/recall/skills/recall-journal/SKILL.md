@@ -1,6 +1,6 @@
 ---
 name: recall-journal
-description: Keep a concise, searchable journal of agent work in Recall and read it back as the agent's long-term memory. Use when the user invokes the recall-journal skill ($recall:recall-journal in Codex, /recall:recall-journal in Claude Code, /recall-journal in Cursor), asks to configure, migrate, or reconfigure journaling, or when plugin lifecycle context reports a valid recall-journal.json destination. Explicit setup can choose capability-gated Structured Project activity shown in Today to Now, or the legacy per-thread journal-note mode; never silently migrate between them.
+description: Keep a concise, searchable journal of agent work in Recall and read it back as the agent's long-term memory. Use when the user invokes the recall-journal skill ($recall:recall-journal in Codex, /recall:recall-journal in Claude Code, /recall-journal in Cursor), asks to configure, migrate, upgrade, or reconfigure journaling, or when plugin lifecycle context reports a valid recall-journal.json destination, a config older than version 7, or a config file that cannot be read. Explicit setup can choose capability-gated Structured Project activity shown in Today to Now, or the legacy per-thread journal-note mode; never silently migrate between them.
 ---
 
 # Recall Journal
@@ -19,7 +19,11 @@ saved mode and destination stay authoritative; missing tools never select
 another mode. An implicit activation without a valid destination skips recording
 without interrupting unrelated work. Explicit setup, migration, reconfiguration,
 disabling, or stale-config repair uses [configuration.md](references/configuration.md).
-Do not change configuration simply to make a failed operation work.
+Do not change configuration simply to make a failed operation work. When the
+hook reports that the saved config is older than version 7, offer the explicit
+upgrade described there once per session when finalizing the work; when it
+reports a file that cannot be read, say so and offer the repair. Neither ever
+happens automatically, and a declined offer leaves the file unchanged.
 
 On an explicit Codex invocation, first follow
 [codex-preflight.md](references/codex-preflight.md). The hook’s own context already

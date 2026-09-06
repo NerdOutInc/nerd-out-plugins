@@ -116,6 +116,46 @@ export function resolveCanonicalWorkingDirectorySync(
   return canonicalizeThroughMainCheckout(currentDirectory, result.stdout);
 }
 
+// The key of a saved filesystem-project destination is the main checkout's
+// root, so a linked worktree and the checkout it belongs to share one entry.
+// Outside Git, or when Git cannot answer, the working directory itself is the
+// root, exactly as the journal skill documents; the caller still rejects the
+// filesystem root through canonicalProjectRoot.
+export function resolveFilesystemProjectRootSync(
+  workingDirectory,
+  env = process.env,
+) {
+  const currentDirectory = normalizeDirectory(workingDirectory);
+  const result = spawnSync(
+    "git",
+    ["-C", currentDirectory, ...GIT_CANONICAL_ARGUMENTS],
+    {
+      encoding: "utf8",
+      env: gitEnvironment(env),
+      maxBuffer: 16 * 1024,
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: GIT_RESOLUTION_TIMEOUT_MS,
+      windowsHide: true,
+    },
+  );
+  if (result.error || result.status !== 0) {
+    return { repository: false, root: currentDirectory };
+  }
+  const lines = result.stdout.split(/\r?\n/);
+  if (lines.at(-1) === "") lines.pop();
+  if (lines.length !== 2 || lines.some((line) => line.length === 0)) {
+    return { repository: true, root: currentDirectory };
+  }
+  const commonDirectory = normalizeDirectory(lines[1]);
+  if (path.basename(commonDirectory) !== ".git") {
+    return { repository: true, root: currentDirectory };
+  }
+  return {
+    repository: true,
+    root: normalizeDirectory(path.dirname(commonDirectory)),
+  };
+}
+
 // The adapter lives inside the long-running bridge, so it must not block.
 export async function resolveCanonicalWorkingDirectory(
   workingDirectory,

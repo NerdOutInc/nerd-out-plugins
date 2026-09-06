@@ -170,7 +170,10 @@ configures a per-agent `recall-journal.json` in one of two complete modes: v7
 Structured Project activity, with global and filesystem-path destinations that
 each name a Recall Project (existing v5 and v6 configs stay readable), or a v2
 legacy global/filesystem-path journal destination selecting a Recall workspace
-and optional Recall Project. A bundled
+and optional Recall Project. The hook reports when a saved config is older
+than v7 or cannot be read as any version; the skill then offers a confirmed
+upgrade or repair once per session through a bundled plan/apply helper, and
+the hook itself never rewrites the file. A bundled
 per-prompt hook detects that valid opt-in config, reminds
 the agent to search prior journal notes for
 relevant context when a task relates to earlier work, and reminds it to

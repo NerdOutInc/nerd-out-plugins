@@ -31,6 +31,22 @@ legacy notes. Load only the selected mode. Configuration and Codex hook trust
 remain separate procedures, so ordinary project work does not repeatedly load
 or run setup instructions.
 
+Plugin `0.38.0` offers the version 7 upgrade instead of waiting to be asked.
+The hook names the saved config version on every prompt for versions 1
+through 6 (an inert version 6 file stays silent, because its pilot was turned
+off on purpose) and asks the agent to offer the upgrade once per session when
+finalizing work; a `recall-journal.json` that exists but cannot be read as
+any version is reported as invalid instead of being ignored. The journal
+skill's new `scripts/upgrade-journal-config` helper plans the exact version 7
+replacement — carried and dropped destinations, consequences, and the
+questions that still need answers — and applies one confirmed file
+atomically with the exact-shape validation every reader now shares from
+`bridge/journal-config.mjs`. Version 5 and version 6 files translate
+mechanically after one yes and a chance to pick a different global Project;
+version 3, version 4, inert version 6, and legacy version 1/2 files need
+explicit answers first. The hook never rewrites a config, and nothing is
+auto-migrated.
+
 Plugin `0.37.0` teaches optional live-schema-gated `read_effort`, `bind_effort`,
 and `resume_milestone` workflows. Agents inspect the exact current checklist,
 keep the effort intro current with a revision guard, and distinguish each
@@ -379,7 +395,10 @@ with v5 only after an explicit mode choice, a live whole-schema check, selection
 of one exact write-ready default Project, and confirmation of the routing
 change. Version 0.34 replaces a legacy config with v7 the same way, carrying
 over Project-scoped global and filesystem-path destinations and requiring an
-exact Project for any workspace-root destination. Structured defaults under
+exact Project for any workspace-root destination. Version 0.38 has the hook
+offer that upgrade once per session for every older config; the offer is
+explicit, the skill's helper writes only a confirmed file, and a declined
+offer leaves the file unchanged. Structured defaults under
 v5 are not error fallbacks, and structured modes never mix with legacy
 named-note writes. Direct, explicit Recall tool use remains
 available wherever the local MCP connection and skills are actually loaded.
@@ -581,6 +600,10 @@ under `skills/` that contains a `SKILL.md`. It currently includes:
   Explicit setup can write v2 Legacy journal note or capability-gated v7
   Structured Project activity; it never auto-migrates an existing config, and
   the modes bypass one another so one prompt cannot enter both protocols.
+  When the hook reports an older version or a file it cannot read, the
+  skill's `scripts/upgrade-journal-config` helper plans the exact version 7
+  replacement (`plan`) and, after live revalidation and the user's
+  confirmation, writes it atomically (`apply`); the hook only reports.
 
 In Codex, invoke skills as `$recall:recall`,
 `$recall:doctor`, and

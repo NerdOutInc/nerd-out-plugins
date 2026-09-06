@@ -212,6 +212,27 @@ function runPackagedHook({
   });
 }
 
+// A file that is not any supported version's exact shape is reported, never
+// routed: the context names the problem and no destination, tells the agent
+// journaling is off until the skill repairs it, and carries no upgrade offer.
+function assertInvalidConfigContext(result, label) {
+  assert.equal(result.status, 0, label);
+  assert.equal(result.stderr, "", label);
+  assert.notEqual(result.stdout, "", label);
+  const context = JSON.parse(result.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(
+    context,
+    /^A recall-journal\.json exists for (?:Codex|Claude Code|Cursor) but is not a valid journal config: /,
+    label,
+  );
+  assert.match(context, /journaling is off until it is repaired/, label);
+  assert.match(context, /never rewrite it from this context/, label);
+  assert.doesNotMatch(context, /workspaceId |projectUuid |projectId /, label);
+  assert.doesNotMatch(context, /This config is version/, label);
+  return context;
+}
+
 test("uses Cursor's native session hook, config, and stable conversation id", () => {
   const configDirectory = makeConfigDirectory();
   const projectDirectory = makeProjectDirectory("cursor-project");
@@ -357,7 +378,6 @@ test("routes a strict v3 config to structured project memory only", () => {
     "create_today_note",
     "exactly one journal note",
     "toggle entries",
-    "$recall:recall-journal",
     "list_note_activity",
     "read_note",
     "update_note_content",
@@ -365,6 +385,13 @@ test("routes a strict v3 config to structured project memory only", () => {
   ]) {
     assert.equal(context.includes(legacyInstruction), false, legacyInstruction);
   }
+  // The skill is named exactly once, and only to offer the version 7 upgrade;
+  // the reader protocol itself still never invites journal setup.
+  assert.equal(context.split("$recall:recall-journal").length - 1, 1);
+  assert.match(
+    context,
+    /offer to upgrade it to version 7 through \$recall:recall-journal/,
+  );
 });
 
 test("uses the host-specific name in v3 without changing its protocol", () => {
@@ -381,7 +408,9 @@ test("uses the host-specific name in v3 without changing its protocol", () => {
     .additionalContext;
   assert.equal(
     context,
-    readFixture("v3", "additional-context.txt").replace("Codex", "Claude Code"),
+    readFixture("v3", "additional-context.txt")
+      .replace("Codex", "Claude Code")
+      .replaceAll("$recall:recall-journal", "/recall:recall-journal"),
   );
 });
 
@@ -407,9 +436,7 @@ test("rejects malformed or mixed v3 configs instead of choosing a journal protoc
       },
     });
 
-    assert.equal(result.status, 0, JSON.stringify(config));
-    assert.equal(result.stderr, "", JSON.stringify(config));
-    assert.equal(result.stdout, "", JSON.stringify(config));
+    assertInvalidConfigContext(result, JSON.stringify(config));
   }
 });
 
@@ -530,7 +557,9 @@ test("uses the host-specific name in v4 without changing its routing", () => {
     .additionalContext;
   assert.equal(
     context,
-    readFixture("v4", "repository-context.txt").replace("Codex", "Claude Code"),
+    readFixture("v4", "repository-context.txt")
+      .replace("Codex", "Claude Code")
+      .replaceAll("$recall:recall-journal", "/recall:recall-journal"),
   );
 });
 
@@ -595,9 +624,7 @@ test("rejects malformed or mixed v4 configs instead of choosing a memory protoco
       input: { hook_event_name: "UserPromptSubmit", cwd: repositoryRoot },
     });
 
-    assert.equal(result.status, 0, JSON.stringify(config));
-    assert.equal(result.stderr, "", JSON.stringify(config));
-    assert.equal(result.stdout, "", JSON.stringify(config));
+    assertInvalidConfigContext(result, JSON.stringify(config));
   }
 });
 
@@ -806,7 +833,7 @@ test("rejects missing, contradictory, or unknown v2 summary target compatibility
       },
     });
 
-    assert.equal(result.stdout, "");
+    assertInvalidConfigContext(result, JSON.stringify(journal));
   }
 });
 
@@ -957,8 +984,7 @@ test("rejects invalid v2 destinations and explicit null Recall Projects", () => 
       },
       input: { hook_event_name: "UserPromptSubmit", cwd: projectRoot },
     });
-    assert.equal(result.status, 0);
-    assert.equal(result.stdout, "", JSON.stringify(config));
+    assertInvalidConfigContext(result, JSON.stringify(config));
   }
 });
 
@@ -1109,7 +1135,7 @@ test("escapes quotes and backslashes in the workspace name", () => {
   assert.equal(context.includes(JSON.stringify(config.workspace.name)), true);
 });
 
-test("stays silent when the workspace id is not a plain token", () => {
+test("reports an invalid config when the workspace id is not a plain token", () => {
   for (const id of [
     "workspace\nid",
     "workspace id",
@@ -1127,13 +1153,7 @@ test("stays silent when the workspace id is not a plain token", () => {
       },
     });
 
-    assert.equal(result.status, 0);
-    assert.equal(
-      result.stdout,
-      "",
-      `expected silence for id ${JSON.stringify(id)}`,
-    );
-    assert.equal(result.stderr, "");
+    assertInvalidConfigContext(result, `invalid workspace id ${JSON.stringify(id)}`);
   }
 });
 
@@ -1176,18 +1196,84 @@ test("stays silent when the config is missing", () => {
   assert.equal(result.stderr, "");
 });
 
-test("stays silent when the config is malformed", () => {
-  const result = runHook({
+test("reports a file that is not a valid journal config instead of staying silent", () => {
+  const oversized = v7Config({
+    paths: Object.fromEntries(
+      Array.from({ length: 700 }, (_, index) => [
+        `/Users/example/projects/${"x".repeat(60)}-${index}`,
+        v7PathDestination(),
+      ]),
+    ),
+  });
+  for (const [config, description] of [
+    [{ version: 1 }, /its contents do not match the exact version 1 shape/],
+    ["not json", /it is not valid JSON/],
+    [
+      { version: 8, projectMemory: { enabled: true } },
+      /its version 8 is newer than this plugin supports/,
+    ],
+    [{}, /its version field is missing/],
+    [
+      { version: 6, projectMemory: { enabled: true } },
+      /do not match the exact version 6 shape/,
+    ],
+    [oversized, /larger than the 64 KiB bound/],
+  ]) {
+    const directory = makeTemporaryDirectory();
+    const text = typeof config === "string" ? config : JSON.stringify(config);
+    fs.writeFileSync(path.join(directory, "recall-journal.json"), text);
+    const result = runHook({
+      environment: {
+        ...cleanEnvironment(),
+        CODEX_HOME: directory,
+        PLUGIN_ROOT: pluginRoot,
+      },
+    });
+    const label = text.slice(0, 80);
+    const context = assertInvalidConfigContext(result, label);
+    assert.match(context, description, label);
+    assert.match(
+      context,
+      /\$recall:recall-journal can inspect it and repair or replace it/,
+      label,
+    );
+    // Reported, never repaired: the file and its directory are untouched.
+    assert.equal(
+      fs.readFileSync(path.join(directory, "recall-journal.json"), "utf8"),
+      text,
+      label,
+    );
+    assert.deepEqual(fs.readdirSync(directory), ["recall-journal.json"], label);
+  }
+
+  // Cursor gets the same report in its own hook shape.
+  const cursor = runHook({
+    args: ["--host", "cursor"],
+    environment: {
+      ...cleanEnvironment(),
+      CURSOR_HOME: makeConfigDirectory({ version: 1 }),
+    },
+    input: { hook_event_name: "sessionStart", session_id: "cursor-1" },
+  });
+  assert.equal(cursor.status, 0, cursor.stderr);
+  const cursorContext = JSON.parse(cursor.stdout).additional_context;
+  assert.match(
+    cursorContext,
+    /^A recall-journal\.json exists for Cursor but is not a valid journal config/,
+  );
+  assert.match(cursorContext, /\/recall-journal can inspect it/);
+
+  // Other events stay silent even when the file is invalid.
+  const otherEvent = runHook({
     environment: {
       ...cleanEnvironment(),
       CODEX_HOME: makeConfigDirectory({ version: 1 }),
       PLUGIN_ROOT: pluginRoot,
     },
+    input: { hook_event_name: "PreToolUse" },
   });
-
-  assert.equal(result.status, 0);
-  assert.equal(result.stdout, "");
-  assert.equal(result.stderr, "");
+  assert.equal(otherEvent.status, 0);
+  assert.equal(otherEvent.stdout, "");
 });
 
 test("stays silent when hook input is invalid JSON", () => {
@@ -1605,7 +1691,7 @@ test("treats an empty projects map as global journaling", () => {
   assert.match(result.stdout, /workspaceId workspace-id/);
 });
 
-test("stays silent when the projects map is malformed", () => {
+test("reports an invalid config when the projects map is malformed", () => {
   const absoluteRoot = path.join(os.tmpdir(), "recall-project");
   const malformedProjects = [
     [],
@@ -1631,13 +1717,10 @@ test("stays silent when the projects map is malformed", () => {
       input: { hook_event_name: "UserPromptSubmit", cwd: absoluteRoot },
     });
 
-    assert.equal(result.status, 0);
-    assert.equal(
-      result.stdout,
-      "",
-      `expected silence for projects ${JSON.stringify(projects)}`,
+    assertInvalidConfigContext(
+      result,
+      `invalid projects ${JSON.stringify(projects)}`,
     );
-    assert.equal(result.stderr, "");
   }
 });
 
@@ -1863,8 +1946,10 @@ test("rejects a v5 config carrying an unknown key", () => {
     input: { hook_event_name: "UserPromptSubmit", cwd: repositoryRoot },
   });
 
-  assert.equal(result.status, 0);
-  assert.equal(result.stdout.trim(), "");
+  assert.match(
+    assertInvalidConfigContext(result, "invalid v5"),
+    /exact version 5 shape/,
+  );
 });
 
 // Fabricates the process table the hook's bridge detection walks: a Claude
@@ -1909,9 +1994,12 @@ const claudeV5Input = {
 function claudeAdjustedV5Fixture(filename, bridgePresent = false) {
   const fixture = readFixture("v5", filename)
     .replace("Codex", "Claude Code")
-    .replace("$recall:recall-journal", "/recall:recall-journal");
+    .replaceAll("$recall:recall-journal", "/recall:recall-journal");
   return bridgePresent
-    ? fixture.split(" Current-session Recall connector presence is unknown")[0]
+    ? fixture.replace(
+        / Current-session Recall connector presence is unknown.*?continue the user's task\./,
+        "",
+      )
     : fixture;
 }
 
@@ -2077,8 +2165,10 @@ test("rejects a v5 config with no default Project", () => {
     input: { hook_event_name: "UserPromptSubmit", cwd: repositoryRoot },
   });
 
-  assert.equal(result.status, 0);
-  assert.equal(result.stdout.trim(), "");
+  assert.match(
+    assertInvalidConfigContext(result, "invalid v5"),
+    /exact version 5 shape/,
+  );
 });
 
 test("v5 Cursor checks shared and unverified hosts without adopting a neighboring bridge", () => {
@@ -2671,9 +2761,7 @@ test("rejects malformed v7 configs instead of choosing a routing protocol", () =
 
   for (const config of configs) {
     const result = runV7Hook(makeConfigDirectory(config), repositoryRoot);
-    assert.equal(result.status, 0, JSON.stringify(config));
-    assert.equal(result.stderr, "", JSON.stringify(config));
-    assert.equal(result.stdout, "", JSON.stringify(config));
+    assertInvalidConfigContext(result, JSON.stringify(config));
   }
 });
 
@@ -2729,9 +2817,12 @@ test("v7 with the session-recording pilot enabled yields to the version 6 adapte
 function claudeAdjustedV7Fixture(filename, bridgePresent = false) {
   const fixture = readFixture("v7", filename)
     .replace("Codex", "Claude Code")
-    .replace("$recall:recall-journal", "/recall:recall-journal");
+    .replaceAll("$recall:recall-journal", "/recall:recall-journal");
   return bridgePresent
-    ? fixture.split(" Current-session Recall connector presence is unknown")[0]
+    ? fixture.replace(
+        / Current-session Recall connector presence is unknown.*?continue the user's task\./,
+        "",
+      )
     : fixture;
 }
 
@@ -2850,9 +2941,7 @@ test("v7 and legacy configs reject a saved root that is a symlink to the filesys
   ]) {
     for (const cwd of [repositoryRoot, makeTemporaryDirectory()]) {
       const result = runV7Hook(makeConfigDirectory(config), cwd);
-      assert.equal(result.status, 0, JSON.stringify(config));
-      assert.equal(result.stderr, "", JSON.stringify(config));
-      assert.equal(result.stdout, "", JSON.stringify(config));
+      assertInvalidConfigContext(result, JSON.stringify(config));
     }
   }
 });
@@ -2869,8 +2958,7 @@ test("v7 rejects two saved roots that canonicalize to the same directory", () =>
     },
   ]) {
     const result = runV7Hook(makeConfigDirectory(v7Config({ paths })), root);
-    assert.equal(result.status, 0);
-    assert.equal(result.stdout, "", Object.keys(paths).join(", "));
+    assertInvalidConfigContext(result, Object.keys(paths).join(", "));
   }
   // One alias still matches through its canonical root.
   const context = v7Context(
@@ -2900,8 +2988,7 @@ test("v7 stops honoring a saved root retargeted at the filesystem root after set
   fs.symlinkSync(path.parse(root).root, root);
   for (const cwd of [makeTemporaryDirectory(), repositoryRoot]) {
     const result = runV7Hook(configDirectory, cwd);
-    assert.equal(result.status, 0);
-    assert.equal(result.stdout, "", cwd);
+    assertInvalidConfigContext(result, cwd);
   }
 });
 
@@ -3023,9 +3110,11 @@ test("both readers honor one config-size bound for large v7 files", () => {
     const result = run(
       v7Config({ paths: oversized, sessionLifecycle: { enabled } }),
     );
-    assert.equal(result.status, 0, String(enabled));
-    assert.equal(result.stderr, "", String(enabled));
-    assert.equal(result.stdout, "", String(enabled));
+    assert.match(
+      assertInvalidConfigContext(result, String(enabled)),
+      /larger than the 64 KiB bound/,
+      String(enabled),
+    );
   }
 });
 
@@ -3137,4 +3226,128 @@ test("v5 and v7 open the session before the context read and gate the delta read
       `${version}/${filename}`,
     );
   }
+});
+
+// Every valid config older than version 7 carries exactly one upgrade offer.
+// It names the host's skill and hands the decision to the user; it never
+// authorizes the hook to rewrite the file.
+test("offers the version 7 upgrade once per prompt for every older valid config", () => {
+  const escape = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const offer = (version, skill) =>
+    new RegExp(
+      `${escape(` This config is version ${version}; version 7 is the current shape. Once per session, when finalizing meaningful work (immediately on an explicit invocation), offer to upgrade it to version 7 through ${skill}, which explains the consequences and writes only after the user confirms; leave the file unchanged if they decline or do not answer, and never rewrite it from this context.`)}$`,
+    );
+  const v5 = JSON.parse(
+    fs.readFileSync(path.join(fixtureRoot, "v5", "recall-journal.json"), "utf8"),
+  );
+  for (const [version, config] of [
+    [1, validConfig()],
+    [2, validV2Config()],
+    [3, validV3Config()],
+    [4, validV4Config()],
+    [5, v5],
+  ]) {
+    const result = runHook({
+      environment: {
+        ...cleanEnvironment(),
+        CODEX_HOME: makeConfigDirectory(config),
+        PLUGIN_ROOT: pluginRoot,
+      },
+      input: {
+        hook_event_name: "UserPromptSubmit",
+        cwd: repositoryRoot,
+        session_id: v5ThreadId,
+      },
+    });
+    assert.equal(result.status, 0, String(version));
+    assert.equal(result.stderr, "", String(version));
+    const context = JSON.parse(result.stdout).hookSpecificOutput
+      .additionalContext;
+    assert.match(context, offer(version, "$recall:recall-journal"), String(version));
+    assert.equal(
+      context.split("This config is version").length - 1,
+      1,
+      String(version),
+    );
+  }
+
+  // The version 6 adapter context carries the same offer for its host.
+  const v6 = runHook({
+    args: ["--host", "claude-code"],
+    environment: {
+      ...cleanEnvironment(),
+      CLAUDE_CONFIG_DIR: v6ConfigDirectory(),
+      PATH: makeFakePsDirectory({
+        bridgeCommand:
+          "node /plugins/recall/bridge/index.mjs --client-name Claude",
+      }),
+    },
+    input: claudeV5Input,
+  });
+  assert.equal(v6.status, 0, v6.stderr);
+  const v6Context = JSON.parse(v6.stdout).hookSpecificOutput.additionalContext;
+  assert.match(v6Context, /opt-in version 6 conversation-segment adapter/);
+  assert.match(v6Context, offer(6, "/recall:recall-journal"));
+
+  // Cursor names its own skill.
+  const cursor = runHook({
+    args: ["--host", "cursor"],
+    environment: {
+      ...cleanEnvironment(),
+      CURSOR_HOME: makeConfigDirectory(validV2Config()),
+    },
+    input: {
+      hook_event_name: "sessionStart",
+      session_id: "cursor-conversation-123",
+      workspace_roots: [makeProjectDirectory("cursor-project")],
+    },
+  });
+  assert.equal(cursor.status, 0, cursor.stderr);
+  assert.match(
+    JSON.parse(cursor.stdout).additional_context,
+    offer(2, "/recall-journal"),
+  );
+});
+
+test("the upgrade offer is absent for version 7, an inert version 6 file, and a missing connector", () => {
+  const current = runHook({
+    args: ["--host", "claude-code"],
+    environment: claudeV7Environment(
+      v7Config({ global: v7GlobalDestination() }),
+    ),
+    input: claudeV5Input,
+  });
+  assert.equal(current.status, 0, current.stderr);
+  const context = JSON.parse(current.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(context, /version 7 is enabled/);
+  assert.doesNotMatch(context, /This config is version/);
+
+  // An inert version 6 file was turned off on purpose; it is never nagged.
+  const inert = runHook({
+    args: ["--host", "claude-code"],
+    environment: claudeV7Environment({
+      version: 6,
+      projectMemory: { enabled: true, defaultProject: v7GlobalDestination() },
+      sessionLifecycle: { enabled: false },
+    }),
+    input: claudeV5Input,
+  });
+  assert.equal(inert.status, 0, inert.stderr);
+  assert.equal(inert.stdout, "");
+
+  // With no connector there is nothing to revalidate against, so the
+  // missing-bridge warning stands alone.
+  const missing = runHook({
+    environment: claudeV5Environment({
+      psDirectory: makeFakePsDirectory(),
+      temporaryDirectory: makeTemporaryDirectory(),
+    }),
+    input: claudeV5Input,
+  });
+  assert.equal(missing.status, 0, missing.stderr);
+  const missingContext = JSON.parse(missing.stdout).hookSpecificOutput
+    .additionalContext;
+  assert.match(missingContext, /connector appears to be unavailable/);
+  assert.doesNotMatch(missingContext, /This config is version/);
 });

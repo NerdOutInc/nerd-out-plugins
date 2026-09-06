@@ -1,12 +1,18 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import {
-  JOURNAL_CONFIG_MAX_BYTES,
-  canonicalProjectRoot,
   matchProjectDestination,
   resolveCanonicalWorkingDirectorySync,
 } from "../bridge/journal-destinations.mjs";
+import {
+  CURRENT_JOURNAL_CONFIG_VERSION,
+  describeInvalidJournalConfig,
+  journalAgentName,
+  journalConfigPath,
+  journalSkillName,
+  readJournalConfigFile,
+  upgradeAvailableContext,
+} from "../bridge/journal-config.mjs";
 import { lifecycleContext } from "./session-lifecycle-context.mjs";
 
 import { detectBridgeStatus } from "./bridge-detection.mjs";
@@ -37,64 +43,20 @@ function resolveJournalContext(env = process.env, explicitHost = null) {
   // Codex sets both root variables for Claude plugin compatibility; Claude Code
   // sets only CLAUDE_PLUGIN_ROOT, so the unprefixed variable identifies Codex.
   const host = explicitHost ?? (env.PLUGIN_ROOT ? "codex" : "claude-code");
-  const configDirectory =
-    host === "cursor"
-      ? env.CURSOR_HOME || path.join(os.homedir(), ".cursor")
-      : host === "codex"
-        ? env.CODEX_HOME || path.join(os.homedir(), ".codex")
-        : env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
 
   return {
-    agentName:
-      host === "cursor" ? "Cursor" : host === "codex" ? "Codex" : "Claude Code",
-    configPath: path.join(configDirectory, "recall-journal.json"),
+    agentName: journalAgentName(host),
+    configPath: journalConfigPath(host, env),
     doctorSkillName:
       host === "cursor"
         ? "/doctor"
         : host === "codex"
           ? "$recall:doctor"
           : "/recall:doctor",
+    expectedEvent: host === "cursor" ? "sessionStart" : "UserPromptSubmit",
     host,
-    skillName:
-      host === "cursor"
-        ? "/recall-journal"
-        : host === "codex"
-          ? "$recall:recall-journal"
-          : "/recall:recall-journal",
+    skillName: journalSkillName(host),
   };
-}
-
-// Workspace fields flow from the shared Recall service into every prompt's
-// context, so force them onto one short line before interpolation.
-function sanitizeWorkspaceField(value) {
-  return value
-    .replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-// The name is display-only, so flatten and truncate it. The id is passed back
-// to the search tools and rendered unquoted, so rather than repair it, require
-// a plain single-line token and reject the workspace otherwise.
-function sanitizeWorkspace(workspace) {
-  if (
-    typeof workspace?.id !== "string" ||
-    typeof workspace?.name !== "string"
-  ) {
-    return null;
-  }
-  const name = sanitizeWorkspaceField(workspace.name).slice(0, 80);
-  if (!name || !/^[\w.:-]{1,128}$/.test(workspace.id)) return null;
-  return { id: workspace.id, name };
-}
-
-function sanitizeRecallProject(project) {
-  if (typeof project?.id !== "string" || typeof project?.name !== "string") {
-    return null;
-  }
-  const name = sanitizeWorkspaceField(project.name).slice(0, 80);
-  if (!name || !/^[\w.:-]{1,128}$/.test(project.id)) return null;
-  return { id: project.id, name };
 }
 
 // The host's session id is rendered unquoted and echoed into journal metadata
@@ -103,258 +65,6 @@ function sanitizeThreadId(value) {
   return typeof value === "string" && /^[\w.:-]{1,128}$/.test(value)
     ? value
     : null;
-}
-
-function isPlainObject(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function hasOnlyKeys(value, allowedKeys) {
-  return Object.keys(value).every((key) => allowedKeys.includes(key));
-}
-
-function sanitizeV3ProjectMemoryConfig(config) {
-  if (!isPlainObject(config.projectMemory)) return null;
-  if (config.projectMemory.enabled !== true) return null;
-
-  // Version 3 is an exclusive, reader-only activation signal. Reject legacy
-  // destinations instead of choosing one of two journal protocols, and keep
-  // the initial contract deliberately small until the structured writer ships.
-  const topLevelKeys = Object.keys(config);
-  if (
-    topLevelKeys.some((key) => key !== "version" && key !== "projectMemory") ||
-    !hasOnlyKeys(config.projectMemory, ["enabled"])
-  ) {
-    return null;
-  }
-
-  return { projectMemory: { version: 3 } };
-}
-
-// Structured destinations are exact: a workspace and a Recall Project, each
-// carrying only an id and a name. A workspace-root destination is invalid
-// because every structured record is Project-scoped end to end.
-function sanitizeStructuredDestination(value) {
-  if (
-    !isPlainObject(value) ||
-    !hasOnlyKeys(value, ["workspace", "recallProject"]) ||
-    !isPlainObject(value.workspace) ||
-    !hasOnlyKeys(value.workspace, ["id", "name"]) ||
-    !isPlainObject(value.recallProject) ||
-    !hasOnlyKeys(value.recallProject, ["id", "name"])
-  ) {
-    return null;
-  }
-
-  const destination = sanitizeDestination(value);
-  return destination?.recallProject ? destination : null;
-}
-
-function sanitizeDefaultProjectConfig(config, version) {
-  if (!isPlainObject(config.projectMemory)) return null;
-  if (config.projectMemory.enabled !== true) return null;
-  if (!hasOnlyKeys(config, ["version", "projectMemory"])) return null;
-  if (!hasOnlyKeys(config.projectMemory, ["enabled", "defaultProject"])) {
-    return null;
-  }
-
-  const destination = sanitizeStructuredDestination(
-    config.projectMemory.defaultProject,
-  );
-  if (!destination) return null;
-  return { projectMemory: { defaultProject: destination, version } };
-}
-
-function sanitizeV4ProjectMemoryConfig(config) {
-  return sanitizeDefaultProjectConfig(config, 4);
-}
-
-function sanitizeV5ProjectMemoryConfig(config) {
-  return sanitizeDefaultProjectConfig(config, 5);
-}
-
-// The version 6 pilot rides under version 7 unchanged: the same two keys, with
-// the same meanings, that bridge/session-lifecycle-routing.mjs reads for v6.
-function sanitizeV7SessionLifecycle(value) {
-  if (value === undefined) return { enabled: false };
-  if (
-    !isPlainObject(value) ||
-    !hasOnlyKeys(value, ["enabled", "codexParticipantVerified"]) ||
-    typeof value.enabled !== "boolean" ||
-    (value.codexParticipantVerified !== undefined &&
-      typeof value.codexParticipantVerified !== "boolean")
-  ) {
-    return null;
-  }
-  return { enabled: value.enabled };
-}
-
-// Version 7 restores the version 2 destination model to the structured
-// writer: an optional global destination plus optional per-path destinations,
-// at least one of which must exist. Every destination names a Project.
-function sanitizeV7ProjectMemoryConfig(config) {
-  if (!isPlainObject(config.projectMemory)) return null;
-  if (config.projectMemory.enabled !== true) return null;
-  if (!hasOnlyKeys(config, ["version", "projectMemory", "sessionLifecycle"])) {
-    return null;
-  }
-  if (!hasOnlyKeys(config.projectMemory, ["enabled", "global", "paths"])) {
-    return null;
-  }
-
-  const { global: globalValue, paths: pathsValue } = config.projectMemory;
-  const globalDestination =
-    globalValue === undefined
-      ? undefined
-      : sanitizeStructuredDestination(globalValue);
-  if (globalValue !== undefined && !globalDestination) return null;
-  const projects = sanitizeProjectDestinations(
-    pathsValue,
-    sanitizeStructuredDestination,
-    { rejectDuplicateRoots: true },
-  );
-  if (!projects || (!globalDestination && projects.length === 0)) return null;
-
-  const sessionLifecycle = sanitizeV7SessionLifecycle(config.sessionLifecycle);
-  if (!sessionLifecycle) return null;
-  return {
-    projectMemory: { globalDestination, projects, version: 7 },
-    sessionLifecycle,
-  };
-}
-
-function resolveSummaryTarget(journal, supportsSummaryTarget) {
-  if (journal === undefined) return "dailyNote";
-  if (!isPlainObject(journal)) return null;
-  if (
-    journal.dailyNote !== undefined &&
-    typeof journal.dailyNote !== "boolean"
-  ) {
-    return null;
-  }
-
-  // Version 1 remains exactly backward compatible. Newer fields on a legacy
-  // file never silently change its DailyNote behavior.
-  if (!supportsSummaryTarget || journal.summaryTarget === undefined) {
-    return journal.dailyNote === false ? "none" : "dailyNote";
-  }
-
-  if (!["today", "dailyNote", "none"].includes(journal.summaryTarget)) {
-    return null;
-  }
-  const canonicalDailyNote = journal.summaryTarget === "dailyNote";
-  if (journal.dailyNote !== canonicalDailyNote) {
-    return null;
-  }
-  return journal.summaryTarget;
-}
-
-function sanitizeDestination(value) {
-  if (!isPlainObject(value)) return null;
-  const workspace = sanitizeWorkspace(value.workspace);
-  if (!workspace) return null;
-
-  const hasRecallProject = Object.prototype.hasOwnProperty.call(
-    value,
-    "recallProject",
-  );
-  const recallProject = hasRecallProject
-    ? sanitizeRecallProject(value.recallProject)
-    : undefined;
-  if (hasRecallProject && !recallProject) return null;
-
-  return recallProject ? { recallProject, workspace } : { workspace };
-}
-
-// Keys are canonicalized before the filesystem-root check, so a key that is
-// merely a symlink to the root cannot prefix-match every session and silently
-// turn a per-project override into a global one. Version 7 additionally
-// rejects two keys that canonicalize to the same directory, because "longest
-// root wins" cannot choose between them honestly.
-function sanitizeProjectDestinations(
-  projectsValue,
-  sanitizeEntry = sanitizeDestination,
-  { rejectDuplicateRoots = false } = {},
-) {
-  if (projectsValue === undefined) return [];
-  if (!isPlainObject(projectsValue)) return null;
-
-  const projects = [];
-  const seenRoots = new Set();
-  for (const [root, entry] of Object.entries(projectsValue)) {
-    const canonicalRoot = canonicalProjectRoot(root);
-    if (!canonicalRoot) return null;
-    if (rejectDuplicateRoots && seenRoots.has(canonicalRoot)) return null;
-    seenRoots.add(canonicalRoot);
-    const destination = sanitizeEntry(entry);
-    if (!destination) return null;
-    projects.push({ destination, root: canonicalRoot });
-  }
-  return projects;
-}
-
-function readValidJournalConfig(configPath) {
-  try {
-    // The adapter enforces the same bound, so an oversized file is invalid to
-    // both readers rather than valid to one and silently lost by the other.
-    if (fs.statSync(configPath).size > JOURNAL_CONFIG_MAX_BYTES) return null;
-    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-
-    if (config?.version === 1) {
-      const summaryTarget = resolveSummaryTarget(config.journal, false);
-      if (!summaryTarget) return null;
-      if (config.scope !== "global") return null;
-      const globalDestination = sanitizeDestination({
-        workspace: config.workspace,
-      });
-      // v1 project entries only define a workspace. Ignore newer destination
-      // fields so a manually augmented legacy config keeps its old behavior.
-      const projects = sanitizeProjectDestinations(config.projects, (entry) =>
-        sanitizeDestination({ workspace: entry?.workspace }),
-      );
-      if (!globalDestination || !projects) return null;
-      return { globalDestination, projects, summaryTarget };
-    }
-
-    if (config?.version === 2) {
-      const summaryTarget = resolveSummaryTarget(config.journal, true);
-      if (!summaryTarget) return null;
-      const globalDestination =
-        config.global === undefined
-          ? undefined
-          : sanitizeDestination(config.global);
-      const projects = sanitizeProjectDestinations(config.projects);
-      if (
-        (config.global !== undefined && !globalDestination) ||
-        !projects ||
-        (!globalDestination && projects.length === 0)
-      ) {
-        return null;
-      }
-      return { globalDestination, projects, summaryTarget };
-    }
-
-    if (config?.version === 3) {
-      return sanitizeV3ProjectMemoryConfig(config);
-    }
-
-    if (config?.version === 4) {
-      return sanitizeV4ProjectMemoryConfig(config);
-    }
-
-    if (config?.version === 5) {
-      return sanitizeV5ProjectMemoryConfig(config);
-    }
-
-    // Version 6 is read by the lifecycle adapter, never by this reader.
-    if (config?.version === 7) {
-      return sanitizeV7ProjectMemoryConfig(config);
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 // Version 4 may use its explicitly configured default Project only when the
@@ -639,14 +349,44 @@ function buildStructuredBridgeMissingHookOutput(context, version) {
   };
 }
 
-function buildHookOutput(input, env = process.env, explicitHost = null) {
-  const context = resolveJournalContext(env, explicitHost);
-  const expectedEvent =
-    context.host === "cursor" ? "sessionStart" : "UserPromptSubmit";
-  if (input?.hook_event_name !== expectedEvent) return null;
+// The file exists but is not any supported version's exact shape, so no
+// destination can be chosen for it. Silence here would leave the user
+// believing journaling is on; naming the problem hands the repair to the
+// skill, and nothing in this context may rewrite the file.
+function buildInvalidConfigHookOutput(context, file) {
+  return {
+    hookSpecificOutput: {
+      hookEventName: "UserPromptSubmit",
+      additionalContext:
+        `A recall-journal.json exists for ${context.agentName} but is not a valid journal config: ${describeInvalidJournalConfig(file)}. ` +
+        "Automatic Recall journaling is off until it is repaired: do not guess a destination, open a session, or write journal notes. " +
+        `When substantive work begins, say once in your first user-visible reply that the saved journal config is invalid and that ${context.skillName} can inspect it and repair or replace it with the user's confirmation; never rewrite it from this context. ` +
+        "Skip trivial acknowledgements.",
+    },
+  };
+}
 
-  const config = readValidJournalConfig(context.configPath);
-  if (!config) return null;
+// Every valid config older than the current version carries the upgrade
+// offer, except a route that already reports the connector as missing: the
+// upgrade needs live tools, so there is nothing to offer on that prompt.
+function withUpgradeOffer(output, context, file) {
+  if (output && file.version < CURRENT_JOURNAL_CONFIG_VERSION) {
+    output.hookSpecificOutput.additionalContext += upgradeAvailableContext(
+      file.version,
+      context.skillName,
+    );
+  }
+  return output;
+}
+
+function buildHookOutput(input, context, file, env = process.env) {
+  if (input?.hook_event_name !== context.expectedEvent) return null;
+
+  // Version 6 belongs to the lifecycle adapter context that main() supplies
+  // next, exactly as an enabled version 7 pilot does; every other valid
+  // version routes here, and an invalid file is reported by main() instead.
+  if (file.status !== "valid" || file.version === 6) return null;
+  const config = file.config;
 
   // Both agents pass the session's working directory in the hook input; the
   // hook process's own working directory is the fallback. Path normalization
@@ -668,13 +408,17 @@ function buildHookOutput(input, env = process.env, explicitHost = null) {
     sanitizeThreadId(input.thread_id);
 
   if (config.projectMemory?.version === 3) {
-    return buildV3ProjectMemoryHookOutput(context);
+    return withUpgradeOffer(buildV3ProjectMemoryHookOutput(context), context, file);
   }
   if (config.projectMemory?.version === 4) {
-    return buildV4ProjectMemoryHookOutput(
+    return withUpgradeOffer(
+      buildV4ProjectMemoryHookOutput(
+        context,
+        config.projectMemory.defaultProject,
+        detectFilesystemRepositoryIdentity(workingDirectory),
+      ),
       context,
-      config.projectMemory.defaultProject,
-      detectFilesystemRepositoryIdentity(workingDirectory),
+      file,
     );
   }
   if (config.projectMemory?.version === 5) {
@@ -692,7 +436,7 @@ function buildHookOutput(input, env = process.env, explicitHost = null) {
     );
     if (bridgeStatus === "unknown")
       output.hookSpecificOutput.additionalContext += UNKNOWN_BRIDGE_CONTEXT;
-    return output;
+    return withUpgradeOffer(output, context, file);
   }
   if (config.projectMemory?.version === 7) {
     // With the session-recording pilot enabled, this prompt belongs to the
@@ -749,19 +493,23 @@ function buildHookOutput(input, env = process.env, explicitHost = null) {
         ? `The configured day-summary target is the legacy DailyNote, which the Recall server has retired: a missing DailyNote can no longer be created, so never write or append a DailyNote summary. Journal and finalize the detailed named-note entry normally with no day summary; when finalizing meaningful work, ask the user once whether to switch this journal's summary target to the Today timeline (offered only when create_today_note is advertised) or to no day summary, and apply the choice through the migration flow in ${context.skillName}. `
         : "This journal disables day-summary notes; finalize only the detailed named-note entry. ";
 
-  return {
-    hookSpecificOutput: {
-      hookEventName: "UserPromptSubmit",
-      additionalContext:
-        binding +
-        projectTargeting +
-        threadIdentity +
-        summaryTarget +
-        `That journal is also ${context.agentName}'s memory: when this task may relate to previously journaled work — ongoing projects, earlier decisions or fixes, or context the user assumes is known — search that configured destination with the Recall keyword_search tool (plus semantic_search when available), read the relevant notes before deciding, and cite any note that informs the response. ` +
-        `For this turn, if the task will produce durable decisions, implementation work, test results, blockers, or follow-ups, load and follow ${context.skillName} when substantive work begins: this chat thread keeps exactly one journal note, so open it (or continue it) after recall, append human-readable toggle entries at checkpoints while working, and wrap up the entry before the final response. ` +
-        "Skip trivial acknowledgements and do not prompt for journal setup merely because this implicit reminder fired.",
+  return withUpgradeOffer(
+    {
+      hookSpecificOutput: {
+        hookEventName: "UserPromptSubmit",
+        additionalContext:
+          binding +
+          projectTargeting +
+          threadIdentity +
+          summaryTarget +
+          `That journal is also ${context.agentName}'s memory: when this task may relate to previously journaled work — ongoing projects, earlier decisions or fixes, or context the user assumes is known — search that configured destination with the Recall keyword_search tool (plus semantic_search when available), read the relevant notes before deciding, and cite any note that informs the response. ` +
+          `For this turn, if the task will produce durable decisions, implementation work, test results, blockers, or follow-ups, load and follow ${context.skillName} when substantive work begins: this chat thread keeps exactly one journal note, so open it (or continue it) after recall, append human-readable toggle entries at checkpoints while working, and wrap up the entry before the final response. ` +
+          "Skip trivial acknowledgements and do not prompt for journal setup merely because this implicit reminder fired.",
+      },
     },
-  };
+    context,
+    file,
+  );
 }
 
 async function main() {
@@ -771,7 +519,8 @@ async function main() {
     const host = requestedHost();
     const input = JSON.parse(rawInput);
     const context = resolveJournalContext(process.env, host);
-    let output = buildHookOutput(input, process.env, host);
+    const file = readJournalConfigFile(context.configPath);
+    let output = buildHookOutput(input, context, file, process.env);
     if (!output) {
       output = await lifecycleContext(input, context.host);
       if (output) {
@@ -785,6 +534,15 @@ async function main() {
             `${context.doctorSkillName} provides scoped connection diagnostics when requested.`;
         }
       }
+    }
+    // A missing file is simply "not configured" and stays silent; a file that
+    // exists but cannot be read as any version is reported, never repaired.
+    if (
+      !output &&
+      file.status === "invalid" &&
+      input?.hook_event_name === context.expectedEvent
+    ) {
+      output = buildInvalidConfigHookOutput(context, file);
     }
     if (output) {
       process.stdout.write(

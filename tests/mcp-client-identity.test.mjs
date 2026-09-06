@@ -318,7 +318,10 @@ test("host manifests share the current plugin version", async () => {
   // 0.36.0 teaches capability-gated Efforts to all three journal hosts.
   // 0.36.1 keeps a compound checklist item unchecked until every clause is
   // satisfied, including when the milestone detail says work remains.
-  assert.equal(codexPlugin.version, "0.37.0");
+  // 0.38.0 reports older and unreadable journal configs from the hook and
+  // ships the skill's plan/apply helper for the confirmed upgrade to version
+  // 7; the hook still never rewrites a config.
+  assert.equal(codexPlugin.version, "0.38.0");
   assert.equal(claudePlugin.version, codexPlugin.version);
   const desktop = await readJson("desktop-extensions/recall/manifest.json");
   assert.equal(desktop.version, "0.10.0");
