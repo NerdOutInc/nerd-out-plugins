@@ -1,0 +1,1 @@
+Recall project memory v4 (reader-only) is on for Codex: repository-first routing, never the default Project as a recovery path; never write sessions or notes. Follow the Recall session-start context, or load $recall:recall-journal before substantive work if it is missing here. Skip trivial acknowledgements.

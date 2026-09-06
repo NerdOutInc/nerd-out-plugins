@@ -135,8 +135,8 @@ Advertise these through a new catalog generation and the typed bridge contract, 
 
 | Surface | Budget |
 | --- | ---: |
-| `SessionStart` context (Claude Code, Codex) and Cursor `sessionStart` | 3.5 KiB |
-| `UserPromptSubmit` reminder | 400 bytes |
+| `SessionStart` context (Claude Code, Codex) and Cursor `sessionStart` | 4.25 KiB at startup; 4.5 KiB after a resume or compaction (measured: the routing paragraph, the once-per-session protocol with its prose target and read limits, and the upgrade offer need 3.2 to 4.2 KB; the 3.5 KiB estimate did not leave room for the offer) |
+| `UserPromptSubmit` reminder | 400 bytes (640 when it must report an absent connector) |
 | Ordinary v5/v7 skill bundle (dispatcher, writer, project context) | 12 KiB |
 | Efforts basics; efforts recovery loaded only on failure | 5 KiB; 7 KiB |
 | Skill descriptions, all three | 600 bytes |

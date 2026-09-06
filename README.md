@@ -173,10 +173,11 @@ legacy global/filesystem-path journal destination selecting a Recall workspace
 and optional Recall Project. The hook reports when a saved config is older
 than v7 or cannot be read as any version; the skill then offers a confirmed
 upgrade or repair once per session through a bundled plan/apply helper, and
-the hook itself never rewrites the file. A bundled
-per-prompt hook detects that valid opt-in config, reminds
+the hook itself never rewrites the file. Bundled session-start and
+per-prompt hooks detect that valid opt-in config: the session event carries
+the full journal context once, and each prompt a short reminder. They remind
 the agent to search prior journal notes for
-relevant context when a task relates to earlier work, and reminds it to
+relevant context when a task relates to earlier work, and remind it to
 journal meaningful work live in that write-ready workspace. In legacy mode,
 each chat thread keeps exactly one journal note — a dateless topic-phrase title, a short
 always-visible intro, and one collapsible toggle entry per checkpoint whose

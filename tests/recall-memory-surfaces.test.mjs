@@ -80,10 +80,18 @@ test("the host matrix distinguishes skills, local MCP, and automatic hooks", asy
     false,
   );
   assert.deepEqual(Object.keys(hooks), ["hooks"]);
-  assert.deepEqual(Object.keys(hooks.hooks), ["UserPromptSubmit"]);
-  assert.equal(hooks.hooks.UserPromptSubmit.length, 1);
-  assert.equal(hooks.hooks.UserPromptSubmit[0].hooks.length, 1);
-  assert.equal(hooks.hooks.UserPromptSubmit[0].hooks[0].type, "command");
+  // The protocol rides the session event once; every prompt gets a reminder.
+  assert.deepEqual(Object.keys(hooks.hooks), ["SessionStart", "UserPromptSubmit"]);
+  for (const eventName of ["SessionStart", "UserPromptSubmit"]) {
+    assert.equal(hooks.hooks[eventName].length, 1, eventName);
+    assert.equal(hooks.hooks[eventName][0].hooks.length, 1, eventName);
+    assert.equal(hooks.hooks[eventName][0].hooks[0].type, "command", eventName);
+    assert.equal(hooks.hooks[eventName][0].matcher, undefined, eventName);
+  }
+  assert.equal(
+    hooks.hooks.SessionStart[0].hooks[0].command,
+    hooks.hooks.UserPromptSubmit[0].hooks[0].command,
+  );
 });
 
 test("the documented mode matrix preserves legacy non-Git memory", async () => {

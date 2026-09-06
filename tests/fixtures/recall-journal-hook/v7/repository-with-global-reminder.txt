@@ -1,0 +1,1 @@
+Recall project memory v7 is on for Codex: repository-first routing, then the global destination workspaceId global-workspace-id and projectUuid global-project-id; lineageKey 11111111-2222-4333-8444-555555555555. Follow the Recall session-start context, or load $recall:recall-journal before substantive work if it is missing here. Skip trivial acknowledgements.

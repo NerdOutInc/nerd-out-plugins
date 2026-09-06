@@ -1,7 +1,7 @@
 {
   "name": "recall",
   "displayName": "Recall",
-  "version": "0.38.0",
+  "version": "0.39.0",
   "description": "Use Recall's local MCP server and project journal from Cursor.",
   "author": {
     "name": "Nerd Out Inc."
