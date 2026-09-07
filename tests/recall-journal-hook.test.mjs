@@ -24,6 +24,10 @@ const fixtureRoot = path.join(
   "tests/fixtures/recall-journal-hook",
 );
 const GIT_TEST_TIMEOUT_MS = 10_000;
+// Claude Code and Codex deliver the protocol once, on their session event;
+// every later prompt carries only a short reminder. Tests that read the full
+// context therefore run the session event by default.
+const sessionStartInput = { hook_event_name: "SessionStart", source: "startup" };
 const temporaryDirectories = [];
 
 afterEach(() => {
@@ -98,6 +102,21 @@ function readFixture(version, filename) {
   return fs
     .readFileSync(path.join(fixtureRoot, version, filename), "utf8")
     .trimEnd();
+}
+
+// Goldens change only on purpose: UPDATE_RECALL_HOOK_FIXTURES=1 rewrites them
+// from the hook's current output before the comparison runs.
+function assertFixture(context, version, filename, label) {
+  if (process.env.UPDATE_RECALL_HOOK_FIXTURES === "1") {
+    fs.writeFileSync(path.join(fixtureRoot, version, filename), `${context}\n`);
+  }
+  assert.equal(context, readFixture(version, filename), label ?? `${version}/${filename}`);
+}
+
+function contextOf(result, label) {
+  assert.equal(result.status, 0, label);
+  assert.equal(result.stderr, "", label);
+  return JSON.parse(result.stdout).hookSpecificOutput.additionalContext;
 }
 
 function recallProject(id = "recall-project-id", name = "Roadmap") {
@@ -188,7 +207,7 @@ function runHook({
   args = [],
   cwd,
   environment,
-  input = { hook_event_name: "UserPromptSubmit" },
+  input = sessionStartInput,
   script = hookScript,
 }) {
   return spawnSync(process.execPath, [script, ...args], {
@@ -202,7 +221,7 @@ function runHook({
 function runPackagedHook({
   cwd,
   environment,
-  input = { hook_event_name: "UserPromptSubmit" },
+  input = sessionStartInput,
 }) {
   return spawnSync("/bin/sh", ["-c", packagedHookCommand], {
     cwd,
@@ -287,7 +306,7 @@ test("injects the Codex journal skill when Codex config is valid", () => {
   assert.equal(result.status, 0);
   assert.equal(result.stderr, "");
   const output = JSON.parse(result.stdout);
-  assert.equal(output.hookSpecificOutput.hookEventName, "UserPromptSubmit");
+  assert.equal(output.hookSpecificOutput.hookEventName, "SessionStart");
   assert.match(
     output.hookSpecificOutput.additionalContext,
     /\$recall:recall-journal/,
@@ -351,7 +370,72 @@ test("keeps legacy v1 and v2 hook context byte-for-byte compatible", () => {
     assert.equal(result.stderr, "", version);
     const context = JSON.parse(result.stdout).hookSpecificOutput
       .additionalContext;
-    assert.equal(context, readFixture(version, "additional-context.txt"));
+    assertFixture(context, version, "additional-context.txt");
+  }
+});
+
+// Every route answers a prompt with a short reminder that names the mode, the
+// route, and the lineage, and points back at the session-start context.
+test("every prompt carries only a short reminder that points at the session-start context", () => {
+  const codex = (configDirectory) => ({
+    ...cleanEnvironment(),
+    CODEX_HOME: configDirectory,
+    PLUGIN_ROOT: pluginRoot,
+  });
+  const noRepository = makeTemporaryDirectory();
+  const savedRoot = makeTemporaryDirectory();
+  fs.mkdirSync(path.join(savedRoot, "src"), { recursive: true });
+  const cases = [
+    ["v1", "reminder.txt", codex(path.join(fixtureRoot, "v1")), repositoryRoot, /^Recall legacy journaling v1 is on for Codex: workspaceId workspace-id; thread id/],
+    ["v2", "reminder.txt", codex(path.join(fixtureRoot, "v2")), repositoryRoot, /^Recall legacy journaling v2 is on for Codex: workspaceId /],
+    ["v3", "reminder.txt", codex(path.join(fixtureRoot, "v3")), repositoryRoot, /^Recall project memory v3 \(reader-only\) is on for Codex: call resolve_project/],
+    ["v4", "repository-reminder.txt", codex(path.join(fixtureRoot, "v4")), repositoryRoot, /^Recall project memory v4 \(reader-only\) is on for Codex: repository-first routing/],
+    ["v4", "no-repository-reminder.txt", codex(path.join(fixtureRoot, "v4")), noRepository, /read the configured default workspaceId default-workspace-id and projectUuid default-project-id directly/],
+    ["v5", "repository-reminder.txt", codex(path.join(fixtureRoot, "v5")), repositoryRoot, /^Recall project memory v5 is on for Codex: repository-first routing, never the default Project as a recovery path; lineageKey/],
+    ["v5", "no-repository-reminder.txt", codex(path.join(fixtureRoot, "v5")), noRepository, /use the default workspaceId default-workspace-id and projectUuid default-project-id \(never resolve_project\)/],
+    ["v7", "path-reminder.txt", codex(makeConfigDirectory(v7Config({ paths: { [savedRoot]: v7PathDestination() } }))), path.join(savedRoot, "src"), /the saved destination workspaceId path-workspace-id and projectUuid path-project-id \(never resolve_project\)/],
+    ["v7", "repository-with-global-reminder.txt", codex(path.join(fixtureRoot, "v7")), repositoryRoot, /repository-first routing, then the global destination workspaceId global-workspace-id and projectUuid global-project-id/],
+    ["v7", "repository-without-global-reminder.txt", codex(makeConfigDirectory(v7Config({ global: null, paths: { [savedRoot]: v7PathDestination() } }))), repositoryRoot, /repository-first routing with no global fallback/],
+    ["v7", "no-repository-reminder.txt", codex(path.join(fixtureRoot, "v7")), noRepository, /the global destination workspaceId global-workspace-id and projectUuid global-project-id \(never resolve_project\)/],
+    ["v7", "unknown-identity-reminder.txt", codex(path.join(fixtureRoot, "v7")), path.join(noRepository, "missing"), /no destination applies: continue without project memory, open no session/],
+  ];
+  for (const [version, filename, environment, cwd, expected] of cases) {
+    const label = `${version}/${filename}`;
+    const context = contextOf(
+      runHook({
+        environment,
+        input: { hook_event_name: "UserPromptSubmit", cwd, session_id: v5ThreadId },
+      }),
+      label,
+    );
+    assertFixture(context, version, filename, label);
+    assert.match(context, expected, label);
+    assert.match(context, /Skip trivial acknowledgements/, label);
+    assert.doesNotMatch(context, /This config is version|open_session on the resolved Project/, label);
+    assert.ok(Buffer.byteLength(context) <= 400, `${label}: ${Buffer.byteLength(context)} bytes`);
+    assert.equal(context.includes(savedRoot), false, label);
+    assert.equal(context.includes("\n"), false, label);
+  }
+});
+
+test("reports an invalid config briefly on every prompt and fully at session start", () => {
+  const environment = codexInvalid();
+  const session = contextOf(runHook({ environment, input: claudeV5Input }));
+  assert.match(session, /^A recall-journal\.json exists for Codex but is not a valid journal config: /);
+  assert.match(session, /never rewrite it from this context/);
+  const prompt = contextOf(runHook({ environment, input: claudeV5PromptInput }));
+  assert.equal(
+    prompt,
+    "Recall journaling is off for Codex: the saved recall-journal.json is not a valid journal config. Say so once, offer $recall:recall-journal to inspect and repair or replace it with the user's confirmation, and never rewrite it from this context.",
+  );
+  assert.doesNotMatch(prompt, /This config is version|workspaceId |projectUuid /);
+
+  function codexInvalid() {
+    return {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory({ version: 5, projectMemory: { enabled: true } }),
+      PLUGIN_ROOT: pluginRoot,
+    };
   }
 });
 
@@ -368,7 +452,7 @@ test("routes a strict v3 config to structured project memory only", () => {
   assert.equal(result.stderr, "");
   const context = JSON.parse(result.stdout).hookSpecificOutput
     .additionalContext;
-  assert.equal(context, readFixture("v3", "additional-context.txt"));
+  assertFixture(context, "v3", "additional-context.txt");
   assert.match(context, /resolve_project/);
   assert.match(context, /get_project_context/);
   assert.match(context, /structured-memory-only/);
@@ -447,14 +531,14 @@ test("uses repository-first v4 routing without exposing the default Project", ()
       CODEX_HOME: path.join(fixtureRoot, "v4"),
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: repositoryRoot },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: repositoryRoot },
   });
 
   assert.equal(result.status, 0);
   assert.equal(result.stderr, "");
   const context = JSON.parse(result.stdout).hookSpecificOutput
     .additionalContext;
-  assert.equal(context, readFixture("v4", "repository-context.txt"));
+  assertFixture(context, "v4", "repository-context.txt");
   assert.match(context, /repository-first routing/);
   assert.match(context, /resolve_project/);
   assert.match(context, /get_project_context/);
@@ -480,14 +564,14 @@ test("uses the explicit v4 default only when no repository identity exists", () 
       CODEX_HOME: path.join(fixtureRoot, "v4"),
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: noRepository },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: noRepository },
   });
 
   assert.equal(result.status, 0);
   assert.equal(result.stderr, "");
   const context = JSON.parse(result.stdout).hookSpecificOutput
     .additionalContext;
-  assert.equal(context, readFixture("v4", "no-repository-context.txt"));
+  assertFixture(context, "v4", "no-repository-context.txt");
   assert.match(context, /projectUuid default-project-id/);
   assert.match(context, /Do not call resolve_project/);
   assert.match(context, /proved no-repository route/);
@@ -503,14 +587,14 @@ test("keeps a v4 repository with no remote on the repository-first route", () =>
       CODEX_HOME: path.join(fixtureRoot, "v4"),
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: repository },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: repository },
   });
 
   assert.equal(result.status, 0);
   assert.equal(result.stderr, "");
   const context = JSON.parse(result.stdout).hookSpecificOutput
     .additionalContext;
-  assert.equal(context, readFixture("v4", "repository-context.txt"));
+  assertFixture(context, "v4", "repository-context.txt");
   assert.match(context, /If there is no supported remote/);
   assert.equal(context.includes("default-project-id"), false);
 });
@@ -526,7 +610,7 @@ test("withholds the v4 default when repository identity cannot be proved", () =>
       CODEX_HOME: path.join(fixtureRoot, "v4"),
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: missingDirectory },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: missingDirectory },
   });
 
   assert.equal(result.status, 0);
@@ -549,7 +633,7 @@ test("uses the host-specific name in v4 without changing its routing", () => {
       CLAUDE_CONFIG_DIR: path.join(fixtureRoot, "v4"),
       CLAUDE_PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: repositoryRoot },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: repositoryRoot },
   });
 
   assert.equal(result.status, 0);
@@ -621,7 +705,7 @@ test("rejects malformed or mixed v4 configs instead of choosing a memory protoco
         CODEX_HOME: makeConfigDirectory(config),
         PLUGIN_ROOT: pluginRoot,
       },
-      input: { hook_event_name: "UserPromptSubmit", cwd: repositoryRoot },
+      input: { hook_event_name: "SessionStart", source: "startup", cwd: repositoryRoot },
     });
 
     assertInvalidConfigContext(result, JSON.stringify(config));
@@ -724,7 +808,7 @@ test("keys the Today card by thread id only when the host provides one", () => {
 
   const withThread = runHook({
     environment,
-    input: { hook_event_name: "UserPromptSubmit", session_id: "thread-123" },
+    input: { hook_event_name: "SessionStart", source: "startup", session_id: "thread-123" },
   });
   assert.match(
     JSON.parse(withThread.stdout).hookSpecificOutput.additionalContext,
@@ -848,7 +932,7 @@ test("keeps v1 project entries workspace-only when newer fields are malformed", 
       CODEX_HOME: makeConfigDirectory(config),
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: projectRoot },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: projectRoot },
   });
 
   assert.equal(result.status, 0);
@@ -903,7 +987,7 @@ test("activates a project-only v2 config only inside the configured filesystem p
       CODEX_HOME: configDirectory,
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: projectRoot },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: projectRoot },
   });
   assert.match(inside.stdout, /workspaceId repo-workspace/);
   assert.match(inside.stdout, /projectId repo-project/);
@@ -916,7 +1000,7 @@ test("activates a project-only v2 config only inside the configured filesystem p
       PLUGIN_ROOT: pluginRoot,
     },
     input: {
-      hook_event_name: "UserPromptSubmit",
+      hook_event_name: "SessionStart", source: "startup",
       cwd: makeTemporaryDirectory(),
     },
   });
@@ -944,7 +1028,7 @@ test("prefers a v2 filesystem-project destination and its Recall Project over gl
       CODEX_HOME: makeConfigDirectory(config),
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: projectRoot },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: projectRoot },
   });
 
   const context = JSON.parse(result.stdout).hookSpecificOutput
@@ -982,7 +1066,7 @@ test("rejects invalid v2 destinations and explicit null Recall Projects", () => 
         CODEX_HOME: makeConfigDirectory(config),
         PLUGIN_ROOT: pluginRoot,
       },
-      input: { hook_event_name: "UserPromptSubmit", cwd: projectRoot },
+      input: { hook_event_name: "SessionStart", source: "startup", cwd: projectRoot },
     });
     assertInvalidConfigContext(result, JSON.stringify(config));
   }
@@ -1036,7 +1120,7 @@ test("injects the host session id as the thread's journal identity", () => {
       PLUGIN_ROOT: pluginRoot,
     },
     input: {
-      hook_event_name: "UserPromptSubmit",
+      hook_event_name: "SessionStart", source: "startup",
       session_id: "b425db1a-153d-45d2-850c-93ac0271f495",
     },
   });
@@ -1056,7 +1140,7 @@ test("accepts a thread_id when no session_id is provided", () => {
       CODEX_HOME: makeConfigDirectory(),
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", thread_id: "thread-123" },
+    input: { hook_event_name: "SessionStart", source: "startup", thread_id: "thread-123" },
   });
 
   assert.equal(result.status, 0);
@@ -1080,7 +1164,7 @@ test("omits the thread identity when the session id is not a plain token", () =>
         CODEX_HOME: makeConfigDirectory(),
         PLUGIN_ROOT: pluginRoot,
       },
-      input: { hook_event_name: "UserPromptSubmit", session_id: sessionId },
+      input: { hook_event_name: "SessionStart", source: "startup", session_id: sessionId },
     });
 
     assert.equal(result.status, 0);
@@ -1392,14 +1476,14 @@ test("runs when the plugin root is reached through a symlink", () => {
   assert.equal(result.stderr, "");
 });
 
-test("ignores hook events other than UserPromptSubmit", () => {
+test("ignores hook events other than SessionStart and UserPromptSubmit", () => {
   const result = runHook({
     environment: {
       ...cleanEnvironment(),
       CODEX_HOME: makeConfigDirectory(),
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "SessionStart" },
+    input: { hook_event_name: "Stop" },
   });
 
   assert.equal(result.status, 0);
@@ -1418,7 +1502,7 @@ test("binds the session to a project workspace when cwd is inside the project", 
       CODEX_HOME: makeConfigDirectory(configWithProject(projectRoot)),
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: nestedDirectory },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: nestedDirectory },
   });
 
   assert.equal(result.status, 0);
@@ -1444,7 +1528,7 @@ test("binds the session when cwd is exactly the project root", () => {
       CLAUDE_CONFIG_DIR: makeConfigDirectory(configWithProject(projectRoot)),
       CLAUDE_PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: projectRoot },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: projectRoot },
   });
 
   assert.equal(result.status, 0);
@@ -1465,7 +1549,7 @@ test("maps an external Codex worktree to its main checkout project", () => {
       CODEX_HOME: makeConfigDirectory(configWithProject(mainCheckout)),
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: workingDirectory },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: workingDirectory },
   });
 
   assert.equal(result.status, 0);
@@ -1487,7 +1571,7 @@ test("maps an external Claude Code worktree to a nested project root", () => {
       CLAUDE_CONFIG_DIR: makeConfigDirectory(configWithProject(nestedProject)),
       CLAUDE_PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: workingDirectory },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: workingDirectory },
   });
 
   assert.equal(result.status, 0);
@@ -1509,7 +1593,7 @@ test("keeps the global workspace when the session is outside every project", () 
       CODEX_HOME: makeConfigDirectory(configWithProject(projectRoot)),
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: unrelatedDirectory },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: unrelatedDirectory },
   });
 
   assert.equal(result.status, 0);
@@ -1534,7 +1618,7 @@ test("keeps filesystem matching when Git is unavailable", () => {
       PATH: "",
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: nestedDirectory },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: nestedDirectory },
   });
 
   assert.equal(result.status, 0);
@@ -1555,7 +1639,7 @@ test("does not match a sibling directory that shares the root's prefix", () => {
       CODEX_HOME: makeConfigDirectory(configWithProject(projectRoot)),
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: siblingDirectory },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: siblingDirectory },
   });
 
   assert.equal(result.status, 0);
@@ -1584,7 +1668,7 @@ test("prefers the longest matching project root when projects nest", () => {
       CODEX_HOME: makeConfigDirectory(config),
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: workingDirectory },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: workingDirectory },
   });
 
   assert.equal(result.status, 0);
@@ -1609,7 +1693,7 @@ test("matches a project root saved through a symlink", () => {
       CODEX_HOME: makeConfigDirectory(configWithProject(linkedRoot)),
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: workingDirectory },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: workingDirectory },
   });
 
   assert.equal(result.status, 0);
@@ -1646,7 +1730,7 @@ test("resolves a relative input cwd against the hook process cwd", () => {
       CODEX_HOME: makeConfigDirectory(configWithProject(nestedProject)),
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: "nested" },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: "nested" },
   });
 
   assert.equal(result.status, 0);
@@ -1666,7 +1750,7 @@ test("normalizes dot segments in the input cwd", () => {
       CODEX_HOME: makeConfigDirectory(configWithProject(projectRoot)),
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: dottedDirectory },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: dottedDirectory },
   });
 
   assert.equal(result.status, 0);
@@ -1714,7 +1798,7 @@ test("reports an invalid config when the projects map is malformed", () => {
         CODEX_HOME: makeConfigDirectory(config),
         PLUGIN_ROOT: pluginRoot,
       },
-      input: { hook_event_name: "UserPromptSubmit", cwd: absoluteRoot },
+      input: { hook_event_name: "SessionStart", source: "startup", cwd: absoluteRoot },
     });
 
     assertInvalidConfigContext(
@@ -1737,7 +1821,7 @@ test("sanitizes the project workspace name in the injected context", () => {
       CODEX_HOME: makeConfigDirectory(config),
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: projectRoot },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: projectRoot },
   });
 
   assert.equal(result.status, 0);
@@ -1758,7 +1842,7 @@ test("uses repository-first v5 routing without exposing the default Project", ()
       PLUGIN_ROOT: pluginRoot,
     },
     input: {
-      hook_event_name: "UserPromptSubmit",
+      hook_event_name: "SessionStart", source: "startup",
       cwd: repositoryRoot,
       session_id: v5ThreadId,
     },
@@ -1768,7 +1852,7 @@ test("uses repository-first v5 routing without exposing the default Project", ()
   assert.equal(result.stderr, "");
   const context = JSON.parse(result.stdout).hookSpecificOutput
     .additionalContext;
-  assert.equal(context, readFixture("v5", "repository-context.txt"));
+  assertFixture(context, "v5", "repository-context.txt");
   assert.match(context, /repository-first routing/);
   assert.match(context, /none, ambiguous, or not_ready/);
   assert.match(context, /as remoteUrl/);
@@ -1792,7 +1876,7 @@ test("uses the explicit v5 default only when no repository identity exists", () 
       PLUGIN_ROOT: pluginRoot,
     },
     input: {
-      hook_event_name: "UserPromptSubmit",
+      hook_event_name: "SessionStart", source: "startup",
       cwd: noRepository,
       session_id: v5ThreadId,
     },
@@ -1802,7 +1886,7 @@ test("uses the explicit v5 default only when no repository identity exists", () 
   assert.equal(result.stderr, "");
   const context = JSON.parse(result.stdout).hookSpecificOutput
     .additionalContext;
-  assert.equal(context, readFixture("v5", "no-repository-context.txt"));
+  assertFixture(context, "v5", "no-repository-context.txt");
   assert.match(context, /default-project-id/);
 });
 
@@ -1818,7 +1902,7 @@ test("withholds the v5 default when repository identity cannot be proved", () =>
       PLUGIN_ROOT: pluginRoot,
     },
     input: {
-      hook_event_name: "UserPromptSubmit",
+      hook_event_name: "SessionStart", source: "startup",
       cwd: missingDirectory,
       session_id: v5ThreadId,
     },
@@ -1846,7 +1930,7 @@ test("v5 names the session tools and never the retired card recipe", () => {
       PLUGIN_ROOT: pluginRoot,
     },
     input: {
-      hook_event_name: "UserPromptSubmit",
+      hook_event_name: "SessionStart", source: "startup",
       cwd: repositoryRoot,
       session_id: v5ThreadId,
     },
@@ -1860,16 +1944,22 @@ test("v5 names the session tools and never the retired card recipe", () => {
   assert.match(context, /daySummary/);
   assert.match(context, /Today -> Now activity/);
   assert.match(context, /concise plain-language intent/);
-  assert.match(context, /when a current branch exists, pass its exact name/);
+  assert.match(context, /the exact current branch when one exists/);
   assert.match(context, /useful title/);
   assert.match(context, /decision, blocker, shipped, or progress/);
-  assert.match(context, /always attach sessionUuid/);
+  assert.match(context, /always this sessionUuid/);
+  assert.match(context, /60 to 120 words of text/);
+  assert.match(context, /noteLimit 2 and entryLimit 6/);
+  assert.match(context, /Verify through tool discovery that those tools are callable here/);
+  assert.match(
+    context,
+    /Load \$recall:recall-journal for efforts, failed or uncertain writes, configuration, upgrade, or repair, or the full protocol/,
+  );
   assert.match(context, /handful of durable checkpoints/);
   assert.match(context, /rejoin Today's chronology after close/);
   assert.match(context, /open_session\.effortUuid/);
   assert.match(context, /including record_milestone\.todayCard/);
-  assert.match(context, /record milestones with record_milestone/);
-  assert.match(context, /Recall owns the effort note and its Today cards/);
+  assert.match(context, /recording milestones with record_milestone/);
   // The mechanics this version exists to retire must never be recited again.
   assert.equal(context.includes("create_today_note"), false);
   assert.equal(context.includes("### Full journal entry"), false);
@@ -1885,7 +1975,7 @@ test("v5 carries the thread id as the session lineage key", () => {
       PLUGIN_ROOT: pluginRoot,
     },
     input: {
-      hook_event_name: "UserPromptSubmit",
+      hook_event_name: "SessionStart", source: "startup",
       cwd: repositoryRoot,
       session_id: v5ThreadId,
     },
@@ -1898,9 +1988,9 @@ test("v5 carries the thread id as the session lineage key", () => {
 
 test("v5 opens without a lineage key rather than inventing one", () => {
   for (const input of [
-    { hook_event_name: "UserPromptSubmit", cwd: repositoryRoot },
+    { hook_event_name: "SessionStart", source: "startup", cwd: repositoryRoot },
     {
-      hook_event_name: "UserPromptSubmit",
+      hook_event_name: "SessionStart", source: "startup",
       cwd: repositoryRoot,
       session_id: "not a valid id",
     },
@@ -1943,7 +2033,7 @@ test("rejects a v5 config carrying an unknown key", () => {
       CODEX_HOME: home,
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: repositoryRoot },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: repositoryRoot },
   });
 
   assert.match(
@@ -1986,56 +2076,50 @@ function claudeV5Environment({ psDirectory, temporaryDirectory }) {
 }
 
 const claudeV5Input = {
+  hook_event_name: "SessionStart",
+  source: "startup",
+  cwd: repositoryRoot,
+  session_id: v5ThreadId,
+};
+const claudeV5PromptInput = {
   hook_event_name: "UserPromptSubmit",
   cwd: repositoryRoot,
   session_id: v5ThreadId,
 };
 
-function claudeAdjustedV5Fixture(filename, bridgePresent = false) {
-  const fixture = readFixture("v5", filename)
+// The goldens use the Codex host; Claude Code differs only in its names.
+function claudeAdjustedV5Fixture(filename) {
+  return readFixture("v5", filename)
     .replace("Codex", "Claude Code")
-    .replaceAll("$recall:recall-journal", "/recall:recall-journal");
-  return bridgePresent
-    ? fixture.replace(
-        / Current-session Recall connector presence is unknown.*?continue the user's task\./,
-        "",
-      )
-    : fixture;
+    .replaceAll("$recall:recall-journal", "/recall:recall-journal")
+    .replaceAll("$recall:doctor", "/recall:doctor");
 }
 
-test("v5 warns instead of reciting the protocol when the session has no bridge", () => {
+test("v5 reports an absent connector briefly on every prompt instead of the protocol", () => {
   const result = runHook({
     environment: claudeV5Environment({
       psDirectory: makeFakePsDirectory(),
       temporaryDirectory: makeTemporaryDirectory(),
     }),
-    input: claudeV5Input,
+    input: claudeV5PromptInput,
   });
 
-  assert.equal(result.status, 0);
-  assert.equal(result.stderr, "");
-  const context = JSON.parse(result.stdout).hookSpecificOutput
-    .additionalContext;
-  assert.equal(context, readFixture("v5", "bridge-missing-context.txt"));
-  assert.match(context, /appears to be unavailable/);
+  const context = contextOf(result);
+  assertFixture(context, "v5", "bridge-missing-reminder.txt");
   assert.match(context, /no Recall bridge child/);
-  assert.match(context, /Verify instead of trusting this hint/);
-  assert.match(context, /resolve_project, open_session/);
-  assert.match(context, /say so plainly in your first user-visible reply/);
-  assert.match(context, /Starting a new session/);
-  assert.match(context, /may help/);
-  assert.match(
-    context,
-    /not tool availability, authorization, or recording proof/,
-  );
+  assert.match(context, /advisory hint, not tool availability/);
+  assert.match(context, /resolve_project and open_session/);
+  assert.match(context, /journaling is unavailable/);
+  assert.match(context, /do not keep searching/);
   assert.match(context, /\/recall:doctor/);
   assert.match(context, /never create a legacy journal note/);
-  // The full protocol recital is withheld: no session opens in this state.
+  // The protocol is never recited here, and nothing invites a session.
   assert.equal(context.includes("lineageKey"), false);
   assert.equal(context.includes("close_session"), false);
+  assert.ok(Buffer.byteLength(context) <= 640, String(Buffer.byteLength(context)));
 });
 
-test("v5 keeps the standard instructions when the session bridge is present", () => {
+test("v5 keeps the short per-prompt reminder when the session bridge is present", () => {
   for (const bridgeCommand of [
     "node /Users/x/plugins/recall/bridge/index.mjs --client-name Claude",
     "/Applications/Recall.app/Contents/Helpers/recall-mcp-bridge --client-name Claude",
@@ -2045,22 +2129,18 @@ test("v5 keeps the standard instructions when the session bridge is present", ()
         psDirectory: makeFakePsDirectory({ bridgeCommand }),
         temporaryDirectory: makeTemporaryDirectory(),
       }),
-      input: claudeV5Input,
+      input: claudeV5PromptInput,
     });
 
-    assert.equal(result.status, 0, bridgeCommand);
-    assert.equal(result.stderr, "", bridgeCommand);
-    const context = JSON.parse(result.stdout).hookSpecificOutput
-      .additionalContext;
     assert.equal(
-      context,
-      claudeAdjustedV5Fixture("repository-context.txt", true),
+      contextOf(result, bridgeCommand),
+      claudeAdjustedV5Fixture("repository-reminder.txt"),
       bridgeCommand,
     );
   }
 });
 
-test("v5 keeps the standard instructions when detection cannot decide", () => {
+test("v5 keeps the short per-prompt reminder when detection cannot decide", () => {
   // An unrecognized host process and a missing ps are both "unknown", and
   // unknown never changes what the agent is told.
   const environments = [
@@ -2077,16 +2157,74 @@ test("v5 keeps the standard instructions when detection cannot decide", () => {
   ];
 
   for (const environment of environments) {
-    const result = runHook({ environment, input: claudeV5Input });
-    assert.equal(result.status, 0);
-    assert.equal(result.stderr, "");
-    const context = JSON.parse(result.stdout).hookSpecificOutput
-      .additionalContext;
-    assert.equal(context, claudeAdjustedV5Fixture("repository-context.txt"));
+    const result = runHook({ environment, input: claudeV5PromptInput });
+    assert.equal(
+      contextOf(result),
+      claudeAdjustedV5Fixture("repository-reminder.txt"),
+    );
   }
 });
 
-test("v5 checks Codex with its requested host and reports current-tool uncertainty", () => {
+test("v5 session start never runs connector detection and carries the verification rule instead", () => {
+  const markerPath = path.join(makeTemporaryDirectory(), "ps-invocations");
+  const result = runHook({
+    environment: claudeV5Environment({
+      psDirectory: makeFakePsDirectory({ markerPath }),
+      temporaryDirectory: makeTemporaryDirectory(),
+    }),
+    input: claudeV5Input,
+  });
+
+  const context = contextOf(result);
+  assert.equal(context, claudeAdjustedV5Fixture("repository-context.txt"));
+  assert.match(
+    context,
+    /Verify through tool discovery that those tools are callable here; a loaded hook or skill is not proof/,
+  );
+  assert.doesNotMatch(
+    context,
+    /no Recall bridge child|connector presence is unknown/,
+  );
+  // At session start the bridge may not exist yet, so no snapshot is taken.
+  assert.equal(fs.existsSync(markerPath), false);
+});
+
+test("v5 session start after a resume or compaction adds the session recovery rule", () => {
+  for (const source of ["resume", "compact"]) {
+    const context = contextOf(
+      runHook({
+        environment: {
+          ...cleanEnvironment(),
+          CODEX_HOME: path.join(fixtureRoot, "v5"),
+          PLUGIN_ROOT: pluginRoot,
+        },
+        input: { ...claudeV5Input, source },
+      }),
+      source,
+    );
+    assert.match(context, /do not open a second session/, source);
+    assert.match(context, /recover it with list_sessions/, source);
+    assert.match(context, /Version 5 is the structured writer/, source);
+    assert.ok(Buffer.byteLength(context) <= 4608, source);
+  }
+  for (const source of ["startup", "clear", "fork"]) {
+    const context = contextOf(
+      runHook({
+        environment: {
+          ...cleanEnvironment(),
+          CODEX_HOME: path.join(fixtureRoot, "v5"),
+          PLUGIN_ROOT: pluginRoot,
+        },
+        input: { ...claudeV5Input, source },
+      }),
+      source,
+    );
+    assert.doesNotMatch(context, /second session|list_sessions/, source);
+    assert.ok(Buffer.byteLength(context) <= 4352, source);
+  }
+});
+
+test("v5 checks Codex with its requested host on every prompt", () => {
   const markerPath = path.join(makeTemporaryDirectory(), "ps-invocations");
   const result = runHook({
     environment: {
@@ -2098,15 +2236,12 @@ test("v5 checks Codex with its requested host and reports current-tool uncertain
         hostCommand: "codex app-server",
       }),
     },
-    input: claudeV5Input,
+    input: claudeV5PromptInput,
   });
 
-  assert.equal(result.status, 0);
-  const context = JSON.parse(result.stdout).hookSpecificOutput
-    .additionalContext;
-  assert.equal(context, readFixture("v5", "repository-context.txt"));
-  assert.match(context, /Current-session Recall connector presence is unknown/);
-  assert.match(context, /Verify the current conversation's tools/);
+  const context = contextOf(result);
+  assertFixture(context, "v5", "repository-reminder.txt");
+  assert.doesNotMatch(context, /no Recall bridge child/);
   assert.equal(fs.readFileSync(markerPath, "utf8"), ".");
 });
 
@@ -2121,13 +2256,12 @@ test("v5 checks a previously present bridge again on every prompt", () => {
     temporaryDirectory: makeTemporaryDirectory(),
   });
 
-  runHook({ environment, input: claudeV5Input });
-  const second = runHook({ environment, input: claudeV5Input });
+  runHook({ environment, input: claudeV5PromptInput });
+  const second = runHook({ environment, input: claudeV5PromptInput });
 
-  assert.equal(second.status, 0);
   assert.equal(
-    JSON.parse(second.stdout).hookSpecificOutput.additionalContext,
-    claudeAdjustedV5Fixture("repository-context.txt", true),
+    contextOf(second),
+    claudeAdjustedV5Fixture("repository-reminder.txt"),
   );
   assert.equal(fs.readFileSync(markerPath, "utf8"), "..");
 });
@@ -2139,13 +2273,12 @@ test("v5 re-checks an absent bridge on every prompt", () => {
     temporaryDirectory: makeTemporaryDirectory(),
   });
 
-  runHook({ environment, input: claudeV5Input });
-  const second = runHook({ environment, input: claudeV5Input });
+  runHook({ environment, input: claudeV5PromptInput });
+  const second = runHook({ environment, input: claudeV5PromptInput });
 
-  assert.equal(second.status, 0);
   assert.equal(
-    JSON.parse(second.stdout).hookSpecificOutput.additionalContext,
-    readFixture("v5", "bridge-missing-context.txt"),
+    contextOf(second),
+    readFixture("v5", "bridge-missing-reminder.txt"),
   );
   assert.equal(fs.readFileSync(markerPath, "utf8"), "..");
 });
@@ -2162,7 +2295,7 @@ test("rejects a v5 config with no default Project", () => {
       CODEX_HOME: home,
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd: repositoryRoot },
+    input: { hook_event_name: "SessionStart", source: "startup", cwd: repositoryRoot },
   });
 
   assert.match(
@@ -2235,13 +2368,17 @@ test("v5 Codex and Cursor never adopt a Claude process as their own host", () =>
       },
     });
     const output = JSON.parse(result.stdout);
-    const context =
-      output.additional_context ?? output.hookSpecificOutput.additionalContext;
-    assert.match(
-      context,
-      /Current-session Recall connector presence is unknown/,
-    );
-    assert.doesNotMatch(context, /no Recall bridge child/);
+    if (host === "cursor") {
+      assert.match(
+        output.additional_context,
+        /Current-session Recall connector presence is unknown/,
+      );
+      assert.doesNotMatch(output.additional_context, /no Recall bridge child/);
+    } else {
+      const context = output.hookSpecificOutput.additionalContext;
+      assert.match(context, /^Recall project memory v5 is on for Codex/);
+      assert.doesNotMatch(context, /no Recall bridge child/);
+    }
   }
 });
 
@@ -2257,11 +2394,11 @@ test("v5 notices a previously present connector exiting despite an old cache fil
       }),
       temporaryDirectory,
     }),
-    input: claudeV5Input,
+    input: claudeV5PromptInput,
   });
   assert.match(
     JSON.parse(first.stdout).hookSpecificOutput.additionalContext,
-    /Version 5 is the structured writer/,
+    /^Recall project memory v5 is on for Claude Code/,
   );
   const cachePath = path.join(
     temporaryDirectory,
@@ -2276,11 +2413,11 @@ test("v5 notices a previously present connector exiting despite an old cache fil
       psDirectory: makeFakePsDirectory({ markerPath }),
       temporaryDirectory,
     }),
-    input: claudeV5Input,
+    input: claudeV5PromptInput,
   });
   assert.equal(
     JSON.parse(second.stdout).hookSpecificOutput.additionalContext,
-    readFixture("v5", "bridge-missing-context.txt"),
+    readFixture("v5", "bridge-missing-reminder.txt"),
   );
   assert.equal(fs.readFileSync(markerPath, "utf8"), "..");
   assert.deepEqual(fs.readdirSync(temporaryDirectory), [
@@ -2297,7 +2434,7 @@ test("v1 through v4 do not run connector detection or alter their legacy contrac
         CLAUDE_CONFIG_DIR: path.join(fixtureRoot, "v" + version),
         PATH: makeFakePsDirectory({ markerPath }),
       },
-      input: claudeV5Input,
+      input: claudeV5PromptInput,
     });
     assert.equal(result.status, 0);
     assert.ok(result.stdout.trim());
@@ -2345,7 +2482,7 @@ test("v6 missing and unknown connector hints preserve adapter status and no-down
         CODEX_HOME: directory,
         PATH: makeFakePsDirectory({ hostCommand, bridgeCommand, markerPath }),
       },
-      input: { ...claudeV5Input, agent_id: "test-participant" },
+      input: { ...claudeV5PromptInput, agent_id: "test-participant" },
     });
     assert.equal(result.status, 0);
     const context = JSON.parse(result.stdout).hookSpecificOutput
@@ -2387,7 +2524,7 @@ test("v6 unsupported participant and Cursor remain unavailable rather than openi
       CODEX_HOME: directory,
       PATH: makeFakePsDirectory({ hostCommand: "codex app-server" }),
     },
-    input: { ...claudeV5Input, agent_id: "bad identity" },
+    input: { ...claudeV5PromptInput, agent_id: "bad identity" },
   });
   const context = JSON.parse(result.stdout).hookSpecificOutput
     .additionalContext;
@@ -2445,14 +2582,19 @@ function v7Config({
   return config;
 }
 
-function runV7Hook(configDirectory, cwd) {
+function runV7Hook(configDirectory, cwd, eventName = "SessionStart") {
   return runHook({
     environment: {
       ...cleanEnvironment(),
       CODEX_HOME: configDirectory,
       PLUGIN_ROOT: pluginRoot,
     },
-    input: { hook_event_name: "UserPromptSubmit", cwd, session_id: v5ThreadId },
+    input: {
+      hook_event_name: eventName,
+      ...(eventName === "SessionStart" ? { source: "startup" } : {}),
+      cwd,
+      session_id: v5ThreadId,
+    },
   });
 }
 
@@ -2491,7 +2633,7 @@ test("v7 routes a saved filesystem-project destination without printing its path
     ),
   );
 
-  assert.equal(context, readFixture("v7", "path-context.txt"));
+  assertFixture(context, "v7", "path-context.txt");
   assert.match(context, /version 7 is enabled for Codex/);
   assert.match(context, /saved filesystem-project destination covers/);
   assert.match(context, /projectUuid path-project-id/);
@@ -2516,7 +2658,7 @@ test("v7 path destination wins inside a repository with a bound remote", () => {
     ),
   );
 
-  assert.equal(context, readFixture("v7", "path-in-repository-context.txt"));
+  assertFixture(context, "v7", "path-in-repository-context.txt");
   assert.match(
     context,
     /takes precedence over this repository's Git remote binding: do not call resolve_project here/,
@@ -2541,9 +2683,10 @@ test("v7 maps a linked worktree back to its saved main checkout", () => {
         workingDirectory,
       ),
     );
-    assert.equal(
+    assertFixture(
       context,
-      readFixture("v7", "path-in-linked-worktree-context.txt"),
+      "v7",
+      "path-in-linked-worktree-context.txt",
       savedRoot,
     );
     // A linked worktree is a repository, so the path-bound paragraph reads
@@ -2562,10 +2705,7 @@ test("v7 uses repository-first routing and names the global fallback", () => {
     runV7Hook(path.join(fixtureRoot, "v7"), repositoryRoot),
   );
 
-  assert.equal(
-    context,
-    readFixture("v7", "repository-with-global-context.txt"),
-  );
+  assertFixture(context, "v7", "repository-with-global-context.txt");
   assert.match(context, /No saved filesystem-project destination covers/);
   assert.match(context, /repository-first routing/);
   assert.match(context, /as remoteUrl/);
@@ -2602,10 +2742,7 @@ test("v7 repository routing has no fallback without a global destination", () =>
     ),
   );
 
-  assert.equal(
-    context,
-    readFixture("v7", "repository-without-global-context.txt"),
-  );
+  assertFixture(context, "v7", "repository-without-global-context.txt");
   assert.match(context, /repository-first routing/);
   assert.match(
     context,
@@ -2623,7 +2760,7 @@ test("v7 uses the global destination when no repository identity exists", () => 
     runV7Hook(path.join(fixtureRoot, "v7"), noRepository),
   );
 
-  assert.equal(context, readFixture("v7", "no-repository-context.txt"));
+  assertFixture(context, "v7", "no-repository-context.txt");
   assert.match(
     context,
     /no filesystem repository identity was found, so use the global Recall workspace "General Memory"/,
@@ -2645,7 +2782,7 @@ test("v7 withholds every destination when repository identity cannot be proved",
     runV7Hook(path.join(fixtureRoot, "v7"), missingDirectory),
   );
 
-  assert.equal(context, readFixture("v7", "unknown-identity-context.txt"));
+  assertFixture(context, "v7", "unknown-identity-context.txt");
   assert.match(
     context,
     /could not prove whether this working directory has filesystem repository identity/,
@@ -2766,16 +2903,24 @@ test("rejects malformed v7 configs instead of choosing a routing protocol", () =
 });
 
 test("v7 with the session-recording pilot enabled yields to the version 6 adapter context", () => {
-  for (const [enabled, expected, forbidden] of [
+  for (const [enabled, input, expected, forbidden] of [
     [
       true,
+      claudeV5PromptInput,
       /opt-in version 6 conversation-segment adapter/,
-      /Version 7 is the structured writer|version 7 is enabled|record_milestone\.todayCard/,
+      /Version 7 is the structured writer|version 7 is enabled|record_milestone\.todayCard|Recall project memory v7/,
     ],
     [
       false,
+      claudeV5Input,
       /Version 7 is the structured writer/,
       /version 6|begin_session_recording/,
+    ],
+    [
+      false,
+      claudeV5PromptInput,
+      /^Recall project memory v7 is on for Claude Code/,
+      /version 6|begin_session_recording|Version 7 is the structured writer/,
     ],
   ]) {
     const directory = makeConfigDirectory(
@@ -2797,7 +2942,7 @@ test("v7 with the session-recording pilot enabled yields to the version 6 adapte
         }),
         TMPDIR: makeTemporaryDirectory(),
       },
-      input: claudeV5Input,
+      input,
     });
 
     assert.equal(result.status, 0, String(enabled));
@@ -2814,19 +2959,14 @@ test("v7 with the session-recording pilot enabled yields to the version 6 adapte
   }
 });
 
-function claudeAdjustedV7Fixture(filename, bridgePresent = false) {
-  const fixture = readFixture("v7", filename)
+function claudeAdjustedV7Fixture(filename) {
+  return readFixture("v7", filename)
     .replace("Codex", "Claude Code")
-    .replaceAll("$recall:recall-journal", "/recall:recall-journal");
-  return bridgePresent
-    ? fixture.replace(
-        / Current-session Recall connector presence is unknown.*?continue the user's task\./,
-        "",
-      )
-    : fixture;
+    .replaceAll("$recall:recall-journal", "/recall:recall-journal")
+    .replaceAll("$recall:doctor", "/recall:doctor");
 }
 
-test("v7 warns instead of reciting the protocol when the session has no bridge", () => {
+test("v7 reports an absent connector briefly on every prompt instead of the protocol", () => {
   const result = runHook({
     environment: {
       ...cleanEnvironment(),
@@ -2835,24 +2975,20 @@ test("v7 warns instead of reciting the protocol when the session has no bridge",
       PATH: makeFakePsDirectory(),
       TMPDIR: makeTemporaryDirectory(),
     },
-    input: claudeV5Input,
+    input: claudeV5PromptInput,
   });
 
-  assert.equal(result.status, 0);
-  assert.equal(result.stderr, "");
-  const context = JSON.parse(result.stdout).hookSpecificOutput
-    .additionalContext;
-  assert.equal(context, readFixture("v7", "bridge-missing-context.txt"));
-  assert.match(context, /version 7 is enabled/);
-  assert.match(context, /journal normally under version 7/);
-  assert.match(context, /appears to be unavailable/);
-  assert.doesNotMatch(context, /version 5/);
+  const context = contextOf(result);
+  assertFixture(context, "v7", "bridge-missing-reminder.txt");
+  assert.match(context, /^Recall project memory v7 is on for Claude Code, but/);
+  assert.match(context, /no Recall bridge child/);
+  assert.doesNotMatch(context, /v5\b|version 5/);
   assert.equal(context.includes("lineageKey"), false);
   assert.equal(context.includes("close_session"), false);
   assert.equal(context.includes("global-project-id"), false);
 });
 
-test("v7 keeps the standard instructions when the session bridge is present or undecided", () => {
+test("v7 keeps the short per-prompt reminder when the session bridge is present or undecided", () => {
   for (const [bridgeCommand, bridgePresent] of [
     [
       "node /Users/x/plugins/recall/bridge/index.mjs --client-name Claude",
@@ -2873,20 +3009,35 @@ test("v7 keeps the standard instructions when the session bridge is present or u
         }),
         TMPDIR: makeTemporaryDirectory(),
       },
-      input: claudeV5Input,
+      input: claudeV5PromptInput,
     });
 
-    assert.equal(result.status, 0, String(bridgeCommand));
-    assert.equal(result.stderr, "", String(bridgeCommand));
     assert.equal(
-      JSON.parse(result.stdout).hookSpecificOutput.additionalContext,
-      claudeAdjustedV7Fixture(
-        "repository-with-global-context.txt",
-        bridgePresent,
-      ),
+      contextOf(result, String(bridgeCommand)),
+      claudeAdjustedV7Fixture("repository-with-global-reminder.txt"),
       String(bridgeCommand),
     );
   }
+});
+
+test("v7 session start never runs connector detection", () => {
+  const markerPath = path.join(makeTemporaryDirectory(), "ps-invocations");
+  const result = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CLAUDE_CONFIG_DIR: path.join(fixtureRoot, "v7"),
+      CLAUDE_PLUGIN_ROOT: pluginRoot,
+      PATH: makeFakePsDirectory({ markerPath }),
+      TMPDIR: makeTemporaryDirectory(),
+    },
+    input: claudeV5Input,
+  });
+
+  assert.equal(
+    contextOf(result),
+    claudeAdjustedV7Fixture("repository-with-global-context.txt"),
+  );
+  assert.equal(fs.existsSync(markerPath), false);
 });
 
 test("v7 Cursor reads its own config and routes through the same rungs", () => {
@@ -3077,11 +3228,11 @@ test("both readers honor one config-size bound for large v7 files", () => {
       ]),
     );
   const sizeOf = (config) => Buffer.byteLength(JSON.stringify(config));
-  const run = (config) =>
+  const run = (config, input = claudeV5Input) =>
     runHook({
       args: ["--host", "claude-code"],
       environment: claudeV7Environment(config),
-      input: claudeV5Input,
+      input,
     });
 
   const large = manyPaths(140, 3);
@@ -3097,6 +3248,7 @@ test("both readers honor one config-size bound for large v7 files", () => {
   );
   const pilot = run(
     v7Config({ paths: large, sessionLifecycle: { enabled: true } }),
+    claudeV5PromptInput,
   );
   assert.equal(pilot.status, 0);
   assert.match(
@@ -3142,19 +3294,15 @@ test("v5 and v7 open the session before the context read and gate the delta read
     );
     assert.match(
       context,
-      /When open_session returns a CLOSED previousSession whose contentAvailable is true and contentTruncated is not true, and the live get_project_context input schema advertises sinceSessionUuid, pass previousSession\.sessionUuid as sinceSessionUuid/,
+      /Pass previousSession\.sessionUuid as sinceSessionUuid only when open_session returned a CLOSED previousSession with contentAvailable true and contentTruncated not true and that schema advertises the anchor; otherwise read the full context/,
       label,
     );
-    assert.match(
-      context,
-      /when the predecessor's content is withheld or truncated, or the schema does not advertise the anchor, read the full context without one, and never infer support from a plugin or app version/,
-      label,
-    );
+    assert.match(context, /callerSessionUuid, plus noteLimit 2 and entryLimit 6/, label);
     // Losing the reader never costs the writer: only the session tools or a
     // failed open stop journaling.
     assert.match(
       context,
-      /If get_project_context is unavailable, or its read fails or is not ready after the session opened, that does not undo the session: keep journaling to it and work without that context/,
+      /A read that is unavailable, fails, or is not ready never undoes the session: keep journaling to it and work without that context/,
       label,
     );
     assert.doesNotMatch(context, /either tool is unavailable/, label);
@@ -3177,7 +3325,7 @@ test("v5 and v7 open the session before the context read and gate the delta read
     // No anchor value is ever printed by the hook: it comes from open_session.
     assert.doesNotMatch(context, /sinceSessionUuid [0-9a-f-]{36}/, label);
     assert.equal(
-      context.split("When work belongs to a named multi-session effort").length - 1,
+      context.split("named multi-session effort").length - 1,
       1,
       label,
     );
@@ -3216,8 +3364,8 @@ test("v5 and v7 open the session before the context read and gate the delta read
   }
 
   for (const [version, filename] of [
-    ["v5", "bridge-missing-context.txt"],
-    ["v7", "bridge-missing-context.txt"],
+    ["v5", "bridge-missing-reminder.txt"],
+    ["v7", "bridge-missing-reminder.txt"],
     ["v7", "unknown-identity-context.txt"],
   ]) {
     assert.doesNotMatch(
@@ -3226,12 +3374,34 @@ test("v5 and v7 open the session before the context read and gate the delta read
       `${version}/${filename}`,
     );
   }
+
+  // The per-prompt reminder points at the session context; it never recites
+  // the protocol, the anchor rule, or the upgrade offer.
+  for (const [version, filename] of [
+    ["v5", "repository-reminder.txt"],
+    ["v5", "no-repository-reminder.txt"],
+    ["v7", "path-reminder.txt"],
+    ["v7", "repository-with-global-reminder.txt"],
+    ["v7", "repository-without-global-reminder.txt"],
+    ["v7", "no-repository-reminder.txt"],
+  ]) {
+    const reminder = readFixture(version, filename);
+    const label = `${version}/${filename}`;
+    assert.match(reminder, /Follow the Recall session-start context/, label);
+    assert.match(reminder, new RegExp(`lineageKey ${v5ThreadId}`), label);
+    assert.doesNotMatch(
+      reminder,
+      /open_session on the resolved Project|sinceSessionUuid|daySummary|record_milestone|This config is version|append_entry/,
+      label,
+    );
+    assert.ok(Buffer.byteLength(reminder) <= 400, `${label}: ${Buffer.byteLength(reminder)}`);
+  }
 });
 
 // Every valid config older than version 7 carries exactly one upgrade offer.
 // It names the host's skill and hands the decision to the user; it never
 // authorizes the hook to rewrite the file.
-test("offers the version 7 upgrade once per prompt for every older valid config", () => {
+test("offers the version 7 upgrade once per session start and never on a prompt", () => {
   const escape = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const offer = (version, skill) =>
     new RegExp(
@@ -3254,7 +3424,7 @@ test("offers the version 7 upgrade once per prompt for every older valid config"
         PLUGIN_ROOT: pluginRoot,
       },
       input: {
-        hook_event_name: "UserPromptSubmit",
+        hook_event_name: "SessionStart", source: "startup",
         cwd: repositoryRoot,
         session_id: v5ThreadId,
       },
@@ -3282,12 +3452,23 @@ test("offers the version 7 upgrade once per prompt for every older valid config"
           "node /plugins/recall/bridge/index.mjs --client-name Claude",
       }),
     },
-    input: claudeV5Input,
+    input: claudeV5PromptInput,
   });
   assert.equal(v6.status, 0, v6.stderr);
   const v6Context = JSON.parse(v6.stdout).hookSpecificOutput.additionalContext;
   assert.match(v6Context, /opt-in version 6 conversation-segment adapter/);
   assert.match(v6Context, offer(6, "/recall:recall-journal"));
+
+  // The per-prompt reminder never repeats the offer.
+  const reminder = runHook({
+    environment: {
+      ...cleanEnvironment(),
+      CODEX_HOME: makeConfigDirectory(v5),
+      PLUGIN_ROOT: pluginRoot,
+    },
+    input: claudeV5PromptInput,
+  });
+  assert.doesNotMatch(contextOf(reminder), /This config is version/);
 
   // Cursor names its own skill.
   const cursor = runHook({
@@ -3337,17 +3518,17 @@ test("the upgrade offer is absent for version 7, an inert version 6 file, and a 
   assert.equal(inert.stdout, "");
 
   // With no connector there is nothing to revalidate against, so the
-  // missing-bridge warning stands alone.
+  // per-prompt missing-bridge reminder stands alone.
   const missing = runHook({
     environment: claudeV5Environment({
       psDirectory: makeFakePsDirectory(),
       temporaryDirectory: makeTemporaryDirectory(),
     }),
-    input: claudeV5Input,
+    input: claudeV5PromptInput,
   });
   assert.equal(missing.status, 0, missing.stderr);
   const missingContext = JSON.parse(missing.stdout).hookSpecificOutput
     .additionalContext;
-  assert.match(missingContext, /connector appears to be unavailable/);
+  assert.match(missingContext, /no Recall bridge child/);
   assert.doesNotMatch(missingContext, /This config is version/);
 });

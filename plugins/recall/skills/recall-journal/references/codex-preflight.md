@@ -1,7 +1,11 @@
 ### Codex hook preflight
 
 On an **explicit** invocation in Codex, verify the bundled
-`UserPromptSubmit` hook before configuring or writing the journal. Resolve the
+`UserPromptSubmit` hook before configuring or writing the journal. The plugin's
+`SessionStart` handler comes from the same `hooks.json` manifest and carries
+the protocol once per session; the per-prompt handler is the one the helper
+below inspects, and its reminder points at the journal skill whenever the
+session-start context is missing. Resolve the
 `scripts/` directory relative to the parent `SKILL.md`, then run
 the absolute path to `../scripts/check-codex-hook` (relative to this reference) from the session's current
 working directory; do not resolve it relative to the user's project. The helper

@@ -31,8 +31,26 @@ legacy notes. Load only the selected mode. Configuration and Codex hook trust
 remain separate procedures, so ordinary project work does not repeatedly load
 or run setup instructions.
 
+Plugin `0.39.0` delivers the journal protocol once per session instead of
+on every prompt. Claude Code and Codex keep each prompt's hook context in the
+transcript, so the former 4 KB per-prompt payload grew with every turn. The
+hook now registers `SessionStart` beside `UserPromptSubmit`: the session event
+carries the full routing and protocol context (and carries it again after a
+resume or compaction, with a rule against opening a second session), while
+each prompt gets a reminder under 400 bytes that names the mode, the route,
+and the lineage key and points back at the session-start context, or at the
+journal skill when that context is missing. The connector snapshot runs only
+on prompts, where the bridge has had time to start; the session event carries
+the generic tool-verification rule instead, and the upgrade offer rides the
+session event alone. The session context also states the ordinary protocol's
+prose target (60 to 120 words per checkpoint), the `noteLimit` and
+`entryLimit` hints for the context read, and the cases that call for the full
+skill, so an ordinary task no longer needs to load it. Cursor keeps its single
+`sessionStart` payload. The plan behind this release is
+`docs/token-usage-optimization-plan.md`.
+
 Plugin `0.38.0` offers the version 7 upgrade instead of waiting to be asked.
-The hook names the saved config version on every prompt for versions 1
+The hook names the saved config version at session start for versions 1
 through 6 (an inert version 6 file stays silent, because its pilot was turned
 off on purpose) and asks the agent to offer the upgrade once per session when
 finalizing work; a `recall-journal.json` that exists but cannot be read as
@@ -93,7 +111,8 @@ before; support comes from the live schema, never from a plugin or app version.
 Plugin `0.34.0` adds journal config version 7, which restores global and
 per-path destinations to structured journaling so a Git repository is no
 longer required to map agent work to a Recall Project. Version 7 routes in a
-fixed order that the hook names on every prompt: a saved filesystem-project
+fixed order that the hook names at session start and summarizes in every
+prompt's reminder: a saved filesystem-project
 destination (longest root, linked worktrees mapped to the main checkout) wins
 even inside a repository with a bound remote; otherwise repository identity
 resolves the exact Git-remote binding, with the global destination as the
@@ -348,8 +367,8 @@ host certification before v6 activation; Cursor has no v6 recording profile.
 
 | Surface | Recall tools and skills | Assisted journal or project memory (v1–v5, v7) |
 | --- | --- | --- |
-| Codex app and Codex CLI | Supported through the local bridge after plugin trust and native approval. | Supported. The bundled Codex `UserPromptSubmit` hook reads this agent's config. |
-| Claude Code | Supported through the local bridge after plugin installation and native approval. | Supported. The bundled Claude Code `UserPromptSubmit` hook reads this agent's config. |
+| Codex app and Codex CLI | Supported through the local bridge after plugin trust and native approval. | Supported. The bundled Codex `SessionStart` and `UserPromptSubmit` hooks read this agent's config: the session event carries the protocol, each prompt a short reminder. |
+| Claude Code | Supported through the local bridge after plugin installation and native approval. | Supported. The bundled Claude Code `SessionStart` and `UserPromptSubmit` hooks read this agent's config: the session event carries the protocol, each prompt a short reminder. |
 | Cursor | Supported through its separate Cursor plugin and a Cursor-specific native approval. | Supported through Cursor's `sessionStart` hook, stable `session_id` (the conversation id), and `~/.cursor/recall-journal.json`. |
 | Claude Desktop Chat | The shared plugin statically registers Recall's local stdio tools and skills. This route has not been re-certified live by Recall in the current Claude Desktop release. | Not automatic. Hooks do not run in ordinary Chat; invoke a skill or Recall tool explicitly. |
 | Claude web Chat | Plugin skills can be available, but the web surface cannot directly launch this local stdio server or dial Recall's loopback listener. | Not automatic. Hooks do not run in ordinary Chat, and a skill alone cannot supply Recall tools. |
@@ -569,15 +588,16 @@ under `skills/` that contains a `SKILL.md`. It currently includes:
   instead of nothing.
   A config that still selects the retired legacy DailyNote summary target gets
   a one-time prompt to switch to Today or none; the Recall server no longer
-  creates DailyNotes, so the skill never writes them. A bundled
-  `UserPromptSubmit` hook notices the valid opt-in config and adds the journal
-  reminder to each later prompt, so the skill no longer has to discover a file
-  before it has been loaded. The reminder names the configured workspace — and
-  the chat thread's stable id when the host provides one — and works in both
-  directions: it tells the agent to search existing journal notes when a
-  task may relate to prior work — so the journal is read back as memory, not
-  just written — and to open, update, and wrap up the thread's note as the
-  work happens. A filesystem project can have its own destination even without
+  creates DailyNotes, so the skill never writes them. Bundled `SessionStart`
+  and `UserPromptSubmit` hooks notice the valid opt-in config: the session
+  event adds the full journal context once (and again after a resume or
+  compaction), and each later prompt adds a short reminder, so the skill no
+  longer has to discover a file before it has been loaded. The context names
+  the configured workspace — and the chat thread's stable id when the host
+  provides one — and works in both directions: it tells the agent to search
+  existing journal notes when a task may relate to prior work — so the
+  journal is read back as memory, not just written — and to open, update, and
+  wrap up the thread's note as the work happens. A filesystem project can have its own destination even without
   a global default: the skill saves its canonical root path under `projects` in
   the same config. Sessions
   working anywhere inside that path — subfolders and worktrees checked out
@@ -594,7 +614,7 @@ under `skills/` that contains a `SKILL.md`. It currently includes:
   restores global and per-path destinations, each naming a Recall Project: a
   saved filesystem-project destination wins, then the repository's exact
   remote binding, then the global destination, and the hook names the chosen
-  destination on every prompt. The session and checkpoints appear in **Today
+  destination at session start and in every prompt's reminder. The session and checkpoints appear in **Today
   -> Now activity**; the optional day summary lands as an app-owned Today
   timeline card.
   Explicit setup can write v2 Legacy journal note or capability-gated v7

@@ -1,0 +1,1 @@
+Recall project memory v7 is on for Codex, but the hook could not prove whether this working directory has filesystem repository identity, so no destination applies: continue without project memory, open no session, do not use a saved filesystem-project or global destination, and say so once in your first user-visible reply. Skip trivial acknowledgements.
