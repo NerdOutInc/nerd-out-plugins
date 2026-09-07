@@ -1,6 +1,6 @@
 ---
 name: doctor
-description: Diagnose missing or failing Recall MCP tools in Claude Code, Codex, or Cursor. Use when the user invokes doctor, Recall tools are missing, or a Recall call fails. Separates current read-tool availability from passive process evidence and an optional fresh connection probe; does not certify automatic journaling.
+description: Diagnose missing or failing Recall MCP tools in Claude Code, Codex, or Cursor. Use when the user invokes doctor, Recall tools are missing, or a Recall call fails; it never certifies automatic journaling.
 ---
 
 # Recall Doctor

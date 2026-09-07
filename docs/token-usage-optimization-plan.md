@@ -137,8 +137,8 @@ Advertise these through a new catalog generation and the typed bridge contract, 
 | --- | ---: |
 | `SessionStart` context (Claude Code, Codex) and Cursor `sessionStart` | 4.25 KiB at startup; 4.5 KiB after a resume or compaction (measured: the routing paragraph, the once-per-session protocol with its prose target and read limits, and the upgrade offer need 3.2 to 4.2 KB; the 3.5 KiB estimate did not leave room for the offer) |
 | `UserPromptSubmit` reminder | 400 bytes (640 when it must report an absent connector) |
-| Ordinary v5/v7 skill bundle (dispatcher, writer, project context) | 12 KiB |
-| Efforts basics; efforts recovery loaded only on failure | 5 KiB; 7 KiB |
+| Ordinary v5/v7 skill bundle (dispatcher, writer, project context) | 12 KiB was the estimate; measured floor 20 KB (down from 22.3 KB), because the prose-contract tests pin about 4 KB of exact wording and the mode table alone is 1 KB. The real saving is that an ordinary session no longer loads the bundle at all: the session-start context carries the protocol, and the skill is read for efforts, failed or uncertain writes, configuration, or a missing context. |
+| Efforts basics; efforts recovery loaded only on failure | 8.8 KB measured (from 11.4 KB); 3.5 KB recovery reference read only on partial stages, pending recovery, deferred bindings, or timeouts |
 | Skill descriptions, all three | 600 bytes |
 | Context read on this Project with plugin limits | measure; expect about 16 KB |
 | Compact context profile (app) | 8 KiB |
