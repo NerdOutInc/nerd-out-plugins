@@ -16,7 +16,7 @@ const pluginRoot = path.join(repositoryRoot, "plugins/recall");
 const hookScript = path.join(pluginRoot, "hooks/journal-context.mjs");
 const fixtureRoot = path.join(repositoryRoot, "tests/fixtures/recall-journal-hook");
 const skillRoot = path.join(pluginRoot, "skills");
-const catalogFixture = path.join(repositoryRoot, "tests/fixtures/recall-catalog/generation-7.json");
+const catalogFixture = path.join(repositoryRoot, "tests/fixtures/recall-catalog/generation-8.json");
 const THREAD_ID = "11111111-2222-4333-8444-555555555555";
 
 const bytes = (text) => Buffer.byteLength(text, "utf8");

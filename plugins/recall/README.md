@@ -60,7 +60,12 @@ new `efforts-recovery.md`; and the always-on skill descriptions are shorter.
 on every route and event, each skill reference, the mode bundles, and the
 skill descriptions to a byte ceiling, and `scripts/measure-context-cost.mjs`
 prints the measured hook, bundle, catalog, and cost-model tables (`--json`
-for machine output). The plan behind this release is
+for machine output). The guidance also discovers the catalog generation 8
+read surface from the live schema: `get_project_context`'s `profile:
+"journal"` index read, `read_entry` for a truncated row, the `append_entry`
+`receipt` in place of the echoed entry, and summary rows in the advisory
+session lists; every one of them is gated on the advertised schema or the
+response, never on a version. The plan behind this release is
 `docs/token-usage-optimization-plan.md`.
 
 Plugin `0.38.0` offers the version 7 upgrade instead of waiting to be asked.

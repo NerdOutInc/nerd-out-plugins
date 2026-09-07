@@ -1949,7 +1949,8 @@ test("v5 names the session tools and never the retired card recipe", () => {
   assert.match(context, /decision, blocker, shipped, or progress/);
   assert.match(context, /always this sessionUuid/);
   assert.match(context, /60 to 120 words of text/);
-  assert.match(context, /noteLimit 2 and entryLimit 6/);
+  assert.match(context, /profile journal, noteLimit 2, and entryLimit 6/);
+  assert.match(context, /read_entry or read_session, when advertised, only when that row matters to the task/);
   assert.match(context, /Verify through tool discovery that those tools are callable here/);
   assert.match(
     context,
@@ -3297,7 +3298,7 @@ test("v5 and v7 open the session before the context read and gate the delta read
       /Pass previousSession\.sessionUuid as sinceSessionUuid only when open_session returned a CLOSED previousSession with contentAvailable true and contentTruncated not true and that schema advertises the anchor; otherwise read the full context/,
       label,
     );
-    assert.match(context, /callerSessionUuid, plus noteLimit 2 and entryLimit 6/, label);
+    assert.match(context, /callerSessionUuid, profile journal, noteLimit 2, and entryLimit 6/, label);
     // Losing the reader never costs the writer: only the session tools or a
     // failed open stop journaling.
     assert.match(

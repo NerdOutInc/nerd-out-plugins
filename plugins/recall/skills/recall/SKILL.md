@@ -255,7 +255,13 @@ and report honestly.
   `archived`) have no capability flag but fail closed to
   `available: false`.
 - Pass the caller's own `callerSessionUuid` so the `sessions` section lists
-  only other ACTIVE sessions. A session's `advisoryStale` flag (ACTIVE but
+  only other ACTIVE sessions. When the schema advertises `profile`, pass
+  `"journal"` for an index-sized read (entries capped near 600 characters,
+  closed sessions near 640, `entryLimit` 6 and `noteLimit` 2 by default, the
+  response echoing `profile: "journal"`) and read a `contentTruncated` row
+  whole through `read_entry` or `read_session`. A generation 8 app serves
+  `sessions` and `otherActiveSessions` as summary rows without `href`,
+  `workspaceId`, or close prose; that is the row shape, not withheld content. A session's `advisoryStale` flag (ACTIVE but
   idle around an hour) is awareness for coordination decisions — another
   agent may still be working; it is never a lock or permission.
 - Open one session per stretch of work with `open_session` (independent
@@ -277,11 +283,18 @@ and report honestly.
 - Optional `refs` carry client-resolved pointers: `commits`, `prUrls`,
   `files`, `entryUuids`, `handoffUuids`. Pass an ACTIVE `sessionUuid` to
   attach the entry and bump that session's `lastActivityAt`.
+- A generation 8 app answers with a `receipt` (`entryUuid`, `entryType`,
+  `title`, `sessionUuid`, `authoredAt`, the recorded `evidence` and
+  `supersedes`) beside the result's `syncStatus` instead of echoing the entry;
+  older apps return `entry`.
+  Read the stored body back with `read_entry` when advertised, otherwise
+  through `list_timeline`.
 - Entries are write-once. Correct an earlier entry with a new entry whose
   `refs.entryUuids` names it (and evidence `supersedes` when retracting an
   evidence-bearing claim); never expect to edit or delete one.
 - Read back with `list_timeline`: newest-first, optional `entryTypes` or
-  `sessionUuid` filters, page only with the returned opaque cursor.
+  `sessionUuid` filters, page only with the returned opaque cursor; when
+  `read_entry` is advertised, it returns one entry whole by `entryUuid`.
 
 ### Handoffs
 
@@ -340,9 +353,10 @@ input schema of that exact tool (`patch_note_content`, strict
 declares an `evidence` property. An older Recall build hard-rejects unknown arguments, so
 never send evidence to a schema that does not advertise it, and never probe by
 sending it anyway. After a write, verify the echo: the result's projected
-content (or the next read) shows the recorded refs, and a response without
-them means an older hosted web app dropped the field — report that honestly
-instead of assuming the evidence was recorded.
+content (`entry`, or the generation 8 `receipt`) or the next read shows the
+recorded refs, and a response without them means an older hosted web app
+dropped the field — report that honestly instead of assuming the evidence was
+recorded.
 
 On `update_note_content`, `evidence` or `supersedes` also opts into the strict
 NamedNote contract. Include the complete `expectedRevision` + UUID
