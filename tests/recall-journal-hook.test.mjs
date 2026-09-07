@@ -1950,7 +1950,7 @@ test("v5 names the session tools and never the retired card recipe", () => {
   assert.match(context, /always this sessionUuid/);
   assert.match(context, /60 to 120 words of text/);
   assert.match(context, /profile journal, noteLimit 2, and entryLimit 6/);
-  assert.match(context, /read_entry or read_session when those are advertised/);
+  assert.match(context, /read_entry or read_session, when advertised, only when that row matters to the task/);
   assert.match(context, /Verify through tool discovery that those tools are callable here/);
   assert.match(
     context,

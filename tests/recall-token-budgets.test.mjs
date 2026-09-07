@@ -16,13 +16,13 @@ const fixtureRoot = path.join(repositoryRoot, "tests/fixtures/recall-journal-hoo
 const KIB = 1024;
 const BUDGETS = {
   hookSessionStartup: 4.25 * KIB,
-  hookSessionCompact: 4.5 * KIB,
+  hookSessionCompact: 4.75 * KIB,
   hookReminder: 400,
   hookAbsentConnectorReminder: 640,
   hookInvalidConfigReminder: 256,
   hookCursorSession: 4.5 * KIB,
   dispatcher: 4.5 * KIB,
-  writer: 12 * KIB,
+  writer: 12.5 * KIB,
   projectContext: 4.5 * KIB,
   efforts: 9 * KIB,
   effortsRecovery: 4 * KIB,

@@ -284,8 +284,9 @@ and report honestly.
   `files`, `entryUuids`, `handoffUuids`. Pass an ACTIVE `sessionUuid` to
   attach the entry and bump that session's `lastActivityAt`.
 - A generation 8 app answers with a `receipt` (`entryUuid`, `entryType`,
-  `title`, `sessionUuid`, `authoredAt`, `syncStatus`, the recorded `evidence`
-  and `supersedes`) instead of echoing the entry; older apps return `entry`.
+  `title`, `sessionUuid`, `authoredAt`, the recorded `evidence` and
+  `supersedes`) beside the result's `syncStatus` instead of echoing the entry;
+  older apps return `entry`.
   Read the stored body back with `read_entry` when advertised, otherwise
   through `list_timeline`.
 - Entries are write-once. Correct an earlier entry with a new entry whose
